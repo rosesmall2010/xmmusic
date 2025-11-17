@@ -1,0 +1,13 @@
+{
+  "header": {
+    "searchPlaceholder": "搜索音乐..."
+  },
+  "sidebar": {
+    "local": "本地音乐",
+    "recent": "最近播放",
+    "playlist": "我的歌单",
+    "favorites": "我的收藏",
+    "queue": "播放队列",
+    "settings": "设置"
+  }
+}

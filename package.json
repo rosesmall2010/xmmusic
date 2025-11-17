@@ -1,0 +1,54 @@
+{
+  "name": "xmmusic",
+  "version": "1.0.0",
+  "description": "基于Electron+Vue+TypeScript的跨平台音乐播放器",
+  "main": "dist/electron/main/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on http://localhost:3000 http://localhost:3001 && electron .",
+    "postinstall": "PYTHON=/opt/homebrew/bin/python3.11 electron-builder install-app-deps",
+    "rebuild": "PYTHON=/opt/homebrew/bin/python3.11 electron-builder install-app-deps",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json && npm run copy:migrations",
+    "copy:migrations": "mkdir -p dist/electron/main/database/migrations && cp src/main/database/migrations/*.sql dist/electron/main/database/migrations/",
+    "pack": "electron-builder",
+    "dist": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "音乐",
+    "播放器",
+    "electron",
+    "vue",
+    "typescript"
+  ],
+  "author": "zdhsoft",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "latest",
+    "@vitejs/plugin-vue": "latest",
+    "concurrently": "latest",
+    "electron": "^32.3.3",
+    "electron-builder": "latest",
+    "electron-rebuild": "^3.2.9",
+    "typescript": "5.9",
+    "vite": "latest",
+    "vue": "3.5.24",
+    "wait-on": "latest"
+  },
+  "dependencies": {
+    "@tanstack/vue-virtual": "latest",
+    "better-sqlite3": "latest",
+    "chokidar": "latest",
+    "exceljs": "latest",
+    "howler": "latest",
+    "iconv-lite": "latest",
+    "music-metadata": "latest",
+    "node-id3": "latest",
+    "pinia": "latest",
+    "vue-i18n": "latest"
+  }
+}

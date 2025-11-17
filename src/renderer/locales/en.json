@@ -1,0 +1,13 @@
+{
+  "header": {
+    "searchPlaceholder": "Search music..."
+  },
+  "sidebar": {
+    "local": "Local Music",
+    "recent": "Recent",
+    "playlist": "Playlists",
+    "favorites": "Favorites",
+    "queue": "Play Queue",
+    "settings": "Settings"
+  }
+}
