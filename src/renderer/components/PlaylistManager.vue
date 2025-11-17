@@ -2,7 +2,10 @@
   <div class="playlist-manager">
     <div class="header">
       <h2>我的歌单</h2>
-      <button @click="createPlaylist" class="btn-create">+ 创建歌单</button>
+      <div class="header-actions">
+        <button @click="createPlaylist" class="btn-create">+ 创建歌单</button>
+        <button @click="importPlaylist" class="btn-secondary">导入 JSON</button>
+      </div>
     </div>
 
     <div class="playlist-grid">
@@ -31,6 +34,7 @@
         <div class="playlist-actions">
           <button @click.stop="editPlaylist(playlist)">✏️</button>
           <button @click.stop="deletePlaylist(playlist.id)">🗑️</button>
+          <button @click.stop="exportPlaylist(playlist)">⬇️</button>
         </div>
       </div>
     </div>
@@ -115,6 +119,33 @@ const deletePlaylist = async (id: number) => {
   }
 }
 
+const exportPlaylist = async (playlist: Playlist) => {
+  try {
+    const filePath = await window.electronAPI.exportPlaylistJSON(playlist.id)
+    if (filePath) {
+      alert(`已导出到：\n${filePath}`)
+    }
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    alert(`导出失败：${error.message || error}`)
+  }
+}
+
+const importPlaylist = async () => {
+  try {
+    const result = await window.electronAPI.importPlaylistJSON()
+    if (result) {
+      await loadPlaylists()
+      musicStore.loadPlaylists()
+      const missing = result.missing?.length || 0
+      alert(`导入完成，新增 ${result.added} 首，未匹配到 ${missing} 首。`)
+    }
+  } catch (error: any) {
+    console.error('导入失败:', error)
+    alert(`导入失败：${error.message || error}`)
+  }
+}
+
 const openPlaylist = (playlist: Playlist) => {
   // TODO: 打开歌单详情
   console.log('打开歌单:', playlist)
@@ -138,6 +169,11 @@ const playPlaylist = (playlist: Playlist) => {
   margin-bottom: 24px;
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .header h2 {
   color: var(--text-color);
 }
@@ -154,6 +190,20 @@ const playPlaylist = (playlist: Playlist) => {
 
 .btn-create:hover {
   background: #ff6b7a;
+}
+
+.btn-secondary {
+  background: var(--hover-bg);
+  color: var(--text-color);
+  border: 1px solid var(--sidebar-border);
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-secondary:hover {
+  background: var(--sidebar-border);
 }
 
 .playlist-grid {

@@ -1,12 +1,13 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { readFileSync, existsSync, copyFile } from 'fs'
 import { promisify } from 'util'
 import type {
   MusicItem,
   Playlist,
-  DuplicateGroup
+  DuplicateGroup,
+  AdvancedSearchCriteria
 } from '@shared/types/music'
 
 const copyFileAsync = promisify(copyFile)
@@ -197,6 +198,12 @@ export default class MusicDatabase {
     return row ? this.mapRowToMusicItem(row) : null
   }
 
+  getMusicByPath(filePath: string): MusicItem | null {
+    const stmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
+    const row = stmt.get(filePath) as any
+    return row ? this.mapRowToMusicItem(row) : null
+  }
+
   getMusicList(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
       SELECT * FROM music
@@ -247,6 +254,86 @@ export default class MusicDatabase {
     }
   }
 
+  advancedSearch(criteria: AdvancedSearchCriteria): MusicItem[] {
+    const conditions: string[] = ['is_duplicate = 0']
+    const params: any[] = []
+
+    if (criteria.keyword) {
+      const like = `%${criteria.keyword.trim()}%`
+      conditions.push('(title LIKE ? OR artist LIKE ? OR album LIKE ? OR file_name LIKE ?)')
+      params.push(like, like, like, like)
+    }
+
+    if (criteria.artist) {
+      conditions.push('artist LIKE ?')
+      params.push(`%${criteria.artist.trim()}%`)
+    }
+
+    if (criteria.album) {
+      conditions.push('album LIKE ?')
+      params.push(`%${criteria.album.trim()}%`)
+    }
+
+    if (criteria.genre) {
+      conditions.push('genre LIKE ?')
+      params.push(`%${criteria.genre.trim()}%`)
+    }
+
+    if (criteria.favorite !== undefined) {
+      conditions.push('favorite = ?')
+      params.push(criteria.favorite ? 1 : 0)
+    }
+
+    if (criteria.directory) {
+      conditions.push('file_path LIKE ?')
+      params.push(`${criteria.directory.replace(/%/g, '\\%')}%`)
+    }
+
+    if (criteria.fileExtension) {
+      conditions.push('file_extension = ?')
+      params.push(criteria.fileExtension.toLowerCase())
+    }
+
+    if (criteria.minDuration !== undefined) {
+      conditions.push('duration >= ?')
+      params.push(criteria.minDuration)
+    }
+
+    if (criteria.maxDuration !== undefined) {
+      conditions.push('duration <= ?')
+      params.push(criteria.maxDuration)
+    }
+
+    if (criteria.yearFrom !== undefined) {
+      conditions.push('(year IS NOT NULL AND year >= ?)')
+      params.push(criteria.yearFrom)
+    }
+
+    if (criteria.yearTo !== undefined) {
+      conditions.push('(year IS NOT NULL AND year <= ?)')
+      params.push(criteria.yearTo)
+    }
+
+    const sortFieldMap: Record<string, string> = {
+      addedAt: 'added_at',
+      title: 'title',
+      duration: 'duration',
+      playCount: 'play_count'
+    }
+    const sortField = sortFieldMap[criteria.sortBy || 'addedAt']
+    const sortOrder = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC'
+    const limit = criteria.limit && criteria.limit > 0 ? criteria.limit : 200
+
+    const stmt = this.db!.prepare(`
+      SELECT * FROM music
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ${sortField} ${sortOrder}
+      LIMIT ?
+    `)
+    const rows = stmt.all(...params, limit) as any[]
+    return rows.map(row => this.mapRowToMusicItem(row))
+  }
+
   getMusicByHash(hash: string): MusicItem[] {
     const stmt = this.db!.prepare('SELECT * FROM music WHERE file_hash = ?')
     const rows = stmt.all(hash) as any[]
@@ -256,6 +343,64 @@ export default class MusicDatabase {
   getMusicByGenre(genre: string): MusicItem[] {
     const stmt = this.db!.prepare('SELECT * FROM music WHERE genre = ? AND is_duplicate = 0 ORDER BY title')
     const rows = stmt.all(genre) as any[]
+    return rows.map(row => this.mapRowToMusicItem(row))
+  }
+
+  getSimilarMusic(musicId: number, limit: number = 20): MusicItem[] {
+    const target = this.getMusicById(musicId)
+    if (!target) {
+      return []
+    }
+
+    const similarityConditions: string[] = []
+    const similarityParams: any[] = []
+
+    if (target.artist) {
+      similarityConditions.push('artist = ?')
+      similarityParams.push(target.artist)
+    }
+    if (target.album) {
+      similarityConditions.push('album = ?')
+      similarityParams.push(target.album)
+    }
+    if (target.genre) {
+      similarityConditions.push('genre = ?')
+      similarityParams.push(target.genre)
+    }
+
+    if (similarityConditions.length === 0) {
+      const directory = dirname(target.filePath)
+      similarityConditions.push('file_path LIKE ?')
+      similarityParams.push(`${directory}%`)
+    }
+
+    const stmt = this.db!.prepare(`
+      SELECT m.*,
+        (
+          (CASE WHEN m.artist = ? THEN 2 ELSE 0 END) +
+          (CASE WHEN m.album = ? THEN 1 ELSE 0 END) +
+          (CASE WHEN m.genre = ? THEN 1 ELSE 0 END) -
+          (ABS(m.duration - ?) / 600.0)
+        ) AS score
+      FROM music m
+      WHERE m.id != ?
+        AND m.is_duplicate = 0
+        AND (${similarityConditions.join(' OR ')})
+      ORDER BY score DESC, ABS(m.duration - ?) ASC, m.play_count DESC
+      LIMIT ?
+    `)
+
+    const rows = stmt.all(
+      target.artist || '',
+      target.album || '',
+      target.genre || '',
+      target.duration || 0,
+      target.id,
+      ...similarityParams,
+      target.duration || 0,
+      limit
+    ) as any[]
+
     return rows.map(row => this.mapRowToMusicItem(row))
   }
 

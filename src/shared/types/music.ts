@@ -116,3 +116,54 @@ export interface ScanOptions {
   excludePaths: string[]
   onProgress?: (progress: ScanProgress) => void
 }
+
+export interface AdvancedSearchCriteria {
+  keyword?: string
+  artist?: string
+  album?: string
+  genre?: string
+  favorite?: boolean
+  directory?: string
+  fileExtension?: string
+  minDuration?: number
+  maxDuration?: number
+  yearFrom?: number
+  yearTo?: number
+  sortBy?: 'addedAt' | 'title' | 'duration' | 'playCount'
+  sortOrder?: 'asc' | 'desc'
+  limit?: number
+}
+
+export interface PlaylistExportSong {
+  title: string
+  artist: string
+  album: string | null
+  duration: number
+  filePath: string
+  fileName: string
+  fileHash: string
+}
+
+export interface PlaylistExportData {
+  version: number
+  exportedAt: string
+  playlist: {
+    name: string
+    description: string | null
+    coverPath: string | null
+    songCount: number
+    totalDuration: number
+  }
+  songs: PlaylistExportSong[]
+}
+
+export interface PlaylistImportResult {
+  playlistId: number
+  added: number
+  missing: Array<{
+    title: string
+    artist?: string
+    filePath?: string
+    fileHash?: string
+  }>
+}

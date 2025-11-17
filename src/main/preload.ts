@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { MusicItem, ScanProgress, ScanResult } from '@shared/types/music'
+import type {
+  MusicItem,
+  ScanProgress,
+  ScanResult,
+  AdvancedSearchCriteria,
+  PlaylistImportResult
+} from '@shared/types/music'
 
 // 暴露安全的 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -19,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('get-music-list', offset, limit),
   getMusicTotalCount: () => ipcRenderer.invoke('get-music-total-count'),
   searchMusic: (query: string) => ipcRenderer.invoke('search-music', query),
+  advancedSearch: (criteria: AdvancedSearchCriteria) => ipcRenderer.invoke('advanced-search', criteria),
   getMusicById: (id: number) => ipcRenderer.invoke('get-music-by-id', id),
   toggleFavorite: (id: number) => ipcRenderer.invoke('toggle-favorite', id),
   recordPlay: (id: number) => ipcRenderer.invoke('record-play', id),
@@ -35,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('add-to-playlist', playlistId, musicId),
   getPlaylistSongs: (playlistId: number) =>
     ipcRenderer.invoke('get-playlist-songs', playlistId),
+  exportPlaylistJSON: (playlistId: number) =>
+    ipcRenderer.invoke('export-playlist-json', playlistId),
+  importPlaylistJSON: () => ipcRenderer.invoke('import-playlist-json'),
 
   // 收藏
   getFavorites: () => ipcRenderer.invoke('get-favorites'),
@@ -67,6 +77,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 重复音乐检测
   getDuplicateGroups: () => ipcRenderer.invoke('get-duplicate-groups'),
   deleteMusicFile: (musicId: number) => ipcRenderer.invoke('delete-music-file', musicId),
+  getSimilarMusic: (musicId: number, limit?: number) =>
+    ipcRenderer.invoke('get-similar-music', musicId, limit),
 
   // Excel导出
   exportMusicToExcel: (musicIds: number[], options?: any) =>
@@ -113,6 +125,7 @@ declare global {
       getMusicList: (offset: number, limit: number) => Promise<MusicItem[]>
       getMusicTotalCount: () => Promise<number>
       searchMusic: (query: string) => Promise<MusicItem[]>
+      advancedSearch: (criteria: AdvancedSearchCriteria) => Promise<MusicItem[]>
       getMusicById: (id: number) => Promise<MusicItem | null>
       toggleFavorite: (id: number) => Promise<void>
       recordPlay: (id: number) => Promise<void>
@@ -122,6 +135,8 @@ declare global {
       getPlaylists: () => Promise<any[]>
       addToPlaylist: (playlistId: number, musicId: number) => Promise<void>
       getPlaylistSongs: (playlistId: number) => Promise<MusicItem[]>
+      exportPlaylistJSON: (playlistId: number) => Promise<string | null>
+      importPlaylistJSON: () => Promise<PlaylistImportResult | null>
       getFavorites: () => Promise<MusicItem[]>
       getPlayHistory: () => Promise<MusicItem[]>
       clearPlayHistory: () => Promise<void>
@@ -136,6 +151,7 @@ declare global {
       fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>
       getDuplicateGroups: () => Promise<any[]>
       deleteMusicFile: (musicId: number) => Promise<boolean>
+      getSimilarMusic: (musicId: number, limit?: number) => Promise<MusicItem[]>
       exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
       exportMusicFiles: (musicIds: number[], options?: any) => Promise<any>
       startFileMonitor: (directoryPath: string, options?: any) => Promise<boolean>

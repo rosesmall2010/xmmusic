@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { writeFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import MusicDatabase from '../database/db'
 import FileScanner from '../services/fileScanner'
 import ID3Fixer from '../services/id3Fixer'
@@ -7,7 +7,7 @@ import ExcelExporter from '../services/excelExporter'
 import FileExporter from '../services/fileExporter'
 import FileMonitor from '../services/fileMonitor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
-import type { ScanProgress } from '@shared/types/music'
+import type { ScanProgress, MusicItem } from '../../shared/types/music'
 
 export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null) {
   // 窗口控制（不依赖数据库）
@@ -87,6 +87,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.searchMusic(query)
   })
 
+  ipcMain.handle('advanced-search', async (_, criteria: any) => {
+    if (!db) return []
+    return db.advancedSearch(criteria)
+  })
+
   ipcMain.handle('get-music-by-id', async (_, id: number) => {
     if (!db) return null
     return db.getMusicById(id)
@@ -100,6 +105,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('record-play', async (_, id: number) => {
     if (!db) return
     db.recordPlay(id)
+  })
+
+  ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number) => {
+    if (!db) return []
+    return db.getSimilarMusic(musicId, limit || 20)
   })
 
   // 播放列表
@@ -131,6 +141,105 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('get-playlist-songs', async (_, playlistId: number) => {
     if (!db) return []
     return db.getPlaylistSongs(playlistId)
+  })
+
+  ipcMain.handle('export-playlist-json', async (_, playlistId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const playlist = db.getPlaylistById(playlistId)
+    if (!playlist) {
+      throw new Error('歌单不存在')
+    }
+
+    const songs = db.getPlaylistSongs(playlistId)
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      playlist,
+      songs: songs.map(song => ({
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        duration: song.duration,
+        filePath: song.filePath,
+        fileName: song.fileName,
+        fileHash: song.fileHash
+      }))
+    }
+
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: '导出歌单 (JSON)',
+      defaultPath: `${playlist.name}.json`,
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }]
+    })
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return null
+    }
+
+    writeFileSync(saveResult.filePath, JSON.stringify(payload, null, 2), 'utf-8')
+    return saveResult.filePath
+  })
+
+  ipcMain.handle('import-playlist-json', async () => {
+    if (!db) throw new Error('数据库未初始化')
+
+    const openResult = await dialog.showOpenDialog(mainWindow, {
+      title: '导入歌单 (JSON)',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON 文件', extensions: ['json'] }]
+    })
+
+    if (openResult.canceled || openResult.filePaths.length === 0) {
+      return null
+    }
+
+    const filePath = openResult.filePaths[0]
+    const raw = readFileSync(filePath, 'utf-8')
+
+    let data: any
+    try {
+      data = JSON.parse(raw)
+    } catch (error) {
+      throw new Error('JSON 文件格式错误')
+    }
+
+    const sourcePlaylist = data.playlist || {}
+    const playlistName = sourcePlaylist.name
+      ? `${sourcePlaylist.name} (导入于${new Date().toLocaleDateString()})`
+      : `导入歌单_${Date.now()}`
+
+    const playlistId = db.createPlaylist(playlistName, sourcePlaylist.description)
+    let added = 0
+    const missing: Array<{ title: string; artist?: string; filePath?: string; fileHash?: string }> = []
+
+    for (const song of data.songs || []) {
+      let music: MusicItem | null = null
+      if (song.fileHash) {
+        const matches = db.getMusicByHash(song.fileHash)
+        music = matches.length > 0 ? matches[0] : null
+      }
+      if (!music && song.filePath) {
+        music = db.getMusicByPath(song.filePath)
+      }
+
+      if (music) {
+        db.addToPlaylist(playlistId, music.id)
+        added += 1
+      } else {
+        missing.push({
+          title: song.title,
+          artist: song.artist,
+          filePath: song.filePath,
+          fileHash: song.fileHash
+        })
+      }
+    }
+
+    return {
+      playlistId,
+      added,
+      missing
+    }
   })
 
   // 收藏

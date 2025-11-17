@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { MusicItem, Playlist } from '@shared/types/music'
+import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
   // State
@@ -14,11 +14,15 @@ export const useMusicStore = defineStore('music', () => {
   const currentView = ref<'local' | 'recent' | 'playlist' | 'favorites' | 'queue' | 'playlist-detail' | 'settings'>('local')
   const playlists = ref<Playlist[]>([])
   const selectedPlaylistId = ref<number | null>(null)
+  const advancedResults = ref<MusicItem[]>([])
+  const advancedCriteria = ref<AdvancedSearchCriteria | null>(null)
+  const advancedLoading = ref(false)
 
   // Getters
   const hasMore = computed(() => {
     return currentOffset.value < totalCount.value
   })
+  const isAdvancedMode = computed(() => !!advancedCriteria.value)
 
   // Actions
   async function loadMusic(offset: number = 0, limit: number = pageSize.value) {
@@ -44,6 +48,30 @@ export const useMusicStore = defineStore('music', () => {
       return
     }
     searchResults.value = await window.electronAPI.searchMusic(query)
+  }
+
+  async function runAdvancedSearch(criteria: AdvancedSearchCriteria) {
+    advancedLoading.value = true
+    try {
+      const cleaned: AdvancedSearchCriteria = { ...criteria }
+      // 移除空字符串
+      Object.keys(cleaned).forEach(key => {
+        const value = (cleaned as any)[key]
+        if (value === '' || value === null) {
+          delete (cleaned as any)[key]
+        }
+      })
+      const results = await window.electronAPI.advancedSearch(cleaned)
+      advancedResults.value = results
+      advancedCriteria.value = cleaned
+    } finally {
+      advancedLoading.value = false
+    }
+  }
+
+  function clearAdvancedSearch() {
+    advancedResults.value = []
+    advancedCriteria.value = null
   }
 
   async function toggleFavorite(id: number) {
@@ -77,9 +105,15 @@ export const useMusicStore = defineStore('music', () => {
     currentView,
     playlists,
     selectedPlaylistId,
+    advancedResults,
+    advancedCriteria,
+    advancedLoading,
+    isAdvancedMode,
     hasMore,
     loadMusic,
     searchMusic,
+    runAdvancedSearch,
+    clearAdvancedSearch,
     toggleFavorite,
     setCurrentView,
     loadPlaylists,

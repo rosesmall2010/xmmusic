@@ -8,6 +8,99 @@
         <button @click="exportFiles" class="btn-export">导出文件</button>
       </div>
     </div>
+    <div class="advanced-controls">
+      <button class="btn-secondary" @click="toggleAdvancedSearchPanel">
+        {{ showAdvancedSearch ? '收起高级搜索' : '高级搜索' }}
+      </button>
+      <span v-if="musicStore.isAdvancedMode" class="advanced-status">
+        已筛选 {{ musicStore.advancedResults.length }} 首
+        <button class="link-button" @click="clearAdvancedSearchResults">清除筛选</button>
+      </span>
+      <span v-if="musicStore.advancedLoading" class="advanced-loading">搜索中...</span>
+    </div>
+
+    <div v-if="showAdvancedSearch" class="advanced-panel">
+      <div class="advanced-grid">
+        <label>
+          <span>关键字</span>
+          <input v-model="advancedForm.keyword" placeholder="标题 / 艺术家 / 专辑" />
+        </label>
+        <label>
+          <span>艺术家</span>
+          <input v-model="advancedForm.artist" placeholder="艺术家" />
+        </label>
+        <label>
+          <span>专辑</span>
+          <input v-model="advancedForm.album" placeholder="专辑" />
+        </label>
+        <label>
+          <span>流派</span>
+          <input v-model="advancedForm.genre" placeholder="流派/风格" />
+        </label>
+        <label>
+          <span>目录前缀</span>
+          <input v-model="advancedForm.directory" placeholder="/Users/xxx/Music" />
+        </label>
+        <label>
+          <span>扩展名</span>
+          <input v-model="advancedForm.fileExtension" placeholder="mp3 / flac" />
+        </label>
+        <label>
+          <span>最短时长 (秒)</span>
+          <input v-model="advancedForm.minDuration" type="number" min="0" />
+        </label>
+        <label>
+          <span>最长时长 (秒)</span>
+          <input v-model="advancedForm.maxDuration" type="number" min="0" />
+        </label>
+        <label>
+          <span>年份 ≥</span>
+          <input v-model="advancedForm.yearFrom" type="number" />
+        </label>
+        <label>
+          <span>年份 ≤</span>
+          <input v-model="advancedForm.yearTo" type="number" />
+        </label>
+        <label>
+          <span>排序字段</span>
+          <select v-model="advancedForm.sortBy">
+            <option value="addedAt">添加时间</option>
+            <option value="title">标题</option>
+            <option value="duration">时长</option>
+            <option value="playCount">播放次数</option>
+          </select>
+        </label>
+        <label>
+          <span>排序方向</span>
+          <select v-model="advancedForm.sortOrder">
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+        </label>
+        <label>
+          <span>最大返回</span>
+          <input v-model="advancedForm.limit" type="number" min="10" max="1000" />
+        </label>
+        <label class="favorite-only">
+          <input v-model="advancedForm.favoriteOnly" type="checkbox" />
+          仅显示收藏
+        </label>
+      </div>
+      <div class="advanced-actions">
+        <button class="btn-primary" @click="runAdvancedSearch" :disabled="musicStore.advancedLoading">
+          执行搜索
+        </button>
+        <button class="btn-secondary" @click="resetAdvancedForm">重置</button>
+        <button
+          v-if="musicStore.isAdvancedMode"
+          class="btn-secondary"
+          @click="clearAdvancedSearchResults"
+        >
+          退出高级搜索
+        </button>
+      </div>
+    </div>
+
     <div ref="containerRef" class="virtual-list-container">
       <div class="table-header">
         <div class="col-index">#</div>
@@ -98,6 +191,10 @@
         <span class="menu-icon">🎶</span>
         <span>添加到歌单</span>
       </div>
+      <div class="menu-item" @click="openSimilarDialog(contextMenu.item)">
+        <span class="menu-icon">✨</span>
+        <span>相似推荐</span>
+      </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="viewDetails(contextMenu.item)">
         <span class="menu-icon">ℹ️</span>
@@ -167,6 +264,38 @@
         </div>
       </div>
     </div>
+
+    <!-- 相似歌曲推荐 -->
+    <div v-if="similarDialog.show" class="dialog-overlay" @click.self="closeSimilarDialog">
+      <div class="dialog dialog-similar">
+        <h3>相似歌曲推荐</h3>
+        <p v-if="similarDialog.base" class="similar-base">
+          基于：{{ similarDialog.base.title }} - {{ similarDialog.base.artist }}
+        </p>
+        <div v-if="similarDialog.loading" class="similar-loading">正在分析...</div>
+        <div v-else class="similar-list">
+          <div v-if="similarDialog.songs.length === 0" class="empty-state">暂未找到相似歌曲</div>
+          <div
+            v-for="song in similarDialog.songs"
+            :key="song.id"
+            class="similar-item"
+            @dblclick="playSimilarSong(song)"
+          >
+            <div class="info">
+              <div class="title">{{ song.title }}</div>
+              <div class="meta">{{ song.artist }} · {{ song.album || '未知专辑' }}</div>
+            </div>
+            <div class="actions">
+              <button @click.stop="queueSimilarSong(song)" title="添加到队列">➕</button>
+              <button @click.stop="playSimilarSong(song)" title="播放">▶️</button>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="closeSimilarDialog">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -175,7 +304,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
-import type { MusicItem, ScanProgress } from '@shared/types/music'
+import type { MusicItem, ScanProgress, AdvancedSearchCriteria } from '@shared/types/music'
+
+interface SimilarDialogState {
+  show: boolean
+  loading: boolean
+  songs: MusicItem[]
+  base: MusicItem | null
+}
 
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
@@ -194,6 +330,9 @@ const scanProgress = ref<ScanProgress>({
 
 const scrollTop = ref(0)
 const containerHeight = ref(600)
+const displayedList = computed<MusicItem[]>(() => {
+  return musicStore.isAdvancedMode ? musicStore.advancedResults : musicStore.musicList
+})
 
 const visibleStart = computed(() => {
   return Math.floor(scrollTop.value / itemHeight)
@@ -202,20 +341,38 @@ const visibleStart = computed(() => {
 const visibleEnd = computed(() => {
   return Math.min(
     visibleStart.value + Math.ceil(containerHeight.value / itemHeight) + 1,
-    musicStore.musicList.length
+    displayedList.value.length
   )
 })
 
 const visibleItems = computed(() => {
-  return musicStore.musicList.slice(visibleStart.value, visibleEnd.value)
+  return displayedList.value.slice(visibleStart.value, visibleEnd.value)
 })
 
 const totalHeight = computed(() => {
-  return musicStore.musicList.length * itemHeight
+  return displayedList.value.length * itemHeight
 })
 
 const offsetY = computed(() => {
   return visibleStart.value * itemHeight
+})
+
+const showAdvancedSearch = ref(false)
+const advancedForm = ref({
+  keyword: '',
+  artist: '',
+  album: '',
+  genre: '',
+  directory: '',
+  fileExtension: '',
+  favoriteOnly: false,
+  minDuration: '',
+  maxDuration: '',
+  yearFrom: '',
+  yearTo: '',
+  sortBy: 'addedAt',
+  sortOrder: 'desc',
+  limit: 200
 })
 
 onMounted(async () => {
@@ -245,7 +402,10 @@ const handleScroll = (e: Event) => {
   scrollTop.value = target.scrollTop
 
   // 加载更多
-  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 100) {
+  if (
+    !musicStore.isAdvancedMode &&
+    target.scrollTop + target.clientHeight >= target.scrollHeight - 100
+  ) {
     if (musicStore.hasMore && !musicStore.loading) {
       musicStore.loadMusic(musicStore.musicList.length, 50)
     }
@@ -268,6 +428,77 @@ const handleScan = async () => {
   }
 }
 
+const resetAdvancedForm = () => {
+  advancedForm.value = {
+    keyword: '',
+    artist: '',
+    album: '',
+    genre: '',
+    directory: '',
+    fileExtension: '',
+    favoriteOnly: false,
+    minDuration: '',
+    maxDuration: '',
+    yearFrom: '',
+    yearTo: '',
+    sortBy: 'addedAt',
+    sortOrder: 'desc',
+    limit: 200
+  }
+}
+
+const toggleAdvancedSearchPanel = () => {
+  showAdvancedSearch.value = !showAdvancedSearch.value
+  if (!showAdvancedSearch.value) {
+    resetAdvancedForm()
+  }
+}
+
+const buildAdvancedCriteria = (): AdvancedSearchCriteria => {
+  const criteria: AdvancedSearchCriteria = {
+    sortBy: advancedForm.value.sortBy as AdvancedSearchCriteria['sortBy'],
+    sortOrder: advancedForm.value.sortOrder as AdvancedSearchCriteria['sortOrder'],
+    limit: Number(advancedForm.value.limit) || 200
+  }
+
+  const maybeNumber = (value: string) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : undefined
+  }
+
+  if (advancedForm.value.keyword.trim()) criteria.keyword = advancedForm.value.keyword.trim()
+  if (advancedForm.value.artist.trim()) criteria.artist = advancedForm.value.artist.trim()
+  if (advancedForm.value.album.trim()) criteria.album = advancedForm.value.album.trim()
+  if (advancedForm.value.genre.trim()) criteria.genre = advancedForm.value.genre.trim()
+  if (advancedForm.value.directory.trim()) criteria.directory = advancedForm.value.directory.trim()
+  if (advancedForm.value.fileExtension.trim()) {
+    criteria.fileExtension = advancedForm.value.fileExtension.trim().toLowerCase()
+  }
+  if (advancedForm.value.favoriteOnly) criteria.favorite = true
+
+  const minDuration = maybeNumber(advancedForm.value.minDuration)
+  if (minDuration !== undefined) criteria.minDuration = minDuration
+  const maxDuration = maybeNumber(advancedForm.value.maxDuration)
+  if (maxDuration !== undefined) criteria.maxDuration = maxDuration
+  const yearFrom = maybeNumber(advancedForm.value.yearFrom)
+  if (yearFrom !== undefined) criteria.yearFrom = yearFrom
+  const yearTo = maybeNumber(advancedForm.value.yearTo)
+  if (yearTo !== undefined) criteria.yearTo = yearTo
+
+  return criteria
+}
+
+const runAdvancedSearch = async () => {
+  const criteria = buildAdvancedCriteria()
+  await musicStore.runAdvancedSearch(criteria)
+  showAdvancedSearch.value = false
+}
+
+const clearAdvancedSearchResults = () => {
+  musicStore.clearAdvancedSearch()
+  showAdvancedSearch.value = false
+}
+
 const handlePlay = async (music: MusicItem) => {
   await play(music)
 }
@@ -286,7 +517,7 @@ const toggleFavorite = async (music: MusicItem) => {
 const exportToExcel = async () => {
   try {
     // 获取当前列表中的所有音乐ID
-    const musicIds = musicList.value.map(m => m.id)
+    const musicIds = displayedList.value.map(m => m.id)
 
     if (musicIds.length === 0) {
       alert('没有可导出的音乐')
@@ -310,7 +541,7 @@ const exportToExcel = async () => {
 const exportFiles = async () => {
   try {
     // 获取当前列表中的所有音乐ID
-    const musicIds = musicStore.musicList.map(m => m.id)
+    const musicIds = displayedList.value.map(m => m.id)
 
     if (musicIds.length === 0) {
       alert('没有可导出的音乐')
@@ -347,6 +578,12 @@ const showCreatePlaylistDialog = ref(false)
 const playlists = ref<any[]>([])
 const newPlaylistName = ref('')
 const newPlaylistDescription = ref('')
+const similarDialog = ref<SimilarDialogState>({
+  show: false,
+  loading: false,
+  songs: [],
+  base: null
+})
 
 // 显示右键菜单
 const showContextMenu = (event: MouseEvent, item: MusicItem) => {
@@ -434,6 +671,37 @@ const addToPlayQueue = (music: MusicItem | null) => {
     alert('已添加到播放列表')
   }
   hideContextMenu()
+}
+
+const openSimilarDialog = async (music: MusicItem | null) => {
+  if (!music) return
+  hideContextMenu()
+  similarDialog.value.show = true
+  similarDialog.value.loading = true
+  similarDialog.value.base = music
+  try {
+    const songs = await window.electronAPI.getSimilarMusic(music.id, 30)
+    similarDialog.value.songs = songs
+  } catch (error) {
+    console.error('获取相似歌曲失败:', error)
+    alert('获取相似歌曲失败，请稍后重试')
+  } finally {
+    similarDialog.value.loading = false
+  }
+}
+
+const closeSimilarDialog = () => {
+  similarDialog.value.show = false
+  similarDialog.value.songs = []
+  similarDialog.value.base = null
+}
+
+const playSimilarSong = async (music: MusicItem) => {
+  await play(music)
+}
+
+const queueSimilarSong = (music: MusicItem) => {
+  playerStore.addToQueue(music)
 }
 
 // 显示添加到播放列表对话框
@@ -698,6 +966,73 @@ MD5: ${music.fileHash}
   gap: 10px;
 }
 
+.advanced-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.advanced-status {
+  font-size: 13px;
+  color: #666;
+}
+
+.advanced-loading {
+  font-size: 13px;
+  color: #ff9800;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  color: #2196f3;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.advanced-panel {
+  padding: 12px 20px 4px;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.advanced-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  gap: 6px;
+}
+
+.advanced-grid input,
+.advanced-grid select {
+  padding: 6px 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.favorite-only {
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.advanced-actions {
+  padding: 12px 20px;
+  display: flex;
+  gap: 10px;
+}
+
 .toolbar-actions {
   display: flex;
   gap: 10px;
@@ -920,6 +1255,63 @@ MD5: ${music.fileHash}
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
+}
+
+.dialog-similar {
+  max-width: 640px;
+}
+
+.similar-base {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.similar-list {
+  max-height: 360px;
+  overflow-y: auto;
+  margin: 12px 0;
+}
+
+.similar-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.similar-item:last-child {
+  border-bottom: none;
+}
+
+.similar-item .info .title {
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.similar-item .info .meta {
+  font-size: 12px;
+  color: var(--secondary-text-color);
+}
+
+.similar-item .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.similar-item .actions button {
+  border: none;
+  background: var(--hover-bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.similar-loading {
+  padding: 20px 0;
+  text-align: center;
+  color: #888;
 }
 
 .btn-secondary {
