@@ -11,7 +11,7 @@ export const useMusicStore = defineStore('music', () => {
   const loading = ref(false)
   const searchQuery = ref('')
   const searchResults = ref<MusicItem[]>([])
-  const currentView = ref<'local' | 'recent' | 'playlist' | 'favorites' | 'queue' | 'playlist-detail' | 'settings'>('local')
+  const currentView = ref<'local' | 'recent' | 'playlist' | 'favorites' | 'queue' | 'playlist-detail' | 'settings' | 'statistics' | 'recommendations'>('local')
   const playlists = ref<Playlist[]>([])
   const selectedPlaylistId = ref<number | null>(null)
   const advancedResults = ref<MusicItem[]>([])
@@ -74,10 +74,10 @@ export const useMusicStore = defineStore('music', () => {
     advancedCriteria.value = null
   }
 
-  async function toggleFavorite(id: number) {
-    await window.electronAPI.toggleFavorite(id)
+  async function toggleFavorite(filePath: string) {
+    await window.electronAPI.toggleFavorite(filePath)
     // 更新本地状态
-    const item = musicList.value.find(m => m.id === id)
+    const item = musicList.value.find(m => m.filePath === filePath)
     if (item) {
       item.favorite = !item.favorite
     }

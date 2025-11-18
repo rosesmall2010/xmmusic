@@ -24,30 +24,216 @@ export default class MusicDatabase {
   }
 
   initialize(dbPath?: string): void {
-    const path = dbPath || join(app.getPath('userData'), 'xmmusic.db')
-    this.db = new Database(path)
+    try {
+      const path = dbPath || join(app.getPath('userData'), 'xmmusic.db')
+      console.log(`📂 数据库路径: ${path}`)
+      console.log(`🔧 尝试创建数据库连接...`)
 
-    // 配置优化
-    this.db.pragma('journal_mode = WAL')
-    this.db.pragma('synchronous = NORMAL')
-    this.db.pragma('cache_size = -32000') // 32MB
-    this.db.pragma('temp_store = MEMORY')
-    this.db.pragma('mmap_size = 268435456') // 256MB
-    this.db.pragma('page_size = 4096')
-    this.db.pragma('foreign_keys = ON')
+      try {
+        this.db = new Database(path)
+        console.log(`✅ 数据库连接创建成功`)
+      } catch (dbError: any) {
+        console.error(`❌ 创建数据库连接失败:`)
+        console.error(`   错误信息: ${dbError?.message || dbError}`)
+        if (dbError?.code) {
+          console.error(`   错误代码: ${dbError.code}`)
+        }
+        if (dbError?.stack) {
+          console.error(`   错误堆栈: ${dbError.stack}`)
+        }
+        throw dbError
+      }
 
-    // 执行迁移
-    this.migrate()
+      // 配置优化
+      try {
+        this.db.pragma('journal_mode = WAL')
+        this.db.pragma('synchronous = NORMAL')
+        this.db.pragma('cache_size = -32000') // 32MB
+        this.db.pragma('temp_store = MEMORY')
+        this.db.pragma('mmap_size = 268435456') // 256MB
+        this.db.pragma('page_size = 4096')
+        this.db.pragma('foreign_keys = ON')
+        console.log(`✅ 数据库配置完成`)
+      } catch (pragmaError: any) {
+        console.error(`❌ 数据库配置失败: ${pragmaError?.message || pragmaError}`)
+        throw pragmaError
+      }
 
-    // 创建索引
-    this.createIndexes()
+      // 执行迁移
+      try {
+        this.migrate()
+        console.log(`✅ 数据库迁移完成`)
+      } catch (migrateError: any) {
+        console.error(`❌ 数据库迁移失败: ${migrateError?.message || migrateError}`)
+        throw migrateError
+      }
+
+      // 创建索引
+      try {
+        this.createIndexes()
+        console.log(`✅ 数据库索引创建完成`)
+      } catch (indexError: any) {
+        console.error(`❌ 数据库索引创建失败: ${indexError?.message || indexError}`)
+        throw indexError
+      }
+    } catch (error: any) {
+      // 清理失败的数据库连接
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch (closeError) {
+          // 忽略关闭错误
+        }
+        this.db = null
+      }
+      throw error
+    }
   }
 
   private migrate(): void {
+    // 执行初始迁移
     const migrationPath = join(__dirname, 'migrations', '001_initial.sql')
     if (existsSync(migrationPath)) {
       const sql = readFileSync(migrationPath, 'utf8')
       this.db!.exec(sql)
+    }
+
+    // 执行搜索历史迁移
+    const searchHistoryPath = join(__dirname, 'migrations', '002_add_search_history.sql')
+    if (existsSync(searchHistoryPath)) {
+      try {
+        const sql = readFileSync(searchHistoryPath, 'utf8')
+        this.db!.exec(sql)
+      } catch (error) {
+        // 表可能已存在，忽略错误
+        console.log('Search history migration:', error)
+      }
+    }
+
+    // 执行播放列表迁移（从 music_id 改为 file_path）
+    try {
+      // 检查 playlist_item 表是否存在
+      const checkStmt = this.db!.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name='playlist_item'
+      `)
+      const tableExists = checkStmt.get()
+
+      if (tableExists) {
+        // 检查表结构：是否已经有 file_path 列
+        const pragmaStmt = this.db!.prepare('PRAGMA table_info(playlist_item)')
+        const columns = pragmaStmt.all() as any[]
+        const hasFilePath = columns.some((col: any) => col.name === 'file_path')
+        const hasMusicId = columns.some((col: any) => col.name === 'music_id')
+
+        if (!hasFilePath && hasMusicId) {
+          // 需要迁移：从 music_id 到 file_path
+          console.log('📦 迁移 playlist_item: music_id → file_path')
+
+          this.db!.exec(`
+            -- 1. 创建新表
+            CREATE TABLE playlist_item_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              playlist_id INTEGER NOT NULL,
+              file_path TEXT NOT NULL,
+              position INTEGER NOT NULL,
+              added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
+              UNIQUE(playlist_id, file_path)
+            );
+
+            -- 2. 迁移现有数据（尝试从 music 表获取 file_path）
+            INSERT INTO playlist_item_new (playlist_id, file_path, position, added_at)
+            SELECT
+              pi.playlist_id,
+              COALESCE(m.file_path, ''),
+              pi.position,
+              pi.added_at
+            FROM playlist_item pi
+            LEFT JOIN music m ON pi.music_id = m.id
+            WHERE m.file_path IS NOT NULL;
+
+            -- 3. 删除旧表
+            DROP TABLE playlist_item;
+
+            -- 4. 重命名新表
+            ALTER TABLE playlist_item_new RENAME TO playlist_item;
+
+            -- 5. 创建索引
+            CREATE INDEX IF NOT EXISTS idx_playlist_item_playlist ON playlist_item(playlist_id);
+            CREATE INDEX IF NOT EXISTS idx_playlist_item_file_path ON playlist_item(file_path);
+          `)
+
+          console.log('✅ Playlist migration completed')
+        } else if (hasFilePath) {
+          console.log('✅ Playlist table already using file_path')
+        } else {
+          console.log('⚠️ Unexpected playlist_item schema, recreating...')
+          // 表结构异常，重新创建
+          this.db!.exec(`
+            DROP TABLE IF EXISTS playlist_item;
+
+            CREATE TABLE playlist_item (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              playlist_id INTEGER NOT NULL,
+              file_path TEXT NOT NULL,
+              position INTEGER NOT NULL,
+              added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
+              UNIQUE(playlist_id, file_path)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_playlist_item_playlist ON playlist_item(playlist_id);
+            CREATE INDEX IF NOT EXISTS idx_playlist_item_file_path ON playlist_item(file_path);
+          `)
+          console.log('✅ Playlist table recreated')
+        }
+      } else {
+        // 表不存在，创建新表
+        console.log('📦 创建 playlist_item 表（使用 file_path）')
+        this.db!.exec(`
+          CREATE TABLE playlist_item (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            playlist_id INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
+            UNIQUE(playlist_id, file_path)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_playlist_item_playlist ON playlist_item(playlist_id);
+          CREATE INDEX IF NOT EXISTS idx_playlist_item_file_path ON playlist_item(file_path);
+        `)
+        console.log('✅ Playlist table created')
+      }
+    } catch (error) {
+      console.error('❌ Playlist migration error:', error)
+      throw error
+    }
+
+    // 执行收藏表迁移（创建独立的 favorites 表）
+    const favoritesMigrationPath = join(__dirname, 'migrations', '004_create_favorites_table.sql')
+    if (existsSync(favoritesMigrationPath)) {
+      try {
+        // 检查 favorites 表是否存在
+        const checkStmt = this.db!.prepare(`
+          SELECT name FROM sqlite_master
+          WHERE type='table' AND name='favorites'
+        `)
+        const tableExists = checkStmt.get()
+
+        if (!tableExists) {
+          console.log('Creating favorites table...')
+          const sql = readFileSync(favoritesMigrationPath, 'utf8')
+          this.db!.exec(sql)
+          console.log('Favorites table migration completed')
+        } else {
+          console.log('Favorites table already exists')
+        }
+      } catch (error) {
+        console.error('Favorites migration error:', error)
+      }
     }
   }
 
@@ -157,6 +343,22 @@ export default class MusicDatabase {
     if (updates.album !== undefined) {
       fields.push('album = ?')
       values.push(updates.album)
+    }
+    if (updates.year !== undefined) {
+      fields.push('year = ?')
+      values.push(updates.year)
+    }
+    if (updates.genre !== undefined) {
+      fields.push('genre = ?')
+      values.push(updates.genre)
+    }
+    if (updates.coverPath !== undefined) {
+      fields.push('cover_path = ?')
+      values.push(updates.coverPath)
+    }
+    if (updates.lyricsPath !== undefined) {
+      fields.push('lyrics_path = ?')
+      values.push(updates.lyricsPath)
     }
     if (updates.favorite !== undefined) {
       fields.push('favorite = ?')
@@ -280,8 +482,12 @@ export default class MusicDatabase {
     }
 
     if (criteria.favorite !== undefined) {
-      conditions.push('favorite = ?')
-      params.push(criteria.favorite ? 1 : 0)
+      // 使用独立的收藏表进行过滤
+      if (criteria.favorite) {
+        conditions.push('file_path IN (SELECT file_path FROM favorites)')
+      } else {
+        conditions.push('file_path NOT IN (SELECT file_path FROM favorites)')
+      }
     }
 
     if (criteria.directory) {
@@ -346,47 +552,51 @@ export default class MusicDatabase {
     return rows.map(row => this.mapRowToMusicItem(row))
   }
 
-  getSimilarMusic(musicId: number, limit: number = 20): MusicItem[] {
+  getSimilarMusic(musicId: number, limit: number = 20, minSimilarity: number = 0.5): Array<MusicItem & { similarity: number }> {
     const target = this.getMusicById(musicId)
     if (!target) {
       return []
     }
 
-    const similarityConditions: string[] = []
-    const similarityParams: any[] = []
+    // 计算相似度的权重
+    const artistWeight = 0.4
+    const albumWeight = 0.2
+    const genreWeight = 0.2
+    const yearWeight = 0.1
+    const durationWeight = 0.1
 
-    if (target.artist) {
-      similarityConditions.push('artist = ?')
-      similarityParams.push(target.artist)
-    }
-    if (target.album) {
-      similarityConditions.push('album = ?')
-      similarityParams.push(target.album)
-    }
-    if (target.genre) {
-      similarityConditions.push('genre = ?')
-      similarityParams.push(target.genre)
-    }
-
-    if (similarityConditions.length === 0) {
-      const directory = dirname(target.filePath)
-      similarityConditions.push('file_path LIKE ?')
-      similarityParams.push(`${directory}%`)
-    }
-
+    // 构建相似度计算SQL - 使用子查询来过滤 similarity
     const stmt = this.db!.prepare(`
-      SELECT m.*,
-        (
-          (CASE WHEN m.artist = ? THEN 2 ELSE 0 END) +
-          (CASE WHEN m.album = ? THEN 1 ELSE 0 END) +
-          (CASE WHEN m.genre = ? THEN 1 ELSE 0 END) -
-          (ABS(m.duration - ?) / 600.0)
-        ) AS score
-      FROM music m
-      WHERE m.id != ?
-        AND m.is_duplicate = 0
-        AND (${similarityConditions.join(' OR ')})
-      ORDER BY score DESC, ABS(m.duration - ?) ASC, m.play_count DESC
+      SELECT * FROM (
+        SELECT m.*,
+          (
+            (CASE WHEN m.artist = ? THEN ${artistWeight} ELSE 0 END) +
+            (CASE WHEN m.album = ? THEN ${albumWeight} ELSE 0 END) +
+            (CASE WHEN m.genre = ? THEN ${genreWeight} ELSE 0 END) +
+            (CASE
+              WHEN m.year IS NOT NULL AND ? IS NOT NULL THEN
+                ${yearWeight} * (1.0 - ABS(m.year - ?) / 50.0)
+              ELSE 0
+            END) +
+            (CASE
+              WHEN m.duration > 0 AND ? > 0 THEN
+                ${durationWeight} * (1.0 - ABS(m.duration - ?) / 600.0)
+              ELSE 0
+            END)
+          ) AS similarity
+        FROM music m
+        WHERE m.id != ?
+          AND m.is_duplicate = 0
+          AND (
+            m.artist = ? OR
+            m.album = ? OR
+            m.genre = ? OR
+            (m.year IS NOT NULL AND ? IS NOT NULL AND ABS(m.year - ?) <= 5) OR
+            (m.duration > 0 AND ? > 0 AND ABS(m.duration - ?) <= 60)
+          )
+      )
+      WHERE similarity >= ?
+      ORDER BY similarity DESC, play_count DESC
       LIMIT ?
     `)
 
@@ -394,14 +604,26 @@ export default class MusicDatabase {
       target.artist || '',
       target.album || '',
       target.genre || '',
+      target.year,
+      target.year,
+      target.duration || 0,
       target.duration || 0,
       target.id,
-      ...similarityParams,
+      target.artist || '',
+      target.album || '',
+      target.genre || '',
+      target.year,
+      target.year,
       target.duration || 0,
+      target.duration || 0,
+      minSimilarity,
       limit
     ) as any[]
 
-    return rows.map(row => this.mapRowToMusicItem(row))
+    return rows.map(row => ({
+      ...this.mapRowToMusicItem(row),
+      similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
+    }))
   }
 
   // ========== 播放列表操作 ==========
@@ -456,7 +678,7 @@ export default class MusicDatabase {
     stmt.run(id)
   }
 
-  addToPlaylist(playlistId: number, musicId: number, position?: number): void {
+  addToPlaylist(playlistId: number, filePath: string, position?: number): void {
     if (position === undefined) {
       const stmt = this.db!.prepare('SELECT MAX(position) as max_pos FROM playlist_item WHERE playlist_id = ?')
       const result = stmt.get(playlistId) as { max_pos: number | null }
@@ -464,32 +686,110 @@ export default class MusicDatabase {
     }
 
     const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO playlist_item (playlist_id, music_id, position)
+      INSERT OR IGNORE INTO playlist_item (playlist_id, file_path, position)
       VALUES (?, ?, ?)
     `)
-    stmt.run(playlistId, musicId, position)
+    stmt.run(playlistId, filePath, position)
 
     // 更新播放列表统计
     this.updatePlaylistStats(playlistId)
   }
 
   getPlaylistSongs(playlistId: number): MusicItem[] {
+    // 从播放列表中获取文件路径，然后尝试从 music 表中查找对应的记录
+    // 如果 music 表中没有，则创建一个临时的 MusicItem
     const stmt = this.db!.prepare(`
-      SELECT m.*
-      FROM music m
-      JOIN playlist_item pi ON m.id = pi.music_id
+      SELECT pi.file_path, pi.position, pi.added_at
+      FROM playlist_item pi
       WHERE pi.playlist_id = ?
       ORDER BY pi.position
     `)
-    const rows = stmt.all(playlistId) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    const playlistItems = stmt.all(playlistId) as Array<{ file_path: string; position: number; added_at: string }>
+
+    return playlistItems.map(item => {
+      // 尝试从 music 表中查找
+      const musicStmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
+      const musicRow = musicStmt.get(item.file_path) as any
+
+      if (musicRow) {
+        // 如果找到了，返回完整的 MusicItem
+        return this.mapRowToMusicItem(musicRow)
+      } else {
+        // 如果没找到，创建一个临时的 MusicItem（基于文件路径）
+        const path = require('path')
+        const fileName = path.basename(item.file_path)
+        const ext = path.extname(item.file_path).toLowerCase()
+
+        return {
+          id: -1, // 临时ID，表示不在 music 表中
+          title: fileName.replace(ext, ''),
+          artist: '未知艺术家',
+          album: null,
+          year: null,
+          genre: null,
+          filePath: item.file_path,
+          fileName: fileName,
+          fileSize: 0,
+          fileHash: '',
+          fileExtension: ext,
+          duration: 0,
+          bitrate: 0,
+          sampleRate: 0,
+          channels: 0,
+          coverPath: null,
+          lyricsPath: null,
+          playCount: 0,
+          lastPlayedAt: null,
+          favorite: false,
+          addedAt: item.added_at,
+          updatedAt: item.added_at,
+          isCorrupted: false,
+          isDuplicate: false
+        }
+      }
+    })
+  }
+
+  // 检查文件路径是否在播放列表中
+  isFileInPlaylist(filePath: string, playlistId?: number): boolean {
+    if (playlistId !== undefined) {
+      // 检查是否在指定播放列表中
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
+      const result = stmt.get(playlistId, filePath) as { count: number }
+      return result.count > 0
+    } else {
+      // 检查是否在任何播放列表中
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE file_path = ?')
+      const result = stmt.get(filePath) as { count: number }
+      return result.count > 0
+    }
+  }
+
+  // 获取文件路径所在的所有播放列表ID
+  getPlaylistsForFile(filePath: string): number[] {
+    const stmt = this.db!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE file_path = ?')
+    const rows = stmt.all(filePath) as Array<{ playlist_id: number }>
+    return rows.map(row => row.playlist_id)
+  }
+
+  // 从播放列表中移除文件（通过文件路径）
+  removeFromPlaylistByPath(playlistId: number, filePath: string): void {
+    const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
+    stmt.run(playlistId, filePath)
+    this.updatePlaylistStats(playlistId)
   }
 
   private updatePlaylistStats(playlistId: number): void {
+    // 更新播放列表统计（基于文件路径匹配 music 表）
     const stmt = this.db!.prepare(`
       UPDATE playlist SET
         song_count = (SELECT COUNT(*) FROM playlist_item WHERE playlist_id = ?),
-        total_duration = (SELECT COALESCE(SUM(duration), 0) FROM music m JOIN playlist_item pi ON m.id = pi.music_id WHERE pi.playlist_id = ?),
+        total_duration = (
+          SELECT COALESCE(SUM(m.duration), 0)
+          FROM playlist_item pi
+          LEFT JOIN music m ON pi.file_path = m.file_path
+          WHERE pi.playlist_id = ?
+        ),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `)
@@ -521,15 +821,79 @@ export default class MusicDatabase {
 
   // ========== 收藏和历史 ==========
 
-  toggleFavorite(musicId: number): void {
-    const stmt = this.db!.prepare('UPDATE music SET favorite = NOT favorite WHERE id = ?')
-    stmt.run(musicId)
+  toggleFavorite(filePath: string): void {
+    // 检查是否已在收藏表中
+    const checkStmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
+    const result = checkStmt.get(filePath) as { count: number }
+
+    if (result.count > 0) {
+      // 如果已收藏，移除
+      const deleteStmt = this.db!.prepare('DELETE FROM favorites WHERE file_path = ?')
+      deleteStmt.run(filePath)
+    } else {
+      // 如果未收藏，添加
+      const insertStmt = this.db!.prepare('INSERT INTO favorites (file_path) VALUES (?)')
+      insertStmt.run(filePath)
+    }
+  }
+
+  isFileFavorite(filePath: string): boolean {
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
+    const result = stmt.get(filePath) as { count: number }
+    return result.count > 0
   }
 
   getFavorites(): MusicItem[] {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE favorite = 1 AND is_duplicate = 0 ORDER BY added_at DESC')
-    const rows = stmt.all() as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 从收藏表中获取文件路径，然后尝试从 music 表中查找对应的记录
+    const stmt = this.db!.prepare(`
+      SELECT f.file_path, f.added_at
+      FROM favorites f
+      ORDER BY f.added_at DESC
+    `)
+    const favorites = stmt.all() as Array<{ file_path: string; added_at: string }>
+
+    return favorites.map(item => {
+      // 尝试从 music 表中查找
+      const musicStmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
+      const musicRow = musicStmt.get(item.file_path) as any
+
+      if (musicRow) {
+        // 如果找到了，返回完整的 MusicItem
+        return this.mapRowToMusicItem(musicRow)
+      } else {
+        // 如果没找到，创建一个临时的 MusicItem（基于文件路径）
+        const path = require('path')
+        const fileName = path.basename(item.file_path)
+        const ext = path.extname(item.file_path).toLowerCase()
+
+        return {
+          id: -1, // 临时ID，表示不在 music 表中
+          title: fileName.replace(ext, ''),
+          artist: '未知艺术家',
+          album: null,
+          year: null,
+          genre: null,
+          filePath: item.file_path,
+          fileName: fileName,
+          fileSize: 0,
+          fileHash: '',
+          fileExtension: ext,
+          duration: 0,
+          bitrate: 0,
+          sampleRate: 0,
+          channels: 0,
+          coverPath: null,
+          lyricsPath: null,
+          playCount: 0,
+          lastPlayedAt: null,
+          favorite: true, // 标记为收藏
+          addedAt: item.added_at,
+          updatedAt: item.added_at,
+          isCorrupted: false,
+          isDuplicate: false
+        }
+      }
+    })
   }
 
   recordPlay(musicId: number): void {
@@ -691,6 +1055,96 @@ export default class MusicDatabase {
     return settings
   }
 
+  // ========== 搜索历史 ==========
+
+  addSearchHistory(query: string, searchType: 'basic' | 'advanced' = 'basic', criteria?: AdvancedSearchCriteria): void {
+    if (!this.db) return
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO search_history (query, search_type, criteria)
+        VALUES (?, ?, ?)
+      `)
+      stmt.run(query, searchType, criteria ? JSON.stringify(criteria) : null)
+
+      // 只保留最近 10 条历史记录
+      const deleteStmt = this.db.prepare(`
+        DELETE FROM search_history
+        WHERE id NOT IN (
+          SELECT id FROM search_history
+          ORDER BY created_at DESC
+          LIMIT 10
+        )
+      `)
+      deleteStmt.run()
+    } catch (error) {
+      console.error('添加搜索历史失败:', error)
+    }
+  }
+
+  getSearchHistory(limit: number = 10): Array<{ query: string; searchType: string; createdAt: string }> {
+    if (!this.db) return []
+    try {
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT query, search_type, created_at
+        FROM search_history
+        ORDER BY created_at DESC
+        LIMIT ?
+      `)
+      const rows = stmt.all(limit) as any[]
+      return rows.map(row => ({
+        query: row.query,
+        searchType: row.search_type,
+        createdAt: row.created_at
+      }))
+    } catch (error) {
+      console.error('获取搜索历史失败:', error)
+      return []
+    }
+  }
+
+  clearSearchHistory(): void {
+    if (!this.db) return
+    try {
+      const stmt = this.db.prepare('DELETE FROM search_history')
+      stmt.run()
+    } catch (error) {
+      console.error('清空搜索历史失败:', error)
+    }
+  }
+
+  // ========== 搜索建议 ==========
+
+  getSearchSuggestions(query: string, limit: number = 5): string[] {
+    if (!this.db || !query || query.trim() === '') return []
+
+    try {
+      // 从音乐标题、艺术家、专辑中搜索建议
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT
+          CASE
+            WHEN title LIKE ? THEN title
+            WHEN artist LIKE ? THEN artist
+            WHEN album LIKE ? THEN album
+          END AS suggestion
+        FROM music
+        WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
+        LIMIT ?
+      `)
+      const likeQuery = `%${query.trim()}%`
+      const rows = stmt.all(likeQuery, likeQuery, likeQuery, likeQuery, likeQuery, likeQuery, limit) as Array<{ suggestion: string }>
+
+      const suggestions = rows
+        .map(row => row.suggestion)
+        .filter(s => s && s.trim() !== '')
+        .slice(0, limit)
+
+      return suggestions
+    } catch (error) {
+      console.error('获取搜索建议失败:', error)
+      return []
+    }
+  }
+
   // ========== 数据库备份 ==========
 
   async backupDatabase(targetPath: string): Promise<void> {
@@ -701,7 +1155,10 @@ export default class MusicDatabase {
 
   // ========== 辅助方法 ==========
 
-  private mapRowToMusicItem(row: any): MusicItem {
+  mapRowToMusicItem(row: any): MusicItem {
+    // 检查是否在收藏表中（基于文件路径）
+    const isFavorite = this.isFileFavorite(row.file_path)
+
     return {
       id: row.id,
       title: row.title,
@@ -722,7 +1179,7 @@ export default class MusicDatabase {
       lyricsPath: row.lyrics_path,
       playCount: row.play_count || 0,
       lastPlayedAt: row.last_played_at,
-      favorite: row.favorite === 1,
+      favorite: isFavorite, // 从独立的收藏表获取
       addedAt: row.added_at,
       updatedAt: row.updated_at,
       isCorrupted: row.is_corrupted === 1,
@@ -741,5 +1198,123 @@ export default class MusicDatabase {
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
+  }
+
+  // ========== 播放统计 ==========
+
+  getOverallStatistics(): {
+    totalPlays: number
+    totalDuration: number
+    totalSongs: number
+    averagePlaysPerSong: number
+    averageDuration: number
+  } {
+    // 总播放次数
+    const totalPlaysStmt = this.db!.prepare('SELECT SUM(play_count) as total FROM music')
+    const totalPlaysResult = totalPlaysStmt.get() as { total: number | null }
+    const totalPlays = totalPlaysResult.total || 0
+
+    // 总歌曲数
+    const totalSongsStmt = this.db!.prepare('SELECT COUNT(*) as count FROM music WHERE is_duplicate = 0')
+    const totalSongsResult = totalSongsStmt.get() as { count: number }
+    const totalSongs = totalSongsResult.count || 0
+
+    // 总播放时长（基于播放次数和歌曲时长）
+    const durationStmt = this.db!.prepare(`
+      SELECT SUM(play_count * duration) as total_duration
+      FROM music
+      WHERE is_duplicate = 0 AND duration > 0 AND play_count > 0
+    `)
+    const durationResult = durationStmt.get() as { total_duration: number | null }
+    const totalDuration = durationResult.total_duration || 0
+
+    // 平均播放次数
+    const averagePlaysPerSong = totalSongs > 0 ? totalPlays / totalSongs : 0
+
+    // 平均播放时长（基于总播放次数）
+    const averageDuration = totalPlays > 0 ? totalDuration / totalPlays : 0
+
+    return {
+      totalPlays,
+      totalDuration,
+      totalSongs,
+      averagePlaysPerSong: Math.round(averagePlaysPerSong * 100) / 100,
+      averageDuration: Math.round(averageDuration)
+    }
+  }
+
+  getTopPlayedSongs(limit: number = 20): Array<MusicItem & { playCount: number; lastPlayedAt: string | null }> {
+    const stmt = this.db!.prepare(`
+      SELECT m.*
+      FROM music m
+      WHERE m.is_duplicate = 0 AND m.play_count > 0
+      ORDER BY m.play_count DESC, m.last_played_at DESC
+      LIMIT ?
+    `)
+    const rows = stmt.all(limit) as any[]
+    return rows.map(row => ({
+      ...this.mapRowToMusicItem(row),
+      playCount: row.play_count || 0,
+      lastPlayedAt: row.last_played_at
+    }))
+  }
+
+  getPlayTrend(days: number = 30): Array<{ date: string; count: number; duration: number }> {
+    const stmt = this.db!.prepare(`
+      SELECT
+        DATE(played_at) as date,
+        COUNT(*) as count
+      FROM play_history
+      WHERE played_at >= datetime('now', '-' || ? || ' days')
+      GROUP BY DATE(played_at)
+      ORDER BY date ASC
+    `)
+    const rows = stmt.all(days) as Array<{ date: string; count: number }>
+
+    // 获取每天的播放时长（基于播放历史）
+    const durationStmt = this.db!.prepare(`
+      SELECT
+        DATE(ph.played_at) as date,
+        SUM(COALESCE(m.duration, 0)) as duration
+      FROM play_history ph
+      JOIN music m ON ph.music_id = m.id
+      WHERE ph.played_at >= datetime('now', '-' || ? || ' days')
+        AND m.duration > 0
+      GROUP BY DATE(ph.played_at)
+      ORDER BY date ASC
+    `)
+    const durationRows = durationStmt.all(days) as Array<{ date: string; duration: number }>
+
+    // 合并数据
+    const durationMap = new Map<string, number>()
+    durationRows.forEach(row => {
+      durationMap.set(row.date, row.duration || 0)
+    })
+
+    return rows.map(row => ({
+      date: row.date,
+      count: row.count,
+      duration: durationMap.get(row.date) || 0
+    }))
+  }
+
+  getArtistStatistics(limit: number = 20): Array<{ artist: string; playCount: number; songCount: number }> {
+    const stmt = this.db!.prepare(`
+      SELECT
+        artist,
+        SUM(play_count) as play_count,
+        COUNT(*) as song_count
+      FROM music
+      WHERE is_duplicate = 0 AND artist IS NOT NULL AND artist != ''
+      GROUP BY artist
+      ORDER BY play_count DESC
+      LIMIT ?
+    `)
+    const rows = stmt.all(limit) as Array<{ artist: string; play_count: number; song_count: number }>
+    return rows.map(row => ({
+      artist: row.artist,
+      playCount: row.play_count || 0,
+      songCount: row.song_count || 0
+    }))
   }
 }

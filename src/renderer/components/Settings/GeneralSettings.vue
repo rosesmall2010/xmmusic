@@ -27,6 +27,11 @@
       <label>最小化到系统托盘</label>
       <input type="checkbox" v-model="settings.minimizeToTray" @change="saveSettings" />
     </div>
+
+    <div class="setting-item">
+      <label>默认显示歌词</label>
+      <input type="checkbox" v-model="settings.showLyrics" @change="saveSettings" />
+    </div>
   </div>
 </template>
 
@@ -40,7 +45,8 @@ const settings = ref({
   theme: 'light',
   language: 'zh',
   autoPlayOnStart: false,
-  minimizeToTray: false
+  minimizeToTray: false,
+  showLyrics: false
 })
 
 onMounted(async () => {
@@ -53,8 +59,14 @@ onMounted(async () => {
 const saveSettings = async () => {
   await window.electronAPI.saveSettings(settings.value)
 
-  // 应用主题
-  document.documentElement.className = settings.value.theme
+  // 应用主题到 #app 元素
+  const appElement = document.getElementById('app')
+  if (appElement) {
+    appElement.className = settings.value.theme
+  }
+
+  // 触发主题变化事件
+  window.dispatchEvent(new CustomEvent('theme-changed', { detail: settings.value.theme }))
 
   // 应用语言
   locale.value = settings.value.language
@@ -62,7 +74,12 @@ const saveSettings = async () => {
 
 // 监听主题变化
 watch(() => settings.value.theme, (newTheme) => {
-  document.documentElement.className = newTheme
+  const appElement = document.getElementById('app')
+  if (appElement) {
+    appElement.className = newTheme
+  }
+  // 触发主题变化事件
+  window.dispatchEvent(new CustomEvent('theme-changed', { detail: newTheme }))
 })
 </script>
 

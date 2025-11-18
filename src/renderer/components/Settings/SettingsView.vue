@@ -23,7 +23,9 @@
 import { ref, computed } from 'vue'
 import GeneralSettings from './GeneralSettings.vue'
 import PlaybackSettings from './PlaybackSettings.vue'
+import EqualizerView from '../EqualizerView.vue'
 import MusicDirectorySettings from './MusicDirectorySettings.vue'
+import ShortcutSettings from './ShortcutSettings.vue'
 import About from './About.vue'
 import ID3FixView from '../ID3FixView.vue'
 
@@ -32,7 +34,9 @@ const activeTab = ref('general')
 const tabs = [
   { id: 'general', name: '通用', icon: '⚙️' },
   { id: 'playback', name: '播放', icon: '🎵' },
+  { id: 'equalizer', name: '均衡器', icon: '🎚️' },
   { id: 'library', name: '媒体库', icon: '📚' },
+  { id: 'shortcuts', name: '快捷键', icon: '⌨️' },
   { id: 'id3fix', name: 'ID3修复', icon: '🔧' },
   { id: 'about', name: '关于', icon: 'ℹ️' }
 ]
@@ -43,8 +47,12 @@ const activeComponent = computed(() => {
       return GeneralSettings
     case 'playback':
       return PlaybackSettings
+    case 'equalizer':
+      return EqualizerView
     case 'library':
       return MusicDirectorySettings
+    case 'shortcuts':
+      return ShortcutSettings
     case 'id3fix':
       return ID3FixView
     case 'about':

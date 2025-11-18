@@ -10,7 +10,8 @@ export const usePlayerStore = defineStore('player', () => {
   const currentTime = ref(0)
   const duration = ref(0)
   const volume = ref(80)
-  const playMode = ref<'sequential' | 'random' | 'repeat'>('sequential')
+  // 播放模式：sequential(列表顺序), random(列表随机), repeat(列表循环), single(单曲循环)
+  const playMode = ref<'sequential' | 'random' | 'repeat' | 'single'>('sequential')
 
   // 播放队列
   const queue = ref<MusicItem[]>([])
@@ -88,17 +89,35 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  // 切换播放模式
+  function togglePlayMode() {
+    const modes: Array<'sequential' | 'random' | 'repeat' | 'single'> = ['sequential', 'random', 'repeat', 'single']
+    const currentIndex = modes.indexOf(playMode.value)
+    const nextIndex = (currentIndex + 1) % modes.length
+    playMode.value = modes[nextIndex]
+  }
+
   // 获取下一首
   function getNext(): MusicItem | null {
     if (queue.value.length === 0) return null
 
-    if (playMode.value === 'random') {
+    if (playMode.value === 'single') {
+      // 单曲循环：返回当前歌曲
+      return currentMusic.value
+    } else if (playMode.value === 'random') {
+      // 列表随机：随机选择一首
       const randomIndex = Math.floor(Math.random() * queue.value.length)
       return queue.value[randomIndex]
     } else if (playMode.value === 'repeat') {
-      return currentMusic.value || queue.value[0]
+      // 列表循环：播放完最后一首后回到第一首
+      const nextIndex = currentQueueIndex.value + 1
+      if (nextIndex < queue.value.length) {
+        return queue.value[nextIndex]
+      } else {
+        return queue.value[0] // 循环到第一首
+      }
     } else {
-      // sequential
+      // sequential: 列表顺序播放
       const nextIndex = currentQueueIndex.value + 1
       if (nextIndex < queue.value.length) {
         return queue.value[nextIndex]
@@ -111,13 +130,23 @@ export const usePlayerStore = defineStore('player', () => {
   function getPrevious(): MusicItem | null {
     if (queue.value.length === 0) return null
 
-    if (playMode.value === 'random') {
+    if (playMode.value === 'single') {
+      // 单曲循环：返回当前歌曲
+      return currentMusic.value
+    } else if (playMode.value === 'random') {
+      // 列表随机：随机选择一首
       const randomIndex = Math.floor(Math.random() * queue.value.length)
       return queue.value[randomIndex]
     } else if (playMode.value === 'repeat') {
-      return currentMusic.value || queue.value[0]
+      // 列表循环：从第一首往前时跳到最后一首
+      const prevIndex = currentQueueIndex.value - 1
+      if (prevIndex >= 0) {
+        return queue.value[prevIndex]
+      } else {
+        return queue.value[queue.value.length - 1] // 循环到最后一首
+      }
     } else {
-      // sequential
+      // sequential: 列表顺序播放
       const prevIndex = currentQueueIndex.value - 1
       if (prevIndex >= 0) {
         return queue.value[prevIndex]
@@ -155,7 +184,14 @@ export const usePlayerStore = defineStore('player', () => {
       try {
         const local = window.localStorage.getItem(LOCAL_STORAGE_KEY)
         if (local) {
-          applyState(JSON.parse(local))
+          try {
+            const parsed = JSON.parse(local)
+            applyState(parsed)
+          } catch (parseError) {
+            console.warn('解析本地播放状态失败，清除无效数据:', parseError)
+            // 清除无效的 localStorage 数据
+            window.localStorage.removeItem(LOCAL_STORAGE_KEY)
+          }
         }
       } catch (error) {
         console.warn('读取本地播放状态失败:', error)
@@ -247,6 +283,7 @@ export const usePlayerStore = defineStore('player', () => {
     setCurrentQueueIndex,
     getNext,
     getPrevious,
+    togglePlayMode,
     initialize,
     resumePosition,
     shouldAutoResume

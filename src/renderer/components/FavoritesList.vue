@@ -29,7 +29,7 @@
         <div class="col-album">{{ item.album || '-' }}</div>
         <div class="col-duration">{{ formatDuration(item.duration) }}</div>
         <div class="col-actions">
-          <button @click="toggleFavorite(item.id)" class="btn-unfavorite">💔</button>
+          <button @click="toggleFavorite(item)" class="btn-unfavorite">💔</button>
         </div>
       </div>
     </div>
@@ -56,8 +56,8 @@ const playMusic = (music: MusicItem) => {
   playerStore.playMusic(music)
 }
 
-const toggleFavorite = async (id: number) => {
-  await window.electronAPI.toggleFavorite(id)
+const toggleFavorite = async (music: MusicItem) => {
+  await window.electronAPI.toggleFavorite(music.filePath)
   await loadFavorites()
 }
 
@@ -102,7 +102,7 @@ h2 {
 }
 
 .btn-export {
-  background: #ff4757;
+  background: var(--active-text);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -112,7 +112,8 @@ h2 {
 }
 
 .btn-export:hover {
-  background: #ff6b7a;
+  background: var(--active-text);
+  opacity: 0.9;
 }
 
 .music-table {

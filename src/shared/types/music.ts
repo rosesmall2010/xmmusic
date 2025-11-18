@@ -117,6 +117,14 @@ export interface ScanOptions {
   onProgress?: (progress: ScanProgress) => void
 }
 
+export interface ScanState {
+  isScanning: boolean
+  isPaused: boolean
+  isCancelled: boolean
+  progress: ScanProgress | null
+  currentPath: string | null
+}
+
 export interface AdvancedSearchCriteria {
   keyword?: string
   artist?: string

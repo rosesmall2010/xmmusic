@@ -1,0 +1,521 @@
+<template>
+  <div v-if="show" class="dialog-overlay" @click.self="close">
+    <div class="dialog metadata-dialog">
+      <h3>{{ isBatch ? '批量编辑元数据' : '编辑元数据' }}</h3>
+
+      <div v-if="isBatch" class="batch-info">
+        <p>已选择 {{ musicIds.length }} 首歌曲</p>
+      </div>
+
+      <div class="form-content">
+        <div class="form-group">
+          <label>标题</label>
+          <input
+            v-model="formData.title"
+            type="text"
+            placeholder="留空则不修改"
+            :disabled="loading"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>艺术家</label>
+          <input
+            v-model="formData.artist"
+            type="text"
+            placeholder="留空则不修改"
+            :disabled="loading"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>专辑</label>
+          <input
+            v-model="formData.album"
+            type="text"
+            placeholder="留空则不修改"
+            :disabled="loading"
+          />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>年份</label>
+            <input
+              v-model.number="formData.year"
+              type="number"
+              placeholder="留空则不修改"
+              min="1900"
+              max="2100"
+              :disabled="loading"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>流派</label>
+            <input
+              v-model="formData.genre"
+              type="text"
+              placeholder="留空则不修改"
+              :disabled="loading"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>封面图片</label>
+          <div class="cover-section">
+            <div v-if="coverPreview" class="cover-preview">
+              <img :src="coverPreview" alt="封面预览" />
+              <button @click="removeCover" class="btn-remove-cover" :disabled="loading">移除</button>
+            </div>
+            <div v-else class="cover-placeholder">
+              <span>暂无封面</span>
+            </div>
+            <div class="cover-actions">
+              <button @click="selectCover" class="btn-select-cover" :disabled="loading">
+                {{ coverPath ? '更换封面' : '选择封面' }}
+              </button>
+              <button
+                v-if="!isBatch && currentMusic"
+                @click="extractCover"
+                class="btn-extract-cover"
+                :disabled="loading"
+              >
+                从文件提取
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="loading" class="loading-overlay">
+        <div class="loading-content">
+          <div class="spinner"></div>
+          <p>{{ loadingText }}</p>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
+          保存
+        </button>
+        <button @click="close" class="btn-secondary" :disabled="loading">取消</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import type { MusicItem } from '@shared/types/music'
+
+interface Props {
+  show: boolean
+  music?: MusicItem | null
+  musicIds?: number[]
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  music: null,
+  musicIds: () => []
+})
+
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'saved'): void
+}>()
+
+const isBatch = computed(() => props.musicIds.length > 0)
+const currentMusic = computed(() => props.music)
+
+const formData = ref({
+  title: '',
+  artist: '',
+  album: '',
+  year: undefined as number | undefined,
+  genre: '',
+  coverPath: null as string | null
+})
+
+const coverPreview = ref<string | null>(null)
+const coverPath = ref<string | null>(null)
+const loading = ref(false)
+const loadingText = ref('')
+
+const hasChanges = computed(() => {
+  return !!(
+    formData.value.title ||
+    formData.value.artist ||
+    formData.value.album ||
+    formData.value.year ||
+    formData.value.genre ||
+    formData.value.coverPath !== null
+  )
+})
+
+watch(() => props.show, (newVal) => {
+  if (newVal) {
+    resetForm()
+    if (currentMusic.value && !isBatch.value) {
+      loadMusicData(currentMusic.value)
+    }
+  }
+})
+
+watch(() => coverPath.value, (newPath) => {
+  if (newPath) {
+    // 创建预览 URL
+    coverPreview.value = `local-file://${encodeURIComponent(newPath)}`
+  } else {
+    coverPreview.value = null
+  }
+})
+
+const resetForm = () => {
+  formData.value = {
+    title: '',
+    artist: '',
+    album: '',
+    year: undefined,
+    genre: '',
+    coverPath: null
+  }
+  coverPath.value = null
+  coverPreview.value = null
+}
+
+const loadMusicData = (music: MusicItem) => {
+  formData.value = {
+    title: music.title,
+    artist: music.artist,
+    album: music.album || '',
+    year: music.year || undefined,
+    genre: music.genre || '',
+    coverPath: music.coverPath || null
+  }
+  coverPath.value = music.coverPath || null
+}
+
+const selectCover = async () => {
+  try {
+    const file = await window.electronAPI.selectImageFile()
+    if (file) {
+      coverPath.value = file
+      formData.value.coverPath = file
+    }
+  } catch (error: any) {
+    console.error('选择封面失败:', error)
+    alert(`选择封面失败: ${error.message}`)
+  }
+}
+
+const removeCover = () => {
+  coverPath.value = null
+  formData.value.coverPath = null
+}
+
+const extractCover = async () => {
+  if (!currentMusic.value) return
+
+  try {
+    loading.value = true
+    loadingText.value = '正在提取封面...'
+
+    // 选择保存位置
+    const savePath = await window.electronAPI.showSaveDialog({
+      title: '保存封面图片',
+      defaultPath: `${currentMusic.value.title}_cover.jpg`,
+      filters: [
+        { name: '图片文件', extensions: ['jpg', 'jpeg', 'png'] }
+      ]
+    })
+
+    if (savePath) {
+      await window.electronAPI.extractMusicCover(currentMusic.value.id, savePath)
+      coverPath.value = savePath
+      formData.value.coverPath = savePath
+      alert('封面提取成功！')
+    }
+  } catch (error: any) {
+    console.error('提取封面失败:', error)
+    alert(`提取封面失败: ${error.message}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+const save = async () => {
+  if (!hasChanges.value) {
+    alert('请至少修改一个字段')
+    return
+  }
+
+  try {
+    loading.value = true
+
+    // 构建更新对象（只包含有值的字段）
+    const updates: any = {}
+    if (formData.value.title) updates.title = formData.value.title
+    if (formData.value.artist) updates.artist = formData.value.artist
+    if (formData.value.album) updates.album = formData.value.album
+    if (formData.value.year) updates.year = formData.value.year
+    if (formData.value.genre) updates.genre = formData.value.genre
+    if (formData.value.coverPath !== null) {
+      updates.coverPath = formData.value.coverPath
+    }
+
+    if (isBatch.value) {
+      // 批量更新
+      loadingText.value = `正在更新 ${props.musicIds.length} 首歌曲...`
+      const result = await window.electronAPI.batchUpdateMusicMetadata(props.musicIds, updates)
+
+      if (result.failed > 0) {
+        alert(`更新完成：成功 ${result.success} 首，失败 ${result.failed} 首\n\n失败的文件：\n${result.errors.map(e => `- ${e.file}: ${e.error}`).join('\n')}`)
+      } else {
+        alert(`成功更新 ${result.success} 首歌曲的元数据`)
+      }
+    } else {
+      // 单个更新
+      if (!currentMusic.value) return
+      loadingText.value = '正在保存...'
+      await window.electronAPI.updateMusicMetadata(currentMusic.value.id, updates)
+      alert('元数据更新成功！')
+    }
+
+    emit('saved')
+    close()
+  } catch (error: any) {
+    console.error('保存失败:', error)
+    alert(`保存失败: ${error.message}`)
+  } finally {
+    loading.value = false
+    loadingText.value = ''
+  }
+}
+
+const close = () => {
+  if (!loading.value) {
+    resetForm()
+    emit('close')
+  }
+}
+</script>
+
+<style scoped>
+.metadata-dialog {
+  width: 600px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.batch-info {
+  padding: 12px;
+  background: var(--hover-bg);
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.batch-info p {
+  margin: 0;
+  color: var(--text-color);
+  font-size: 14px;
+}
+
+.form-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.form-group input {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 14px;
+}
+
+.form-group input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cover-preview {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.btn-remove-cover {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.cover-placeholder {
+  width: 200px;
+  height: 200px;
+  border: 2px dashed var(--border-color);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-text-color);
+  font-size: 14px;
+}
+
+.cover-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-select-cover,
+.btn-extract-cover {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-select-cover:hover:not(:disabled),
+.btn-extract-cover:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.btn-select-cover:disabled,
+.btn-extract-cover:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  z-index: 10;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: white;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #ff4757;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #ff6b7a;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+</style>

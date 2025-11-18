@@ -61,17 +61,15 @@ export function usePlayer() {
     audioElement.onended = () => {
       playerStore.isPlaying = false
       stopProgressUpdate()
-      // 自动播放下一首
-      if (playerStore.playMode !== 'repeat') {
-        const next = playerStore.getNext()
-        if (next) {
-          const index = playerStore.queue.findIndex(m => m.id === next.id)
-          if (index >= 0) {
-            playerStore.setCurrentQueueIndex(index)
-            setTimeout(async () => {
-              await play(next)
-            }, 500)
-          }
+      // 自动播放下一首（根据播放模式）
+      const next = playerStore.getNext()
+      if (next) {
+        const index = playerStore.queue.findIndex(m => m.id === next.id)
+        if (index >= 0) {
+          playerStore.setCurrentQueueIndex(index)
+          setTimeout(async () => {
+            await play(next)
+          }, 500)
         }
       }
     }
@@ -155,17 +153,15 @@ export function usePlayer() {
       onend: () => {
         playerStore.isPlaying = false
         stopProgressUpdate()
-        // 自动播放下一首
-        if (playerStore.playMode !== 'repeat') {
-          const next = playerStore.getNext()
-          if (next) {
-            const index = playerStore.queue.findIndex(m => m.id === next.id)
-            if (index >= 0) {
-              playerStore.setCurrentQueueIndex(index)
-              setTimeout(async () => {
-                await play(next)
-              }, 500)
-            }
+        // 自动播放下一首（根据播放模式）
+        const next = playerStore.getNext()
+        if (next) {
+          const index = playerStore.queue.findIndex(m => m.id === next.id)
+          if (index >= 0) {
+            playerStore.setCurrentQueueIndex(index)
+            setTimeout(async () => {
+              await play(next)
+            }, 500)
           }
         }
       },

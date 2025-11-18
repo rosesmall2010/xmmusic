@@ -209,12 +209,13 @@ document.addEventListener('click', hideContextMenu)
 }
 
 .btn-clear {
-  background: #ff4757;
+  background: var(--active-text);
   color: white;
 }
 
 .btn-clear:hover:not(:disabled) {
-  background: #ff6b7a;
+  background: var(--active-text);
+  opacity: 0.9;
 }
 
 .btn-shuffle {
@@ -262,12 +263,12 @@ document.addEventListener('click', hideContextMenu)
 }
 
 .queue-item.active {
-  background: rgba(255, 71, 87, 0.1);
-  border-left: 3px solid #ff4757;
+  background: var(--hover-bg);
+  border-left: 3px solid var(--active-text);
 }
 
 .queue-item.playing {
-  background: rgba(255, 71, 87, 0.2);
+  background: var(--active-bg);
 }
 
 .item-index {
@@ -302,6 +303,7 @@ document.addEventListener('click', hideContextMenu)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-color);
 }
 
 .item-artist {
@@ -341,7 +343,7 @@ document.addEventListener('click', hideContextMenu)
 
 .btn-remove:hover {
   background: rgba(255, 71, 87, 0.2);
-  color: #ff4757;
+  color: var(--active-text);
 }
 
 .empty-queue {
@@ -357,18 +359,13 @@ document.addEventListener('click', hideContextMenu)
 
 .context-menu {
   position: fixed;
-  background: #ffffff !important;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-color) !important;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 8px 0;
   min-width: 200px;
   z-index: 1000;
-}
-
-.dark .context-menu {
-  background: #2d2d2d !important;
-  border-color: #444;
 }
 
 .menu-item {
@@ -377,29 +374,17 @@ document.addEventListener('click', hideContextMenu)
   gap: 12px;
   padding: 10px 16px;
   cursor: pointer;
-  color: #333 !important;
+  color: var(--text-color) !important;
   transition: background-color 0.2s;
 }
 
-.dark .menu-item {
-  color: #fff !important;
-}
-
 .menu-item:hover {
-  background: #f5f5f5 !important;
-}
-
-.dark .menu-item:hover {
-  background: #3d3d3d !important;
+  background: var(--hover-bg) !important;
 }
 
 .menu-divider {
   height: 1px;
-  background: #e0e0e0 !important;
+  background: var(--border-color) !important;
   margin: 4px 0;
-}
-
-.dark .menu-divider {
-  background: #444 !important;
 }
 </style>

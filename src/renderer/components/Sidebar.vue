@@ -49,6 +49,8 @@ const menuItems = [
   { id: 'playlist', icon: '📋' },
   { id: 'favorites', icon: '❤️' },
   { id: 'queue', icon: '📻' },
+  { id: 'recommendations', icon: '✨' },
+  { id: 'statistics', icon: '📊' },
   { id: 'settings', icon: '⚙️' }
 ]
 

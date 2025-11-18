@@ -8,6 +8,8 @@
     "playlist": "Playlists",
     "favorites": "Favorites",
     "queue": "Play Queue",
+    "recommendations": "Recommendations",
+    "statistics": "Statistics",
     "settings": "Settings"
   }
 }

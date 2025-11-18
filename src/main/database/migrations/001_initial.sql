@@ -55,16 +55,15 @@ CREATE TABLE IF NOT EXISTS playlist (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 播放列表项表
+-- 播放列表项表（使用 file_path 而不是 music_id，使其独立于音乐库）
 CREATE TABLE IF NOT EXISTS playlist_item (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   playlist_id INTEGER NOT NULL,
-  music_id INTEGER NOT NULL,
+  file_path TEXT NOT NULL,
   position INTEGER NOT NULL,
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
-  FOREIGN KEY (music_id) REFERENCES music(id) ON DELETE CASCADE,
-  UNIQUE(playlist_id, music_id)
+  UNIQUE(playlist_id, file_path)
 );
 
 -- 播放历史表
@@ -116,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_music_artist_title ON music(artist, title);
 CREATE INDEX IF NOT EXISTS idx_music_genre ON music(genre);
 CREATE INDEX IF NOT EXISTS idx_music_favorite ON music(favorite);
 CREATE INDEX IF NOT EXISTS idx_playlist_item_playlist ON playlist_item(playlist_id);
-CREATE INDEX IF NOT EXISTS idx_playlist_item_music ON playlist_item(music_id);
+CREATE INDEX IF NOT EXISTS idx_playlist_item_file_path ON playlist_item(file_path);
 CREATE INDEX IF NOT EXISTS idx_play_history_music ON play_history(music_id);
 CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC);
 

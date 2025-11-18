@@ -111,6 +111,7 @@ h2 {
 
 .btn-clear:hover {
   background: #da190b;
+  opacity: 0.9;
 }
 
 .music-table {

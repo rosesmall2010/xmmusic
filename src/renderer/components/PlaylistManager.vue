@@ -322,20 +322,15 @@ const playPlaylist = (playlist: Playlist) => {
 }
 
 .dialog {
-  background: #ffffff !important;
-  color: #1f1f1f !important;
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
   padding: 24px;
   border-radius: 8px;
   width: 400px;
   max-width: 90%;
-  border: 1px solid #e0e0e0;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.dark .dialog {
-  background: #2d2d2d !important;
-  color: #f5f5f5 !important;
-  border-color: #444444;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+  z-index: 1001;
 }
 
 .dialog * {
@@ -344,7 +339,7 @@ const playPlaylist = (playlist: Playlist) => {
 
 .dialog h3 {
   margin-bottom: 20px;
-  color: inherit !important;
+  color: var(--text-color) !important;
 }
 
 .form-group {
@@ -362,18 +357,11 @@ const playPlaylist = (playlist: Playlist) => {
 .form-group textarea {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border-color) !important;
   border-radius: 4px;
-  background: #ffffff;
-  color: #1f1f1f;
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
   resize: vertical;
-}
-
-.dark .form-group input,
-.dark .form-group textarea {
-  background: #3a3a3a;
-  color: #f5f5f5;
-  border-color: #555555;
 }
 
 .dialog-actions {
@@ -384,7 +372,7 @@ const playPlaylist = (playlist: Playlist) => {
 }
 
 .btn-primary {
-  background: #ff4757;
+  background: var(--active-text);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -393,7 +381,8 @@ const playPlaylist = (playlist: Playlist) => {
 }
 
 .btn-primary:hover {
-  background: #ff6b7a;
+  background: var(--active-text);
+  opacity: 0.9;
 }
 
 .btn-secondary {

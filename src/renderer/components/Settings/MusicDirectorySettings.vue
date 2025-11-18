@@ -16,8 +16,8 @@
         </div>
 
         <div class="directory-actions">
-          <button @click="scanDirectory(dir)" class="btn-scan" :disabled="scanning === dir.id">
-            {{ scanning === dir.id ? '扫描中...' : '扫描' }}
+          <button @click="scanDirectory(dir)" class="btn-scan" :disabled="scanStore.isScanning && !scanStore.isPaused">
+            {{ scanStore.isScanning && !scanStore.isPaused ? '扫描中...' : '扫描' }}
           </button>
           <button @click="editDirectory(dir)" class="btn-edit">编辑</button>
           <button @click="removeDirectory(dir.id)" class="btn-remove">删除</button>
@@ -80,10 +80,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useScanStore } from '@/stores/scan'
 import type { MusicDirectory } from '@shared/types/music'
 
+const scanStore = useScanStore()
 const directories = ref<MusicDirectory[]>([])
-const scanning = ref<string | null>(null)
 const showEditDialog = ref(false)
 const editingDirectory = ref<Partial<MusicDirectory>>({
   path: '',
@@ -154,12 +155,13 @@ const removeDirectory = async (id: string) => {
 }
 
 const scanDirectory = async (dir: MusicDirectory) => {
-  scanning.value = dir.id
   try {
     await window.electronAPI.scanMusicFolder(dir.path)
     await loadDirectories()
-  } finally {
-    scanning.value = null
+  } catch (error: any) {
+    if (error.message !== '扫描已取消') {
+      alert(`扫描失败: ${error.message}`)
+    }
   }
 }
 
@@ -292,11 +294,25 @@ button:disabled {
 }
 
 .dialog {
-  background: var(--bg-color);
+  background: var(--bg-color) !important;
   padding: 24px;
   border-radius: 8px;
   width: 500px;
   max-width: 90%;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+  z-index: 1001;
+}
+
+.dialog * {
+  background: transparent !important;
+}
+
+.dialog input,
+.dialog select,
+.dialog textarea {
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
 }
 
 .dialog h3 {
@@ -319,10 +335,10 @@ button:disabled {
 .form-group select {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color) !important;
   border-radius: 4px;
-  background: var(--bg-color);
-  color: var(--text-color);
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
 }
 
 .path-input {

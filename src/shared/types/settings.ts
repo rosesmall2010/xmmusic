@@ -14,3 +14,12 @@ export interface AppSettings {
   maxDirectories: number
   defaultFileTypes: string[]
 }
+
+export type ShortcutConfig = Record<string, string>
+
+export interface ShortcutAction {
+  action: string
+  label: string
+  description?: string
+  defaultAccelerator: string
+}

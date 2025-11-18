@@ -53,9 +53,19 @@ export default class FileScanner {
   private db: MusicDatabase
   private concurrency: number = 10
   private activeTasks: number = 0
+  private isPaused: boolean = false
+  private isCancelled: boolean = false
 
   constructor(db: MusicDatabase) {
     this.db = db
+  }
+
+  setPaused(paused: boolean): void {
+    this.isPaused = paused
+  }
+
+  setCancelled(cancelled: boolean): void {
+    this.isCancelled = cancelled
   }
 
   async scanDirectory(path: string, options: ScanOptions): Promise<ScanResult> {
@@ -69,13 +79,55 @@ export default class FileScanner {
       errors: []
     }
 
+    this.isPaused = false
+    this.isCancelled = false
+
     // 收集所有文件
     const files = await this.collectFiles(path, options)
     const total = files.length
     let current = 0
+    let lastProgressUpdate = 0
+    const PROGRESS_UPDATE_INTERVAL = 100 // 每100ms最多更新一次进度
+
+    // 进度更新函数（节流）
+    const updateProgress = (file: string) => {
+      const now = Date.now()
+      if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
+        lastProgressUpdate = now
+        if (options.onProgress && !this.isCancelled) {
+          // 使用 setImmediate 让出控制权，避免阻塞
+          setImmediate(() => {
+            if (options.onProgress) {
+              options.onProgress({
+                current,
+                total,
+                currentFile: file,
+                speed: current / ((Date.now() - startTime) / 1000),
+                percentage: (current / total) * 100
+              })
+            }
+          })
+        }
+      }
+    }
 
     // 处理文件
     const tasks = files.map(file => async () => {
+      // 检查是否取消
+      if (this.isCancelled) {
+        throw new Error('扫描已取消')
+      }
+
+      // 等待恢复（如果暂停）
+      while (this.isPaused && !this.isCancelled) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      // 再次检查是否取消
+      if (this.isCancelled) {
+        throw new Error('扫描已取消')
+      }
+
       try {
         const processed = await this.processFile(file, options)
         if (processed) {
@@ -84,24 +136,44 @@ export default class FileScanner {
           result.skipped++
         }
       } catch (error: any) {
+        if (error.message === '扫描已取消') {
+          throw error
+        }
         result.failed++
         result.errors.push({ file, error: error.message || 'Unknown error' })
       } finally {
         current++
+        updateProgress(file)
+      }
+    })
+
+    try {
+      // 并发执行
+      await this.executeWithConcurrency(tasks)
+    } catch (error: any) {
+      if (error.message === '扫描已取消') {
+        throw error
+      }
+    }
+
+    // 确保最后更新一次进度
+    if (options.onProgress && !this.isCancelled && current > 0) {
+      setImmediate(() => {
         if (options.onProgress) {
           options.onProgress({
             current,
             total,
-            currentFile: file,
+            currentFile: '',
             speed: current / ((Date.now() - startTime) / 1000),
-            percentage: (current / total) * 100
+            percentage: 100
           })
         }
-      }
-    })
+      })
+    }
 
-    // 并发执行
-    await this.executeWithConcurrency(tasks)
+    if (this.isCancelled) {
+      throw new Error('扫描已取消')
+    }
 
     result.duration = Date.now() - startTime
     return result
@@ -198,11 +270,31 @@ export default class FileScanner {
 
   async calculateMD5(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const hash = createHash('md5')
-      const stream = createReadStream(filePath)
+      // 检查是否取消
+      if (this.isCancelled) {
+        reject(new Error('扫描已取消'))
+        return
+      }
 
-      stream.on('data', (chunk) => hash.update(chunk))
-      stream.on('end', () => resolve(hash.digest('hex')))
+      const hash = createHash('md5')
+      const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 }) // 64KB chunks
+
+      stream.on('data', (chunk) => {
+        // 检查是否取消
+        if (this.isCancelled) {
+          stream.destroy()
+          reject(new Error('扫描已取消'))
+          return
+        }
+        hash.update(chunk)
+      })
+      stream.on('end', () => {
+        if (!this.isCancelled) {
+          resolve(hash.digest('hex'))
+        } else {
+          reject(new Error('扫描已取消'))
+        }
+      })
       stream.on('error', reject)
     })
   }
@@ -272,12 +364,22 @@ export default class FileScanner {
 
     const runNext = async (): Promise<void> => {
       while (index < tasks.length) {
+        // 检查是否取消
+        if (this.isCancelled) {
+          break
+        }
+
         const currentIndex = index++
         this.activeTasks++
 
         try {
           const result = await tasks[currentIndex]()
           results[currentIndex] = result
+
+          // 每处理几个文件后让出控制权，避免阻塞
+          if (currentIndex % 5 === 0) {
+            await new Promise(resolve => setImmediate(resolve))
+          }
         } catch (error) {
           // 错误已在 processFile 中处理
         } finally {

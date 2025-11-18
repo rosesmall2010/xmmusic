@@ -8,6 +8,8 @@
     "playlist": "我的歌单",
     "favorites": "我的收藏",
     "queue": "播放队列",
+    "recommendations": "智能推荐",
+    "statistics": "播放统计",
     "settings": "设置"
   }
 }

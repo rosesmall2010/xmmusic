@@ -13,6 +13,7 @@ app.use(pinia)
 
 // i18n
 const i18n = createI18n({
+  legacy: false, // 使用 Composition API 模式
   locale: 'zh',
   messages: { zh, en }
 })

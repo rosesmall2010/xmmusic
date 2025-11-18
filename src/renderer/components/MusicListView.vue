@@ -1,8 +1,42 @@
 <template>
   <div class="music-list-view">
     <div class="toolbar">
-      <button @click="handleScan" :disabled="scanning">扫描音乐</button>
-      <span v-if="scanning" class="scan-progress">扫描中: {{ scanProgress.percentage.toFixed(1) }}%</span>
+      <div class="scan-controls">
+        <button @click="handleScan" :disabled="scanStore.isScanning && !scanStore.isPaused" class="btn-scan">
+          扫描音乐
+        </button>
+        <div v-if="scanStore.isScanning || scanStore.progress" class="scan-status">
+          <span class="scan-progress">
+            {{ scanStore.isPaused ? '已暂停' : '扫描中' }}:
+            {{ scanStore.progress ? scanStore.progress.percentage.toFixed(1) + '%' : '0%' }}
+            ({{ scanStore.progress ? scanStore.progress.current : 0 }}/{{ scanStore.progress ? scanStore.progress.total : 0 }})
+          </span>
+          <button
+            v-if="scanStore.isScanning && !scanStore.isPaused"
+            @click="pauseScan"
+            class="btn-pause"
+            title="暂停扫描"
+          >
+            ⏸
+          </button>
+          <button
+            v-if="scanStore.isScanning && scanStore.isPaused"
+            @click="resumeScan"
+            class="btn-resume"
+            title="继续扫描"
+          >
+            ▶
+          </button>
+          <button
+            v-if="scanStore.isScanning"
+            @click="cancelScan"
+            class="btn-cancel"
+            title="取消扫描"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
       <div class="toolbar-actions">
         <button @click="exportToExcel" class="btn-export">导出到 Excel</button>
         <button @click="exportFiles" class="btn-export">导出文件</button>
@@ -131,28 +165,28 @@
             @contextmenu.prevent="showContextMenu($event, item)"
           >
             <div class="item-index">{{ item.id }}</div>
-            <div class="item-title">{{ item.title }}</div>
-            <div class="item-artist">{{ item.artist }}</div>
-            <div class="item-album">{{ item.album || '-' }}</div>
+            <div class="item-title" v-html="highlightText(item.title, getSearchQuery())"></div>
+            <div class="item-artist" v-html="highlightText(item.artist, getSearchQuery())"></div>
+            <div class="item-album" v-html="highlightText(item.album || '-', getSearchQuery())"></div>
             <div class="item-duration">{{ formatDuration(item.duration) }}</div>
             <div class="item-path" :title="item.filePath">{{ item.fileName }}</div>
             <div class="item-md5" :title="item.fileHash">{{ item.fileHash.substring(0, 8) }}...</div>
             <div class="item-status">
               <button
                 class="status-icon favorite"
-                :class="{ active: item.favorite }"
-                @dblclick.stop="toggleFavorite(item)"
+                :class="{ active: isFileFavorite(item.filePath) }"
+                @click.stop="toggleFavorite(item)"
                 title="收藏"
               >
-                {{ item.favorite ? '❤️' : '🤍' }}
+                {{ isFileFavorite(item.filePath) ? '❤️' : '🤍' }}
               </button>
               <button
-                class="status-icon queue"
-                :class="{ active: isInQueue(item.id) }"
-                @dblclick.stop="toggleQueue(item)"
+                class="status-icon playlist"
+                :class="{ active: isInPlaylist(item.filePath) }"
+                @click.stop="togglePlaylist(item)"
                 title="播放列表"
               >
-                {{ isInQueue(item.id) ? '📋' : '➕' }}
+                {{ isInPlaylist(item.filePath) ? '🎵' : '➕' }}
               </button>
             </div>
             <div class="item-actions">
@@ -180,8 +214,8 @@
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="toggleFavorite(contextMenu.item)">
-        <span class="menu-icon">{{ contextMenu.item?.favorite ? '💔' : '❤️' }}</span>
-        <span>{{ contextMenu.item?.favorite ? '取消收藏' : '收藏' }}</span>
+        <span class="menu-icon">{{ contextMenu.item && isFileFavorite(contextMenu.item.filePath) ? '💔' : '❤️' }}</span>
+        <span>{{ contextMenu.item && isFileFavorite(contextMenu.item.filePath) ? '取消收藏' : '收藏' }}</span>
       </div>
       <div class="menu-item" @click="addToPlayQueue(contextMenu.item)">
         <span class="menu-icon">📋</span>
@@ -196,6 +230,10 @@
         <span>相似推荐</span>
       </div>
       <div class="menu-divider"></div>
+      <div class="menu-item" @click="editMetadata(contextMenu.item)">
+        <span class="menu-icon">✏️</span>
+        <span>编辑元数据</span>
+      </div>
       <div class="menu-item" @click="viewDetails(contextMenu.item)">
         <span class="menu-icon">ℹ️</span>
         <span>查看详情</span>
@@ -265,6 +303,15 @@
       </div>
     </div>
 
+    <!-- 元数据编辑对话框 -->
+    <MetadataEditDialog
+      :show="metadataEditDialog.show"
+      :music="metadataEditDialog.music"
+      :musicIds="metadataEditDialog.musicIds"
+      @close="closeMetadataEditDialog"
+      @saved="handleMetadataSaved"
+    />
+
     <!-- 相似歌曲推荐 -->
     <div v-if="similarDialog.show" class="dialog-overlay" @click.self="closeSimilarDialog">
       <div class="dialog dialog-similar">
@@ -285,6 +332,10 @@
               <div class="title">{{ song.title }}</div>
               <div class="meta">{{ song.artist }} · {{ song.album || '未知专辑' }}</div>
             </div>
+            <div class="similarity-score" v-if="song.similarity !== undefined">
+              <span class="score-label">相似度</span>
+              <span class="score-value">{{ Math.round(song.similarity * 100) }}%</span>
+            </div>
             <div class="actions">
               <button @click.stop="queueSimilarSong(song)" title="添加到队列">➕</button>
               <button @click.stop="playSimilarSong(song)" title="播放">▶️</button>
@@ -300,33 +351,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
+import { useScanStore } from '@/stores/scan'
 import { usePlayer } from '@/composables/usePlayer'
+import MetadataEditDialog from './MetadataEditDialog.vue'
 import type { MusicItem, ScanProgress, AdvancedSearchCriteria } from '@shared/types/music'
+
+interface SimilarSong extends MusicItem {
+  similarity?: number
+}
 
 interface SimilarDialogState {
   show: boolean
   loading: boolean
-  songs: MusicItem[]
+  songs: SimilarSong[]
   base: MusicItem | null
 }
 
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
+const scanStore = useScanStore()
 const { play } = usePlayer()
 
 const containerRef = ref<HTMLElement>()
 const itemHeight = 50
-const scanning = ref(false)
-const scanProgress = ref<ScanProgress>({
-  current: 0,
-  total: 0,
-  currentFile: '',
-  speed: 0,
-  percentage: 0
-})
 
 const scrollTop = ref(0)
 const containerHeight = ref(600)
@@ -375,6 +425,9 @@ const advancedForm = ref({
   limit: 200
 })
 
+// 播放列表状态缓存（文件路径 -> 是否在播放列表中）
+const playlistStatusCache = ref<Map<string, boolean>>(new Map())
+
 onMounted(async () => {
   await musicStore.loadMusic(0, 50)
 
@@ -384,14 +437,25 @@ onMounted(async () => {
     containerHeight.value = containerRef.value.clientHeight
   }
 
-  // 监听扫描进度
-  window.electronAPI.onScanProgress((progress) => {
-    scanProgress.value = progress
-  })
+  // 更新播放列表状态缓存
+  const filePaths = displayedList.value.map(m => m.filePath)
+  await updatePlaylistStatusCache(filePaths)
+
+  // 更新收藏状态缓存
+  await updateFavoriteStatusCache(filePaths)
+
+  // 扫描状态由 App.vue 统一管理，这里不需要重复监听
 })
 
+// 监听列表变化，更新播放列表和收藏状态
+watch(displayedList, async (newList) => {
+  const filePaths = newList.map(m => m.filePath)
+  await updatePlaylistStatusCache(filePaths)
+  await updateFavoriteStatusCache(filePaths)
+}, { deep: false })
+
 onUnmounted(() => {
-  window.electronAPI.removeScanProgress()
+  // 扫描监听由 App.vue 统一管理，这里不需要移除
   if (containerRef.value) {
     containerRef.value.removeEventListener('scroll', handleScroll)
   }
@@ -416,15 +480,33 @@ const handleScan = async () => {
   const folders = await window.electronAPI.selectMusicFolder()
   if (folders.length === 0) return
 
-  scanning.value = true
   try {
     for (const folder of folders) {
       await window.electronAPI.scanMusicFolder(folder)
     }
     // 重新加载列表
     await musicStore.loadMusic(0, 50)
-  } finally {
-    scanning.value = false
+  } catch (error: any) {
+    if (error.message !== '扫描已取消') {
+      alert(`扫描失败: ${error.message}`)
+    }
+  }
+}
+
+const pauseScan = async () => {
+  await window.electronAPI.pauseScan()
+}
+
+const resumeScan = async () => {
+  await window.electronAPI.resumeScan()
+}
+
+const cancelScan = async () => {
+  if (confirm('确定要取消扫描吗？')) {
+    await window.electronAPI.cancelScan()
+    scanStore.setScanning(false)
+    scanStore.setPaused(false)
+    scanStore.setProgress(null)
   }
 }
 
@@ -509,9 +591,42 @@ const formatDuration = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+const getSearchQuery = (): string => {
+  if (musicStore.isAdvancedMode && musicStore.advancedCriteria?.keyword) {
+    return musicStore.advancedCriteria.keyword
+  }
+  return musicStore.searchQuery
+}
+
+const highlightText = (text: string, query: string): string => {
+  if (!query || !text || text === '-') return text
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escapedQuery})`, 'gi')
+  return text.replace(regex, '<mark>$1</mark>')
+}
+
+// 收藏状态缓存（文件路径 -> 是否收藏）
+const favoriteStatusCache = ref<Map<string, boolean>>(new Map())
+
+// 检查文件是否收藏（基于文件路径）
+const isFileFavorite = (filePath: string): boolean => {
+  return favoriteStatusCache.value.get(filePath) || false
+}
+
+// 更新收藏状态缓存
+const updateFavoriteStatusCache = async (filePaths: string[]) => {
+  for (const filePath of filePaths) {
+    const isFavorite = await window.electronAPI.isFileFavorite(filePath)
+    favoriteStatusCache.value.set(filePath, isFavorite)
+  }
+}
+
 const toggleFavorite = async (music: MusicItem) => {
-  await musicStore.toggleFavorite(music.id)
-  music.favorite = !music.favorite
+  await window.electronAPI.toggleFavorite(music.filePath)
+  // 更新缓存
+  const newFavoriteStatus = !isFileFavorite(music.filePath)
+  favoriteStatusCache.value.set(music.filePath, newFavoriteStatus)
+  music.favorite = newFavoriteStatus
 }
 
 const exportToExcel = async () => {
@@ -585,6 +700,12 @@ const similarDialog = ref<SimilarDialogState>({
   base: null
 })
 
+const metadataEditDialog = ref({
+  show: false,
+  music: null as MusicItem | null,
+  musicIds: [] as number[]
+})
+
 // 显示右键菜单
 const showContextMenu = (event: MouseEvent, item: MusicItem) => {
   contextMenu.value = {
@@ -656,6 +777,43 @@ const toggleQueue = (music: MusicItem) => {
   }
 }
 
+// 检查文件是否在播放列表中（基于文件路径）
+const isInPlaylist = (filePath: string): boolean => {
+  return playlistStatusCache.value.get(filePath) || false
+}
+
+// 切换播放列表状态
+const togglePlaylist = async (music: MusicItem) => {
+  const isIn = isInPlaylist(music.filePath)
+  if (isIn) {
+    // 如果已在播放列表中，显示菜单让用户选择从哪个播放列表移除
+    const playlistIds = await window.electronAPI.getPlaylistsForFile(music.filePath)
+    if (playlistIds.length === 0) {
+      playlistStatusCache.value.set(music.filePath, false)
+      return
+    }
+    if (playlistIds.length === 1) {
+      // 只有一个播放列表，直接移除
+      await window.electronAPI.removeFromPlaylistByPath(playlistIds[0], music.filePath)
+      playlistStatusCache.value.set(music.filePath, false)
+    } else {
+      // 多个播放列表，显示选择对话框
+      alert(`该文件在 ${playlistIds.length} 个播放列表中，请通过播放列表管理页面移除`)
+    }
+  } else {
+    // 如果不在播放列表中，显示添加到播放列表对话框
+    showAddToPlaylistDialog()
+  }
+}
+
+// 更新播放列表状态缓存
+const updatePlaylistStatusCache = async (filePaths: string[]) => {
+  for (const filePath of filePaths) {
+    const isIn = await window.electronAPI.isFileInPlaylist(filePath)
+    playlistStatusCache.value.set(filePath, isIn)
+  }
+}
+
 const playAndAddToQueue = async (music: MusicItem) => {
   if (!isInQueue(music.id)) {
     playerStore.addToQueue(music)
@@ -680,8 +838,8 @@ const openSimilarDialog = async (music: MusicItem | null) => {
   similarDialog.value.loading = true
   similarDialog.value.base = music
   try {
-    const songs = await window.electronAPI.getSimilarMusic(music.id, 30)
-    similarDialog.value.songs = songs
+    const songs = await window.electronAPI.getSimilarMusic(music.id, 30, 0.5)
+    similarDialog.value.songs = songs as SimilarSong[]
   } catch (error) {
     console.error('获取相似歌曲失败:', error)
     alert('获取相似歌曲失败，请稍后重试')
@@ -721,7 +879,9 @@ const closePlaylistDialog = () => {
 const addToPlaylist = async (playlistId: number) => {
   if (contextMenu.value.item) {
     try {
-      await window.electronAPI.addToPlaylist(playlistId, contextMenu.value.item.id)
+      await window.electronAPI.addToPlaylist(playlistId, contextMenu.value.item.filePath)
+      // 更新缓存
+      playlistStatusCache.value.set(contextMenu.value.item.filePath, true)
       showPlaylistDialog.value = false
       contextMenu.value.show = false
     } catch (error) {
@@ -791,6 +951,34 @@ MD5: ${music.fileHash}
   }
   hideContextMenu()
 }
+
+const editMetadata = (music: MusicItem | null) => {
+  if (music) {
+    metadataEditDialog.value = {
+      show: true,
+      music,
+      musicIds: []
+    }
+  }
+  hideContextMenu()
+}
+
+const closeMetadataEditDialog = () => {
+  metadataEditDialog.value = {
+    show: false,
+    music: null,
+    musicIds: []
+  }
+}
+
+const handleMetadataSaved = async () => {
+  // 重新加载当前列表
+  if (musicStore.isAdvancedMode) {
+    await musicStore.runAdvancedSearch(musicStore.advancedCriteria!)
+  } else {
+    await musicStore.loadMusic(0, 50)
+  }
+}
 </script>
 
 <style scoped>
@@ -802,12 +990,68 @@ MD5: ${music.fileHash}
 
 .toolbar {
   padding: 10px 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+.scan-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-scan {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--active-text);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-scan:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-scan:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .scan-progress {
-  margin-left: 20px;
-  color: #666;
+  color: var(--secondary-text-color);
+  font-size: 13px;
+}
+
+.btn-pause,
+.btn-resume,
+.btn-cancel {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-pause:hover,
+.btn-resume:hover,
+.btn-cancel:hover {
+  background: var(--active-bg);
+}
+
+.btn-cancel {
+  color: var(--active-text);
 }
 
 .virtual-list-container {
@@ -846,7 +1090,7 @@ MD5: ${music.fileHash}
 .col-index,
 .item-index {
   text-align: center;
-  color: #999;
+  color: var(--secondary-text-color);
 }
 
 .col-title,
@@ -855,18 +1099,27 @@ MD5: ${music.fileHash}
 .item-artist,
 .col-album,
 .item-album {
-  color: #333;
+  color: var(--text-color);
+}
+
+.item-title mark,
+.item-artist mark,
+.item-album mark {
+  background-color: #ffeb3b;
+  color: inherit;
+  font-weight: 600;
+  padding: 0;
 }
 
 .col-duration,
 .item-duration {
   text-align: center;
-  color: #555;
+  color: var(--text-color);
 }
 
 .col-path,
 .item-path {
-  color: #555;
+  color: var(--text-color);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -877,7 +1130,7 @@ MD5: ${music.fileHash}
 .item-md5 {
   font-family: monospace;
   font-size: 12px;
-  color: #555;
+  color: var(--text-color);
 }
 
 .col-status,
@@ -893,20 +1146,21 @@ MD5: ${music.fileHash}
   column-gap: 12px;
   align-items: center;
   padding: 0 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: background-color 0.2s;
   font-size: 13px;
+  color: var(--text-color);
 }
 
 .music-item:hover {
-  background-color: #f5f5f5;
+  background-color: var(--hover-bg);
 }
 
 .item-index {
   width: 40px;
   text-align: center;
-  color: #999;
+  color: var(--secondary-text-color);
 }
 
 .item-status {
@@ -935,10 +1189,10 @@ MD5: ${music.fileHash}
 }
 
 .status-icon.favorite.active {
-  color: #ff4757;
+  color: var(--active-text);
 }
 
-.status-icon.queue.active {
+.status-icon.playlist.active {
   color: #4290ff;
 }
 
@@ -971,12 +1225,13 @@ MD5: ${music.fileHash}
   align-items: center;
   gap: 12px;
   padding: 8px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-color);
 }
 
 .advanced-status {
   font-size: 13px;
-  color: #666;
+  color: var(--secondary-text-color);
 }
 
 .advanced-loading {
@@ -995,7 +1250,7 @@ MD5: ${music.fileHash}
 .advanced-panel {
   padding: 12px 20px 4px;
   background: var(--sidebar-bg);
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .advanced-grid {
@@ -1015,9 +1270,11 @@ MD5: ${music.fileHash}
 .advanced-grid input,
 .advanced-grid select {
   padding: 6px 8px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 13px;
+  background: var(--bg-color);
+  color: var(--text-color);
 }
 
 .favorite-only {
@@ -1050,6 +1307,7 @@ MD5: ${music.fileHash}
 
 .btn-export:hover {
   background: #0b7dda;
+  opacity: 0.9;
 }
 
 .btn-more {
@@ -1069,18 +1327,13 @@ MD5: ${music.fileHash}
 /* 右键菜单 */
 .context-menu {
   position: fixed;
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 8px 0;
   min-width: 200px;
   z-index: 1000;
-}
-
-.dark .context-menu {
-  background: #2d2d2d;
-  border-color: #444;
 }
 
 .menu-item {
@@ -1089,20 +1342,12 @@ MD5: ${music.fileHash}
   gap: 12px;
   padding: 10px 16px;
   cursor: pointer;
-  color: #333;
+  color: var(--text-color);
   transition: background-color 0.2s;
 }
 
-.dark .menu-item {
-  color: #fff;
-}
-
 .menu-item:hover {
-  background: #f5f5f5;
-}
-
-.dark .menu-item:hover {
-  background: #3d3d3d;
+  background: var(--hover-bg);
 }
 
 .menu-icon {
@@ -1113,12 +1358,8 @@ MD5: ${music.fileHash}
 
 .menu-divider {
   height: 1px;
-  background: #e0e0e0;
+  background: var(--border-color);
   margin: 4px 0;
-}
-
-.dark .menu-divider {
-  background: #444;
 }
 
 /* 对话框 */
@@ -1136,7 +1377,7 @@ MD5: ${music.fileHash}
 }
 
 .dialog {
-  background: #ffffff !important;
+  background: var(--bg-color) !important;
   padding: 24px;
   border-radius: 8px;
   width: 400px;
@@ -1144,15 +1385,10 @@ MD5: ${music.fileHash}
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  border: 1px solid #e0e0e0;
-  color: #1f1f1f !important;
-}
-
-.dark .dialog {
-  background: #2d2d2d !important;
-  border-color: #444444;
-  color: #f5f5f5 !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-color) !important;
+  z-index: 1001;
 }
 
 .dialog * {
@@ -1161,73 +1397,48 @@ MD5: ${music.fileHash}
 
 .dialog h3 {
   margin-bottom: 20px;
-  color: #333333 !important;
+  color: var(--text-color) !important;
   font-size: 18px;
   font-weight: 600;
   margin-top: 0;
-}
-
-.dark .dialog h3 {
-  color: #ffffff !important;
 }
 
 .playlist-list {
   flex: 1;
   overflow-y: auto;
   margin-bottom: 16px;
-  background: #fdfdfd;
-  border: 1px solid #f0f0f0;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 8px;
 }
 
-.dark .playlist-list {
-  background: #3a3a3a;
-  border-color: #555555;
-}
 .playlist-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px;
   margin-bottom: 8px;
-  background: #f8f9fa;
+  background: var(--hover-bg);
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s;
-  color: #333;
-}
-
-.dark .playlist-item {
-  background: #3d3d3d;
-  color: #fff;
+  color: var(--text-color);
 }
 
 .playlist-item:hover {
-  background: #e9ecef;
-}
-
-.dark .playlist-item:hover {
-  background: #4d4d4d;
+  background: var(--active-bg);
 }
 
 .song-count {
-  color: #666666;
+  color: var(--secondary-text-color);
   font-size: 13px;
-}
-
-.dark .song-count {
-  color: #bbbbbb;
 }
 
 .empty-state {
   text-align: center;
   padding: 40px 20px;
-  color: #666666;
-}
-
-.dark .empty-state {
-  color: #cccccc;
+  color: var(--secondary-text-color);
 }
 
 .empty-state p {
@@ -1235,7 +1446,7 @@ MD5: ${music.fileHash}
 }
 
 .btn-create {
-  background: #ff4757;
+  background: var(--active-text);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -1245,7 +1456,8 @@ MD5: ${music.fileHash}
 }
 
 .btn-create:hover {
-  background: #ff6b7a;
+  background: var(--active-text);
+  opacity: 0.9;
 }
 
 .dialog-actions {
@@ -1263,7 +1475,7 @@ MD5: ${music.fileHash}
 
 .similar-base {
   font-size: 13px;
-  color: #666;
+  color: var(--secondary-text-color);
   margin-bottom: 12px;
 }
 
@@ -1278,7 +1490,27 @@ MD5: ${music.fileHash}
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+}
+
+.similarity-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.score-label {
+  font-size: 11px;
+  color: var(--secondary-text-color);
+  margin-bottom: 2px;
+}
+
+.score-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--active-text);
 }
 
 .similar-item:last-child {
@@ -1311,7 +1543,7 @@ MD5: ${music.fileHash}
 .similar-loading {
   padding: 20px 0;
   text-align: center;
-  color: #888;
+  color: var(--secondary-text-color);
 }
 
 .btn-secondary {
@@ -1329,7 +1561,7 @@ MD5: ${music.fileHash}
 }
 
 .btn-primary {
-  background: #ff4757;
+  background: var(--active-text);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -1339,11 +1571,12 @@ MD5: ${music.fileHash}
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #ff6b7a;
+  background: var(--active-text);
+  opacity: 0.9;
 }
 
 .btn-primary:disabled {
-  background: #ccc;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -1354,48 +1587,32 @@ MD5: ${music.fileHash}
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333333 !important;
+  color: var(--text-color) !important;
   font-weight: 500;
   font-size: 14px;
-}
-
-.dark .form-group label {
-  color: #ffffff !important;
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
-  background: #ffffff !important;
-  color: #333333 !important;
+  background: var(--bg-color) !important;
+  color: var(--text-color) !important;
   box-sizing: border-box;
-}
-
-.dark .form-group input,
-.dark .form-group textarea {
-  background: #3d3d3d !important;
-  color: #ffffff !important;
-  border-color: #555555 !important;
 }
 
 .form-group input::placeholder,
 .form-group textarea::placeholder {
-  color: #999999 !important;
-}
-
-.dark .form-group input::placeholder,
-.dark .form-group textarea::placeholder {
-  color: #888888 !important;
+  color: var(--secondary-text-color) !important;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #ff4757;
+  border-color: var(--active-text);
 }
 
 .form-group textarea {

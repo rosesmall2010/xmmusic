@@ -1,15 +1,24 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import MusicDatabase from '../database/db'
 import FileScanner from '../services/fileScanner'
 import ID3Fixer from '../services/id3Fixer'
 import ExcelExporter from '../services/excelExporter'
 import FileExporter from '../services/fileExporter'
 import FileMonitor from '../services/fileMonitor'
+import ShortcutManager from '../services/shortcutManager'
+import LyricsService from '../services/lyricsService'
+import TrayService from '../services/trayService'
+import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
+import scanManager from '../services/scanManager'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
+import type { ShortcutConfig } from '../../shared/types/settings'
+import type { LyricsData } from '../../shared/types/lyrics'
 
-export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null) {
+export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
+  const lyricsService = new LyricsService()
+  const metadataEditor = new MetadataEditor()
   // 窗口控制（不依赖数据库）
   ipcMain.handle('window-minimize', () => {
     mainWindow.minimize()
@@ -55,20 +64,136 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return result.filePaths || []
   })
 
+  ipcMain.handle('select-image-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '图片文件', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] }
+      ]
+    })
+    return result.filePaths && result.filePaths.length > 0 ? result.filePaths[0] : null
+  })
+
+  // 文件读写（用于快捷键配置导入/导出）
+  ipcMain.handle('read-file', async (_, filePath: string, encoding: string = 'utf-8') => {
+    return readFileSync(filePath, encoding as BufferEncoding)
+  })
+
+  ipcMain.handle('write-file', async (_, filePath: string, content: string, encoding: string = 'utf-8') => {
+    writeFileSync(filePath, content, encoding as BufferEncoding)
+  })
+
+  ipcMain.handle('show-save-dialog', async (_, options: any) => {
+    const result = await dialog.showSaveDialog(mainWindow, options)
+    return result.canceled ? null : result.filePath
+  })
+
+  // 扫描管理器状态
+  let currentScanner: FileScanner | null = null
+
   ipcMain.handle('scan-music-folder', async (_, path: string) => {
     if (!db) {
-      throw new Error('数据库未初始化，无法扫描音乐。请查看控制台错误信息。')
+      const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
+        '可能的原因：\n' +
+        '1. better-sqlite3 模块未正确编译\n' +
+        '2. 数据库文件权限问题\n' +
+        '3. 数据库初始化失败\n\n' +
+        '请查看终端控制台的错误信息，或尝试重新编译：\n' +
+        'npm run rebuild'
+      console.error('❌ 数据库未初始化，无法执行扫描操作')
+      console.error('💡 提示：请检查终端控制台的数据库初始化错误信息')
+      throw new Error(errorMsg)
     }
-    const scanner = new FileScanner(db)
-    const result = await scanner.scanDirectory(path, {
-      recursive: true,
-      fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
-      excludePaths: [],
-      onProgress: (progress: ScanProgress) => {
-        mainWindow.webContents.send('scan-progress', progress)
+
+    // 检查是否已有扫描任务
+    const state = scanManager.getState()
+    if (state.isScanning && !state.isPaused) {
+      throw new Error('已有扫描任务正在进行中，请先暂停或取消当前任务')
+    }
+
+    // 如果已暂停，恢复扫描
+    if (state.isPaused && currentScanner) {
+      scanManager.resume()
+      currentScanner.setPaused(false)
+      mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: false })
+      return { success: 0, failed: 0, corrupted: 0, skipped: 0, duration: 0, errors: [] }
+    }
+
+    // 创建新的扫描器
+    currentScanner = new FileScanner(db)
+    scanManager.setScanning(true)
+    scanManager.setCancelled(false)
+
+    try {
+      const result = await currentScanner.scanDirectory(path, {
+        recursive: true,
+        fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
+        excludePaths: [],
+        onProgress: (progress: ScanProgress) => {
+          scanManager.setProgress(progress)
+          // 使用 setImmediate 确保不阻塞主线程
+          setImmediate(() => {
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('scan-progress', progress)
+            }
+          })
+        }
+      })
+      scanManager.setScanning(false)
+      currentScanner = null
+      return result
+    } catch (error: any) {
+      scanManager.setScanning(false)
+      currentScanner = null
+      if (error.message === '扫描已取消') {
+        throw error
       }
-    })
-    return result
+      throw error
+    }
+  })
+
+  ipcMain.handle('pause-scan', async () => {
+    const state = scanManager.getState()
+    if (state.isScanning && !state.isPaused) {
+      scanManager.pause()
+      if (currentScanner) {
+        currentScanner.setPaused(true)
+      }
+      mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: true })
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('resume-scan', async () => {
+    const state = scanManager.getState()
+    if (state.isScanning && state.isPaused) {
+      scanManager.resume()
+      if (currentScanner) {
+        currentScanner.setPaused(false)
+      }
+      mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: false })
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('cancel-scan', async () => {
+    const state = scanManager.getState()
+    if (state.isScanning) {
+      scanManager.cancel()
+      if (currentScanner) {
+        currentScanner.setCancelled(true)
+      }
+      currentScanner = null
+      mainWindow.webContents.send('scan-state-changed', { isScanning: false, isPaused: false })
+      return true
+    }
+    return false
+  })
+
+  ipcMain.handle('get-scan-state', async () => {
+    return scanManager.getState()
   })
 
   // 数据库操作（需要数据库）
@@ -84,12 +209,36 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   ipcMain.handle('search-music', async (_, query: string) => {
     if (!db) return []
-    return db.searchMusic(query)
+    const results = db.searchMusic(query)
+    // 记录搜索历史
+    if (query && query.trim()) {
+      db.addSearchHistory(query.trim(), 'basic')
+    }
+    return results
   })
 
   ipcMain.handle('advanced-search', async (_, criteria: any) => {
     if (!db) return []
-    return db.advancedSearch(criteria)
+    const results = db.advancedSearch(criteria)
+    // 记录搜索历史
+    const query = criteria.keyword || '高级搜索'
+    db.addSearchHistory(query, 'advanced', criteria)
+    return results
+  })
+
+  ipcMain.handle('get-search-history', async () => {
+    if (!db) return []
+    return db.getSearchHistory(10)
+  })
+
+  ipcMain.handle('clear-search-history', async () => {
+    if (!db) return
+    db.clearSearchHistory()
+  })
+
+  ipcMain.handle('get-search-suggestions', async (_, query: string) => {
+    if (!db) return []
+    return db.getSearchSuggestions(query, 5)
   })
 
   ipcMain.handle('get-music-by-id', async (_, id: number) => {
@@ -97,19 +246,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getMusicById(id)
   })
 
-  ipcMain.handle('toggle-favorite', async (_, id: number) => {
-    if (!db) return
-    db.toggleFavorite(id)
-  })
-
   ipcMain.handle('record-play', async (_, id: number) => {
     if (!db) return
     db.recordPlay(id)
   })
 
-  ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number) => {
+  ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number, minSimilarity?: number) => {
     if (!db) return []
-    return db.getSimilarMusic(musicId, limit || 20)
+    return db.getSimilarMusic(musicId, limit || 20, minSimilarity || 0.5)
   })
 
   // 播放列表
@@ -133,9 +277,24 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getPlaylists()
   })
 
-  ipcMain.handle('add-to-playlist', async (_, playlistId: number, musicId: number) => {
+  ipcMain.handle('add-to-playlist', async (_, playlistId: number, filePath: string) => {
     if (!db) return
-    db.addToPlaylist(playlistId, musicId)
+    db.addToPlaylist(playlistId, filePath)
+  })
+
+  ipcMain.handle('is-file-in-playlist', async (_, filePath: string, playlistId?: number) => {
+    if (!db) return false
+    return db.isFileInPlaylist(filePath, playlistId)
+  })
+
+  ipcMain.handle('get-playlists-for-file', async (_, filePath: string) => {
+    if (!db) return []
+    return db.getPlaylistsForFile(filePath)
+  })
+
+  ipcMain.handle('remove-from-playlist-by-path', async (_, playlistId: number, filePath: string) => {
+    if (!db) return
+    db.removeFromPlaylistByPath(playlistId, filePath)
   })
 
   ipcMain.handle('get-playlist-songs', async (_, playlistId: number) => {
@@ -214,16 +373,54 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
     for (const song of data.songs || []) {
       let music: MusicItem | null = null
+
+      // 1. 优先通过 fileHash 匹配（最准确）
       if (song.fileHash) {
         const matches = db.getMusicByHash(song.fileHash)
         music = matches.length > 0 ? matches[0] : null
       }
+
+      // 2. 通过 filePath 匹配
       if (!music && song.filePath) {
         music = db.getMusicByPath(song.filePath)
       }
 
+      // 3. 通过标题和艺术家模糊匹配（改进的自动匹配）
+      if (!music && song.title && song.artist) {
+        // 使用高级搜索来匹配标题和艺术家
+        const results = db.advancedSearch({
+          keyword: song.title.trim(),
+          artist: song.artist.trim(),
+          limit: 10
+        })
+        if (results.length > 0) {
+          // 找到最匹配的（标题和艺术家都匹配）
+          const match = results.find(m =>
+            m.title.toLowerCase().includes(song.title.trim().toLowerCase()) &&
+            m.artist.toLowerCase().includes(song.artist.trim().toLowerCase())
+          )
+          if (match) {
+            music = match
+          } else {
+            music = results[0]
+          }
+        }
+      }
+
+      // 4. 仅通过标题匹配（如果艺术家不匹配）
+      if (!music && song.title) {
+        const results = db.searchMusic(song.title.trim(), 5)
+        if (results.length > 0) {
+          music = results[0]
+        }
+      }
+
       if (music) {
-        db.addToPlaylist(playlistId, music.id)
+        db.addToPlaylist(playlistId, music.filePath)
+        added += 1
+      } else if (song.filePath) {
+        // 即使 music 表中没有，也添加到播放列表（基于文件路径）
+        db.addToPlaylist(playlistId, song.filePath)
         added += 1
       } else {
         missing.push({
@@ -243,6 +440,16 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   // 收藏
+  ipcMain.handle('toggle-favorite', async (_, filePath: string) => {
+    if (!db) return
+    db.toggleFavorite(filePath)
+  })
+
+  ipcMain.handle('is-file-favorite', async (_, filePath: string) => {
+    if (!db) return false
+    return db.isFileFavorite(filePath)
+  })
+
   ipcMain.handle('get-favorites', () => {
     if (!db) return []
     return db.getFavorites()
@@ -334,6 +541,54 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('get-duplicate-groups', () => {
     if (!db) return []
     return db.getDuplicateGroups()
+  })
+
+  // ========== 歌词功能 ==========
+
+  ipcMain.handle('load-lyrics', async (_, musicId: number) => {
+    if (!db) return null
+    const music = db.getMusicById(musicId)
+    if (!music) return null
+
+    // 1. 如果数据库中有歌词路径，直接使用
+    if (music.lyricsPath && existsSync(music.lyricsPath)) {
+      try {
+        return lyricsService.parseLyrics(music.lyricsPath)
+      } catch (error) {
+        console.error('解析歌词文件失败:', error)
+      }
+    }
+
+    // 2. 自动查找同目录下的歌词文件
+    const lyricsPath = lyricsService.findLyricsFile(music.filePath)
+    if (lyricsPath) {
+      try {
+        const lyrics = lyricsService.parseLyrics(lyricsPath)
+        // 保存歌词路径到数据库
+        db.updateMusic(musicId, { lyricsPath })
+        return lyrics
+      } catch (error) {
+        console.error('解析歌词文件失败:', error)
+      }
+    }
+
+    return null
+  })
+
+  ipcMain.handle('parse-lyrics-file', async (_, filePath: string) => {
+    if (!existsSync(filePath)) {
+      throw new Error('歌词文件不存在')
+    }
+    try {
+      return lyricsService.parseLyrics(filePath)
+    } catch (error: any) {
+      throw new Error(`解析歌词文件失败: ${error.message}`)
+    }
+  })
+
+  ipcMain.handle('update-music-lyrics-path', async (_, musicId: number, lyricsPath: string) => {
+    if (!db) return
+    db.updateMusic(musicId, { lyricsPath })
   })
 
   ipcMain.handle('delete-music-file', async (_, musicId: number) => {
@@ -437,4 +692,278 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return true
     })
   }
+
+  // 快捷键管理
+  if (shortcutManager) {
+    // 初始化快捷键（从设置中加载）
+    ipcMain.handle('get-shortcut-config', async () => {
+      let settings: Record<string, any> = {}
+      if (db) {
+        try {
+          settings = db.getAllSettings()
+        } catch (error) {
+          settings = loadSettingsFromFile()
+        }
+      } else {
+        settings = loadSettingsFromFile()
+      }
+      return settings.shortcuts || {}
+    })
+
+    ipcMain.handle('save-shortcut-config', async (_, shortcuts: ShortcutConfig) => {
+      if (db) {
+        db.setSetting('shortcuts', shortcuts)
+      } else {
+        const settings = loadSettingsFromFile()
+        settings.shortcuts = shortcuts
+        saveSettingsToFile(settings)
+      }
+    })
+
+    ipcMain.handle('get-default-shortcuts', () => {
+      return shortcutManager.getDefaultShortcuts()
+    })
+
+    ipcMain.handle('register-shortcut', async (_, action: string, accelerator: string) => {
+      if (!shortcutManager) return false
+
+      // 解析 accelerator（从显示格式转换为 Electron 格式）
+      const parsedAccelerator = shortcutManager.parseAccelerator(accelerator)
+
+      // 创建处理函数
+      const handler = () => {
+        // 发送消息到渲染进程来执行操作
+        mainWindow?.webContents.send('shortcut-action', action)
+      }
+
+      return shortcutManager.register(action, parsedAccelerator, handler)
+    })
+
+    ipcMain.handle('unregister-shortcut', async (_, action: string) => {
+      if (!shortcutManager) return
+      shortcutManager.unregister(action)
+    })
+
+    ipcMain.handle('register-all-shortcuts', async (_, shortcuts: ShortcutConfig) => {
+      if (!shortcutManager) return false
+
+      // 创建处理函数映射
+      const handlers: Record<string, () => void> = {
+        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
+        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
+        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
+        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
+        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
+        'toggle-window': () => {
+          if (mainWindow?.isVisible()) {
+            mainWindow.hide()
+          } else {
+            mainWindow?.show()
+            mainWindow?.focus()
+          }
+        },
+        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+      }
+
+      // 转换快捷键格式
+      const parsedShortcuts: Record<string, string> = {}
+      for (const [action, accelerator] of Object.entries(shortcuts)) {
+        if (accelerator) {
+          parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
+        }
+      }
+
+      shortcutManager.registerAll(parsedShortcuts, handlers)
+
+      // 保存配置
+      if (db) {
+        db.setSetting('shortcuts', shortcuts)
+      } else {
+        const settings = loadSettingsFromFile()
+        settings.shortcuts = shortcuts
+        saveSettingsToFile(settings)
+      }
+
+      return true
+    })
+
+    ipcMain.handle('check-shortcut-available', async (_, accelerator: string) => {
+      if (!shortcutManager) return false
+      const parsedAccelerator = shortcutManager.parseAccelerator(accelerator)
+      return shortcutManager.isAvailable(parsedAccelerator)
+    })
+
+    // 加载并注册保存的快捷键
+    ipcMain.handle('load-shortcuts', async () => {
+      if (!shortcutManager) return false
+
+      let shortcuts: ShortcutConfig = {}
+      if (db) {
+        try {
+          const settings = db.getAllSettings()
+          shortcuts = settings.shortcuts || {}
+        } catch (error) {
+          const settings = loadSettingsFromFile()
+          shortcuts = settings.shortcuts || {}
+        }
+      } else {
+        const settings = loadSettingsFromFile()
+        shortcuts = settings.shortcuts || {}
+      }
+
+      // 如果没有保存的配置，使用默认值
+      if (Object.keys(shortcuts).length === 0) {
+        shortcuts = shortcutManager.getDefaultShortcuts()
+      }
+
+      // 注册快捷键
+      const handlers: Record<string, () => void> = {
+        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
+        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
+        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
+        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
+        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
+        'toggle-window': () => {
+          if (mainWindow?.isVisible()) {
+            mainWindow.hide()
+          } else {
+            mainWindow?.show()
+            mainWindow?.focus()
+          }
+        },
+        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+      }
+
+      const parsedShortcuts: Record<string, string> = {}
+      for (const [action, accelerator] of Object.entries(shortcuts)) {
+        if (accelerator) {
+          parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
+        }
+      }
+
+      shortcutManager.registerAll(parsedShortcuts, handlers)
+      return true
+    })
+  }
+
+  // ========== 系统托盘功能 ==========
+  if (trayService) {
+    // 监听播放状态变化
+    ipcMain.on('update-tray-play-state', (_, isPlaying: boolean) => {
+      trayService.updatePlayState(isPlaying)
+    })
+
+    // 监听当前音乐变化
+    ipcMain.on('update-tray-current-music', (_, music: { title: string; artist: string } | null) => {
+      trayService.updateCurrentMusic(music)
+    })
+
+    // 监听托盘操作（通过webContents发送）
+    mainWindow.webContents.on('did-finish-load', () => {
+      // 这个事件监听器会在渲染进程发送消息时触发
+    })
+  }
+
+  // ========== 播放统计功能 ==========
+  if (db) {
+    ipcMain.handle('get-overall-statistics', () => {
+      return db.getOverallStatistics()
+    })
+
+    ipcMain.handle('get-top-played-songs', async (_, limit: number = 20) => {
+      return db.getTopPlayedSongs(limit)
+    })
+
+    ipcMain.handle('get-play-trend', async (_, days: number = 30) => {
+      return db.getPlayTrend(days)
+    })
+
+    ipcMain.handle('get-artist-statistics', async (_, limit: number = 20) => {
+      return db.getArtistStatistics(limit)
+    })
+  }
+
+  // ========== 元数据编辑功能 ==========
+  ipcMain.handle('update-music-metadata', async (_, musicId: number, updates: any) => {
+    if (!db) throw new Error('数据库未初始化')
+
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+
+    try {
+      // 更新文件中的 ID3 标签
+      await metadataEditor.updateMetadata(music.filePath, updates)
+
+      // 更新数据库
+      const dbUpdates: any = {}
+      if (updates.title !== undefined) dbUpdates.title = updates.title
+      if (updates.artist !== undefined) dbUpdates.artist = updates.artist
+      if (updates.album !== undefined) dbUpdates.album = updates.album
+      if (updates.year !== undefined) dbUpdates.year = updates.year
+      if (updates.genre !== undefined) dbUpdates.genre = updates.genre
+      if (updates.coverPath !== undefined) dbUpdates.coverPath = updates.coverPath
+
+      if (Object.keys(dbUpdates).length > 0) {
+        db.updateMusic(musicId, dbUpdates)
+      }
+
+      return true
+    } catch (error: any) {
+      throw new Error(`更新元数据失败: ${error.message}`)
+    }
+  })
+
+  ipcMain.handle('batch-update-music-metadata', async (_, musicIds: number[], updates: any, onProgress?: (current: number, total: number) => void) => {
+    if (!db) throw new Error('数据库未初始化')
+
+    const filePaths: string[] = []
+    for (const id of musicIds) {
+      const music = db.getMusicById(id)
+      if (music) {
+        filePaths.push(music.filePath)
+      }
+    }
+
+    if (filePaths.length === 0) {
+      throw new Error('没有可更新的音乐')
+    }
+
+    try {
+      // 批量更新文件中的 ID3 标签
+      const result = await metadataEditor.batchUpdateMetadata(filePaths, updates, onProgress)
+
+      // 更新数据库
+      const dbUpdates: any = {}
+      if (updates.title !== undefined) dbUpdates.title = updates.title
+      if (updates.artist !== undefined) dbUpdates.artist = updates.artist
+      if (updates.album !== undefined) dbUpdates.album = updates.album
+      if (updates.year !== undefined) dbUpdates.year = updates.year
+      if (updates.genre !== undefined) dbUpdates.genre = updates.genre
+      if (updates.coverPath !== undefined) dbUpdates.coverPath = updates.coverPath
+
+      if (Object.keys(dbUpdates).length > 0) {
+        for (const id of musicIds) {
+          db.updateMusic(id, dbUpdates)
+        }
+      }
+
+      return result
+    } catch (error: any) {
+      throw new Error(`批量更新元数据失败: ${error.message}`)
+    }
+  })
+
+  ipcMain.handle('extract-music-cover', async (_, musicId: number, outputPath: string) => {
+    if (!db) throw new Error('数据库未初始化')
+
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+
+    try {
+      await metadataEditor.extractCover(music.filePath, outputPath)
+      return true
+    } catch (error: any) {
+      throw new Error(`提取封面失败: ${error.message}`)
+    }
+  })
 }

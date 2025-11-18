@@ -1,0 +1,42 @@
+appId: com.zdhsoft.xmmusic
+productName: xmmusic
+copyright: Copyright © 2024 zdhsoft
+
+directories:
+  buildResources: build
+  output: dist
+
+files:
+  - dist/electron/**/*
+  - dist/renderer/**/*
+  - package.json
+  - node_modules/**
+
+mac:
+  category: public.app-category.music
+  icon: build/icon.icns
+  target:
+    - target: default
+      arch:
+        - x64
+        - arm64
+  gatekeeperAssess: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+
+linux:
+  icon: build/icon.png
+  target:
+    - AppImage
+    - deb
+    - rpm

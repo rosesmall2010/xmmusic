@@ -1,5 +1,5 @@
 version: 4.44.3
-installed_at: '2025-11-16T17:38:32.193Z'
+installed_at: '2025-11-18T01:49:49.375Z'
 install_type: full
 agent: null
 ides_setup:
@@ -42,6 +42,84 @@ files:
   - path: .bmad-core/utils/bmad-doc-template.md
     hash: 34df6ead8b91abfc
     modified: false
+  - path: .bmad-core/data/test-priorities-matrix.md
+    hash: 1dd5698a46ab054e
+    modified: false
+  - path: .bmad-core/data/test-levels-framework.md
+    hash: f814f8efed0e96e1
+    modified: false
+  - path: .bmad-core/data/technical-preferences.md
+    hash: a829f3172a10b396
+    modified: false
+  - path: .bmad-core/data/elicitation-methods.md
+    hash: 8c3ca9b84c8784c9
+    modified: false
+  - path: .bmad-core/data/brainstorming-techniques.md
+    hash: 62b0bf50648906b0
+    modified: false
+  - path: .bmad-core/data/bmad-kb.md
+    hash: c23a5fc5c6508c5c
+    modified: false
+  - path: .bmad-core/checklists/story-draft-checklist.md
+    hash: 0bc8a90678dba318
+    modified: false
+  - path: .bmad-core/checklists/story-dod-checklist.md
+    hash: df403478049b6958
+    modified: false
+  - path: .bmad-core/checklists/po-master-checklist.md
+    hash: 8354985e56053c48
+    modified: false
+  - path: .bmad-core/checklists/pm-checklist.md
+    hash: b53f0270312713d2
+    modified: false
+  - path: .bmad-core/checklists/change-checklist.md
+    hash: fb2d071796c8f8b6
+    modified: false
+  - path: .bmad-core/checklists/architect-checklist.md
+    hash: 15ef7d01b0e31c3f
+    modified: false
+  - path: .bmad-core/agent-teams/team-no-ui.yaml
+    hash: 00cbffc4106cbe1e
+    modified: false
+  - path: .bmad-core/agent-teams/team-ide-minimal.yaml
+    hash: 424972103dfde87d
+    modified: false
+  - path: .bmad-core/agent-teams/team-fullstack.yaml
+    hash: 14c7a2d8bc7ceb6f
+    modified: false
+  - path: .bmad-core/agent-teams/team-all.yaml
+    hash: db5b0ff0a9c9c2e8
+    modified: false
+  - path: .bmad-core/agents/ux-expert.md
+    hash: 5de34d36ca9a747c
+    modified: false
+  - path: .bmad-core/agents/sm.md
+    hash: bd6543412a550438
+    modified: false
+  - path: .bmad-core/agents/qa.md
+    hash: 4ad40f692ee9c9fe
+    modified: false
+  - path: .bmad-core/agents/po.md
+    hash: 02a321a754de36e3
+    modified: false
+  - path: .bmad-core/agents/pm.md
+    hash: eef91ef67b74c2cf
+    modified: false
+  - path: .bmad-core/agents/dev.md
+    hash: 944c6b2750c3f0a7
+    modified: false
+  - path: .bmad-core/agents/bmad-orchestrator.md
+    hash: 1adabdf959dddf55
+    modified: false
+  - path: .bmad-core/agents/bmad-master.md
+    hash: 7e7928ef673b5f79
+    modified: false
+  - path: .bmad-core/agents/architect.md
+    hash: f5d211e80b8e160d
+    modified: false
+  - path: .bmad-core/agents/analyst.md
+    hash: 220103a5b3af7eb1
+    modified: false
   - path: .bmad-core/templates/story-tmpl.yaml
     hash: 11e79b87ff700c8f
     modified: false
@@ -80,84 +158,6 @@ files:
     modified: false
   - path: .bmad-core/templates/architecture-tmpl.yaml
     hash: e66f63be1af30585
-    modified: false
-  - path: .bmad-core/data/test-priorities-matrix.md
-    hash: 1dd5698a46ab054e
-    modified: false
-  - path: .bmad-core/data/test-levels-framework.md
-    hash: f814f8efed0e96e1
-    modified: false
-  - path: .bmad-core/data/technical-preferences.md
-    hash: a829f3172a10b396
-    modified: false
-  - path: .bmad-core/data/elicitation-methods.md
-    hash: 8c3ca9b84c8784c9
-    modified: false
-  - path: .bmad-core/data/brainstorming-techniques.md
-    hash: 62b0bf50648906b0
-    modified: false
-  - path: .bmad-core/data/bmad-kb.md
-    hash: c23a5fc5c6508c5c
-    modified: false
-  - path: .bmad-core/checklists/story-draft-checklist.md
-    hash: 0bc8a90678dba318
-    modified: false
-  - path: .bmad-core/checklists/story-dod-checklist.md
-    hash: df403478049b6958
-    modified: false
-  - path: .bmad-core/checklists/po-master-checklist.md
-    hash: 8354985e56053c48
-    modified: false
-  - path: .bmad-core/checklists/pm-checklist.md
-    hash: b53f0270312713d2
-    modified: false
-  - path: .bmad-core/checklists/change-checklist.md
-    hash: fb2d071796c8f8b6
-    modified: false
-  - path: .bmad-core/checklists/architect-checklist.md
-    hash: 15ef7d01b0e31c3f
-    modified: false
-  - path: .bmad-core/agents/ux-expert.md
-    hash: 5de34d36ca9a747c
-    modified: false
-  - path: .bmad-core/agents/sm.md
-    hash: bd6543412a550438
-    modified: false
-  - path: .bmad-core/agents/qa.md
-    hash: 4ad40f692ee9c9fe
-    modified: false
-  - path: .bmad-core/agents/po.md
-    hash: 02a321a754de36e3
-    modified: false
-  - path: .bmad-core/agents/pm.md
-    hash: eef91ef67b74c2cf
-    modified: false
-  - path: .bmad-core/agents/dev.md
-    hash: 944c6b2750c3f0a7
-    modified: false
-  - path: .bmad-core/agents/bmad-orchestrator.md
-    hash: 1adabdf959dddf55
-    modified: false
-  - path: .bmad-core/agents/bmad-master.md
-    hash: 7e7928ef673b5f79
-    modified: false
-  - path: .bmad-core/agents/architect.md
-    hash: f5d211e80b8e160d
-    modified: false
-  - path: .bmad-core/agents/analyst.md
-    hash: 220103a5b3af7eb1
-    modified: false
-  - path: .bmad-core/agent-teams/team-no-ui.yaml
-    hash: 00cbffc4106cbe1e
-    modified: false
-  - path: .bmad-core/agent-teams/team-ide-minimal.yaml
-    hash: 424972103dfde87d
-    modified: false
-  - path: .bmad-core/agent-teams/team-fullstack.yaml
-    hash: 14c7a2d8bc7ceb6f
-    modified: false
-  - path: .bmad-core/agent-teams/team-all.yaml
-    hash: db5b0ff0a9c9c2e8
     modified: false
   - path: .bmad-core/tasks/validate-next-story.md
     hash: 75e84133d364d973
