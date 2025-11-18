@@ -14,8 +14,12 @@ let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 
 function createWindow(): void {
-  // 开发模式检测：检查是否有 VITE_DEV_SERVER_URL 或 NODE_ENV
-  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV || process.env.VITE_DEV_SERVER_URL
+  // 开发模式检测：严格判断是否为开发模式
+  // 生产打包版本中，NODE_ENV 会被设置为 'production'，且不会有 VITE_DEV_SERVER_URL
+  const isDev: boolean = process.env.NODE_ENV !== 'production' &&
+                         (process.env.NODE_ENV === 'development' ||
+                          !process.env.NODE_ENV ||
+                          !!process.env.VITE_DEV_SERVER_URL)
 
   // 设置应用图标
   // 开发环境：从项目根目录的 build 文件夹
@@ -112,7 +116,8 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: false, // 允许访问本地文件
       webSecurity: false, // 允许跨域访问本地文件
-      preload: join(__dirname, 'preload.js')
+      preload: join(__dirname, 'preload.js'),
+      devTools: isDev // 生产模式下完全禁用 DevTools
     },
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default'
@@ -123,19 +128,26 @@ function createWindow(): void {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000'
     console.log(`🔗 加载开发服务器: ${devServerUrl}`)
     mainWindow.loadURL(devServerUrl)
+    // 仅在开发模式下打开 DevTools
     mainWindow.webContents.openDevTools()
   } else {
-    // 生产模式：加载打包后的文件
+    // 生产模式：加载打包后的文件，不打开 DevTools
     const indexPath = join(__dirname, '../renderer/index.html')
     console.log(`📁 加载文件: ${indexPath}`)
     mainWindow.loadFile(indexPath)
+    // 确保生产模式下 DevTools 是关闭的
+    mainWindow.webContents.closeDevTools()
   }
 }
 
 app.whenReady().then(async () => {
   // 设置 Dock 图标（仅 macOS）
   if (process.platform === 'darwin') {
-    const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV || process.env.VITE_DEV_SERVER_URL
+    // 开发模式检测：严格判断是否为开发模式
+    const isDev = process.env.NODE_ENV !== 'production' &&
+                  (process.env.NODE_ENV === 'development' ||
+                   !process.env.NODE_ENV ||
+                   process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
     const dockIconPath = join(projectRoot, 'build', 'icon.png')
 
