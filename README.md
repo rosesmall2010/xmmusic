@@ -80,7 +80,7 @@ npm run pack
 - **Electron**: 39.2.1 - 桌面应用框架
 - **Vue**: 3.5.24 - 前端框架
 - **TypeScript**: 5.9 - 类型系统
-- **SQLite**: better-sqlite3 - 本地数据库
+- **SQLite**: @vscode/sqlite3 - 本地数据库（兼容 Electron 39）
 - **Vite**: 构建工具
 - **Pinia**: 状态管理
 - **Howler.js**: 音频播放

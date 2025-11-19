@@ -119,8 +119,8 @@ function createWindow(): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false, // 允许访问本地文件
-      webSecurity: false, // 允许跨域访问本地文件
+      sandbox: true,
+      webSecurity: true,
       preload: join(__dirname, 'preload.js'),
       devTools: isDev, // 生产模式下完全禁用 DevTools
       // Electron 39 网络服务稳定性配置
@@ -183,8 +183,6 @@ function createWindow(): void {
           console.log(`✅ 找到备用路径: ${altPath}`)
           mainWindow.loadFile(altPath)
           console.log('='.repeat(60))
-          // 临时启用 DevTools 以便调试
-          mainWindow.webContents.openDevTools()
           return
         }
       }
@@ -197,17 +195,7 @@ function createWindow(): void {
 
     mainWindow.loadFile(indexPath).catch((error) => {
       console.error('❌ loadFile 失败:', error)
-      // 临时启用 DevTools 以便调试
-      if (mainWindow) {
-        mainWindow.webContents.openDevTools()
-      }
     })
-
-    // 临时启用 DevTools 以便调试白屏问题
-    // 注意：调试完成后应该关闭这行，或者添加一个设置选项来控制
-    if (mainWindow) {
-      mainWindow.webContents.openDevTools()
-    }
   }
 }
 
