@@ -7,6 +7,10 @@ import FileMonitor from './services/fileMonitor'
 import ShortcutManager from './services/shortcutManager'
 import TrayService from './services/trayService'
 
+// 修复 Electron 39 网络服务崩溃问题
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
+app.commandLine.appendSwitch('disable-site-isolation-trials')
+
 let mainWindow: BrowserWindow | null = null
 let db: MusicDatabase | null = null
 let fileMonitor: FileMonitor | null = null
@@ -14,9 +18,10 @@ let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 
 function createWindow(): void {
-  // 开发模式检测：严格判断是否为开发模式
-  // 生产打包版本中，NODE_ENV 会被设置为 'production'，且不会有 VITE_DEV_SERVER_URL
-  const isDev: boolean = process.env.NODE_ENV !== 'production' &&
+  // 开发模式检测：使用 app.isPackaged 作为最可靠的判断依据
+  // app.isPackaged 在打包后的应用中为 true，开发模式下为 false
+  // 同时检查 NODE_ENV 和 VITE_DEV_SERVER_URL 作为辅助判断
+  const isDev: boolean = !app.isPackaged &&
                          (process.env.NODE_ENV === 'development' ||
                           !process.env.NODE_ENV ||
                           !!process.env.VITE_DEV_SERVER_URL)
@@ -117,10 +122,31 @@ function createWindow(): void {
       sandbox: false, // 允许访问本地文件
       webSecurity: false, // 允许跨域访问本地文件
       preload: join(__dirname, 'preload.js'),
-      devTools: isDev // 生产模式下完全禁用 DevTools
+      devTools: isDev, // 生产模式下完全禁用 DevTools
+      // Electron 39 网络服务稳定性配置
+      backgroundThrottling: false,
+      offscreen: false
     },
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default'
+  })
+
+  // 添加错误处理和调试信息
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('='.repeat(60))
+    console.error('❌ 页面加载失败!')
+    console.error(`  - 错误代码: ${errorCode}`)
+    console.error(`  - 错误描述: ${errorDescription}`)
+    console.error(`  - URL: ${validatedURL}`)
+    console.error('='.repeat(60))
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('✅ 页面加载完成')
+  })
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('✅ DOM 准备就绪')
   })
 
   if (isDev) {
@@ -131,23 +157,78 @@ function createWindow(): void {
     // 仅在开发模式下打开 DevTools
     mainWindow.webContents.openDevTools()
   } else {
-    // 生产模式：加载打包后的文件，不打开 DevTools
+    // 生产模式：加载打包后的文件
     const indexPath = join(__dirname, '../renderer/index.html')
-    console.log(`📁 加载文件: ${indexPath}`)
-    mainWindow.loadFile(indexPath)
-    // 确保生产模式下 DevTools 是关闭的
-    mainWindow.webContents.closeDevTools()
+    console.log('='.repeat(60))
+    console.log('📁 生产模式文件加载信息:')
+    console.log(`  - __dirname: ${__dirname}`)
+    console.log(`  - indexPath: ${indexPath}`)
+    console.log(`  - 文件存在: ${existsSync(indexPath)}`)
+    console.log(`  - process.resourcesPath: ${process.resourcesPath}`)
+    console.log(`  - app.isPackaged: ${app.isPackaged}`)
+
+    // 检查文件是否存在
+    if (!existsSync(indexPath)) {
+      console.error('❌ index.html 文件不存在!')
+      console.error('尝试查找备用路径...')
+      const altPaths = [
+        join(process.resourcesPath, 'app.asar', 'dist', 'renderer', 'index.html'),
+        join(process.resourcesPath, 'app', 'dist', 'renderer', 'index.html'),
+        join(__dirname, '..', 'renderer', 'index.html'),
+        join(__dirname, '../../renderer/index.html')
+      ]
+      for (const altPath of altPaths) {
+        console.log(`  - 检查: ${altPath} (存在: ${existsSync(altPath)})`)
+        if (existsSync(altPath)) {
+          console.log(`✅ 找到备用路径: ${altPath}`)
+          mainWindow.loadFile(altPath)
+          console.log('='.repeat(60))
+          // 临时启用 DevTools 以便调试
+          mainWindow.webContents.openDevTools()
+          return
+        }
+      }
+      console.error('❌ 无法找到 index.html 文件')
+      console.log('='.repeat(60))
+    } else {
+      console.log(`✅ 找到文件: ${indexPath}`)
+      console.log('='.repeat(60))
+    }
+
+    mainWindow.loadFile(indexPath).catch((error) => {
+      console.error('❌ loadFile 失败:', error)
+      // 临时启用 DevTools 以便调试
+      if (mainWindow) {
+        mainWindow.webContents.openDevTools()
+      }
+    })
+
+    // 临时启用 DevTools 以便调试白屏问题
+    // 注意：调试完成后应该关闭这行，或者添加一个设置选项来控制
+    if (mainWindow) {
+      mainWindow.webContents.openDevTools()
+    }
   }
 }
 
+// 处理网络服务崩溃和渲染进程错误
+app.on('web-contents-created', (_, contents) => {
+  contents.on('render-process-gone', (event: Electron.Event, details: Electron.RenderProcessGoneDetails) => {
+    console.error('❌ 渲染进程退出:', details)
+    if (details.reason === 'crashed') {
+      console.error('❌ 渲染进程崩溃，原因:', details.exitCode)
+    }
+  })
+})
+
 app.whenReady().then(async () => {
   // 设置 Dock 图标（仅 macOS）
-  if (process.platform === 'darwin') {
-    // 开发模式检测：严格判断是否为开发模式
-    const isDev = process.env.NODE_ENV !== 'production' &&
+  if (process.platform === 'darwin' && app.dock) {
+    // 开发模式检测：使用 app.isPackaged 作为最可靠的判断依据
+    const isDev = !app.isPackaged &&
                   (process.env.NODE_ENV === 'development' ||
                    !process.env.NODE_ENV ||
-                   process.env.VITE_DEV_SERVER_URL)
+                   !!process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
     const dockIconPath = join(projectRoot, 'build', 'icon.png')
 
@@ -197,14 +278,14 @@ app.whenReady().then(async () => {
     }
     console.error('')
     console.error('⚠️ 可能的原因:')
-    console.error('  1. better-sqlite3 模块未正确编译')
-    console.error('  2. Python 环境配置问题')
-    console.error('  3. Electron 版本与 better-sqlite3 不兼容')
+    console.error('  1. @vscode/sqlite3 模块未正确安装')
+    console.error('  2. 数据库文件权限问题')
+    console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
     console.error('')
     console.error('💡 解决方案:')
-    console.error('  1. 重新编译: npm run rebuild')
-    console.error('  2. 检查 Python: python3 --version')
-    console.error('  3. 查看文档: docs/BETTER_SQLITE3_FIX.md')
+    console.error('  1. 重新安装依赖: npm install')
+    console.error('  2. 检查数据库文件权限')
+    console.error('  3. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
     console.error('')
     console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
     console.error('='.repeat(60))

@@ -10,11 +10,11 @@
     "postinstall": "PYTHON=/opt/homebrew/bin/python3.11 electron-builder install-app-deps",
     "rebuild": "PYTHON=/opt/homebrew/bin/python3.11 electron-builder install-app-deps",
     "build": "npm run build:renderer && npm run build:electron",
-    "build:renderer": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json && npm run copy:migrations",
+    "build:renderer": "NODE_ENV=production vite build",
+    "build:electron": "NODE_ENV=production tsc -p tsconfig.electron.json && npm run copy:migrations",
     "copy:migrations": "mkdir -p dist/electron/main/database/migrations && cp src/main/database/migrations/*.sql dist/electron/main/database/migrations/",
-    "pack": "electron-builder",
-    "dist": "npm run build && electron-builder"
+    "pack": "NODE_ENV=production electron-builder",
+    "dist": "npm run build && NODE_ENV=production electron-builder"
   },
   "keywords": [
     "音乐",
@@ -27,11 +27,10 @@
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "latest",
     "@vitejs/plugin-vue": "latest",
     "concurrently": "latest",
-    "electron": "^32.3.3",
+    "electron": "^39.2.1",
     "electron-builder": "latest",
     "electron-rebuild": "^3.2.9",
     "typescript": "5.9",
@@ -41,8 +40,9 @@
   },
   "dependencies": {
     "@tanstack/vue-virtual": "latest",
-    "better-sqlite3": "latest",
+    "@vscode/sqlite3": "^5.1.1",
     "chokidar": "latest",
+    "deasync": "^0.1.31",
     "exceljs": "latest",
     "howler": "latest",
     "iconv-lite": "latest",

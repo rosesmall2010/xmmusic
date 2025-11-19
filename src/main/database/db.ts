@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import Database from './sqlite3-sync'
 import { app } from 'electron'
 import { join, dirname } from 'path'
 import { readFileSync, existsSync, copyFile } from 'fs'
@@ -14,7 +14,7 @@ const copyFileAsync = promisify(copyFile)
 
 export default class MusicDatabase {
   private static instance: MusicDatabase
-  private db: Database.Database | null = null
+  private db: Database | null = null
 
   static getInstance(): MusicDatabase {
     if (!MusicDatabase.instance) {

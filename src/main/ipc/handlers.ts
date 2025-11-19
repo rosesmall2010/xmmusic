@@ -95,11 +95,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     if (!db) {
       const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
         '可能的原因：\n' +
-        '1. better-sqlite3 模块未正确编译\n' +
+        '1. @vscode/sqlite3 模块未正确安装\n' +
         '2. 数据库文件权限问题\n' +
         '3. 数据库初始化失败\n\n' +
-        '请查看终端控制台的错误信息，或尝试重新编译：\n' +
-        'npm run rebuild'
+        '请查看终端控制台的错误信息，或尝试重新安装依赖：\n' +
+        'npm install'
       console.error('❌ 数据库未初始化，无法执行扫描操作')
       console.error('💡 提示：请检查终端控制台的数据库初始化错误信息')
       throw new Error(errorMsg)
