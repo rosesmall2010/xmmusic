@@ -29,7 +29,10 @@
     "vue",
     "typescript"
   ],
-  "author": "zdhsoft",
+  "author": {
+    "name": "zdhsoft",
+    "email": "zdhsoft@126.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",

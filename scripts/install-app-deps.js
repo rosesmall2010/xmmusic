@@ -8,7 +8,9 @@ if (isMac && !env.PYTHON) {
   env.PYTHON = '/opt/homebrew/bin/python3.11'
 }
 
-const result = spawnSync('npx', ['electron-builder', 'install-app-deps'], {
+const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+
+const result = spawnSync(npxCommand, ['electron-builder', 'install-app-deps'], {
   stdio: 'inherit',
   env
 })
