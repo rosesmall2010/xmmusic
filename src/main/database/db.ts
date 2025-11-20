@@ -248,8 +248,17 @@ export default class MusicDatabase {
 
   close(): void {
     if (this.db) {
-      this.db.close()
-      this.db = null
+      try {
+        this.db.close()
+        this.db = null
+      } catch (error: any) {
+        // 忽略 SQLITE_BUSY 错误
+        // 应用退出时这个错误不影响数据完整性，操作系统会自动清理资源
+        if (error?.code !== 'SQLITE_BUSY') {
+          console.error('关闭数据库时出错:', error)
+        }
+        this.db = null
+      }
     }
   }
 

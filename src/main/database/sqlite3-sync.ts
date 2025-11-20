@@ -203,6 +203,14 @@ export class Statement {
       })
     })
   }
+
+  finalize(): void {
+    syncWait<void>((callback) => {
+      this.stmt.finalize((err: Error | null) => {
+        callback(err || null)
+      })
+    })
+  }
 }
 
 // 导出 Database 作为默认导出

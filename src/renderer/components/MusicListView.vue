@@ -771,11 +771,11 @@ const toggleQueue = (music: MusicItem) => {
     const index = playerStore.queue.findIndex(m => m.id === music.id)
     if (index >= 0) {
       playerStore.removeFromQueue(index)
-      alert('已从播放队列移除')
+      // 图标状态变化已足够提示，无需 alert
     }
   } else {
     playerStore.addToQueue(music)
-    alert('已添加到播放队列')
+    // 图标状态变化已足够提示，无需 alert
   }
 }
 
@@ -828,7 +828,7 @@ const playAndAddToQueue = async (music: MusicItem) => {
 const addToPlayQueue = (music: MusicItem | null) => {
   if (music) {
     playerStore.addToQueue(music)
-    alert('已添加到播放列表')
+    // 图标状态变化已足够提示，无需 alert
   }
   hideContextMenu()
 }
