@@ -127,8 +127,12 @@ function createWindow(): void {
       backgroundThrottling: false,
       offscreen: false
     },
-    frame: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default'
+    // macOS: 使用原生红绿灯按钮，隐藏标题栏但保留按钮
+    // Windows/Linux: 完全自定义无边框窗口
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset', frame: true }
+      : { frame: false }
+    )
   })
 
   // 添加错误处理和调试信息

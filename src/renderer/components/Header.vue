@@ -56,14 +56,17 @@
             </div>
             <button class="header-btn" @click="toggleTheme">
               <span v-if="theme === 'light'">🌙</span>
-              <span v-else>☀️</span>
+              <span v-else">☀️</span>
             </button>
             <button class="header-btn" @click="toggleLanguage">
               {{ currentLanguage === 'zh' ? 'EN' : '中文' }}
             </button>
-            <button class="header-btn" @click="minimizeWindow">➖</button>
-            <button class="header-btn" @click="maximizeWindow">🔲</button>
-            <button class="header-btn close-btn" @click="closeWindow">✕</button>
+            <!-- Windows/Linux 窗口控制按钮，macOS 使用原生红绿灯按钮 -->
+            <template v-if="!isMacOS">
+              <button class="header-btn" @click="minimizeWindow">➖</button>
+              <button class="header-btn" @click="maximizeWindow">🔲</button>
+              <button class="header-btn close-btn" @click="closeWindow">✕</button>
+            </template>
           </div>
   </header>
 </template>
@@ -84,6 +87,9 @@ const showSuggestions = ref(false)
 const searchSuggestions = ref<string[]>([])
 const searchHistory = ref<Array<{ query: string; searchType: string; createdAt: string }>>([])
 const selectedSuggestionIndex = ref(-1)
+
+// 检测是否为 macOS
+const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0
 
 onMounted(async () => {
   const settings = await window.electronAPI.getSettings()
