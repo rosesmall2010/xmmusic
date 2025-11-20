@@ -13,8 +13,6 @@ import FavoritesList from './FavoritesList.vue'
 import PlayHistory from './PlayHistory.vue'
 import PlayQueueView from './PlayQueueView.vue'
 import PlaylistDetailView from './PlaylistDetailView.vue'
-import RecommendationsView from './RecommendationsView.vue'
-import StatisticsView from './StatisticsView.vue'
 import SettingsView from './Settings/SettingsView.vue'
 
 const musicStore = useMusicStore()
@@ -33,10 +31,6 @@ const currentView = computed(() => {
       return PlayQueueView
     case 'playlist-detail':
       return PlaylistDetailView
-    case 'recommendations':
-      return RecommendationsView
-    case 'statistics':
-      return StatisticsView
     case 'settings':
       return SettingsView
     default:

@@ -1,8 +1,9 @@
-import { readdir, stat } from 'fs/promises'
+import { readdir, stat, writeFile, mkdir } from 'fs/promises'
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
 import { join, extname, basename } from 'path'
 import { createRequire } from 'module'
+import { app } from 'electron'
 import MusicDatabase from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
 
@@ -219,7 +220,21 @@ export default class FileScanner {
       // 检查是否已存在（通过 hash）
       const existingByHash = this.db.getMusicByHash(hash)
       if (existingByHash.length > 0) {
-        return false // 跳过重复文件
+        // 检查现有记录是否缺少封面
+        const existing = existingByHash[0]
+        if (!existing.coverPath) {
+          try {
+            // 尝试提取封面
+            const metadata = await this.parseMetadata(filePath, hash)
+            if (metadata.coverPath) {
+              // 更新数据库
+              this.db.updateMusic(existing.id, { coverPath: metadata.coverPath })
+            }
+          } catch (updateError) {
+            console.warn(`更新封面失败: ${filePath}`, updateError)
+          }
+        }
+        return false // 跳过重复文件（不计入新增）
       }
 
       // 检测损坏
@@ -230,7 +245,7 @@ export default class FileScanner {
       }
 
       // 解析元数据
-      const metadata = await this.parseMetadata(filePath)
+      const metadata = await this.parseMetadata(filePath, hash)
 
       // 获取文件信息
       const fileStat = await stat(filePath)
@@ -312,7 +327,7 @@ export default class FileScanner {
     }
   }
 
-  private async parseMetadata(filePath: string): Promise<{
+  private async parseMetadata(filePath: string, fileHash: string): Promise<{
     title: string
     artist: string
     album: string | null
@@ -327,6 +342,17 @@ export default class FileScanner {
     try {
       const parseFile = await getParseFile()
       const metadata = await parseFile(filePath)
+
+      // 提取封面
+      let coverPath: string | null = null
+      if (metadata.common.picture && metadata.common.picture.length > 0) {
+        try {
+          coverPath = await this.extractCover(metadata.common.picture[0], fileHash)
+        } catch (coverError) {
+          console.warn(`封面提取失败: ${filePath}`, coverError)
+        }
+      }
+
       return {
         title: metadata.common.title || '',
         artist: metadata.common.artist || '',
@@ -337,7 +363,7 @@ export default class FileScanner {
         bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate / 1000) : 0,
         sampleRate: metadata.format.sampleRate || 0,
         channels: metadata.format.numberOfChannels || 0,
-        coverPath: null // 封面提取稍后实现
+        coverPath
       }
     } catch (error) {
       // 返回默认值
@@ -353,6 +379,46 @@ export default class FileScanner {
         channels: 0,
         coverPath: null
       }
+    }
+  }
+
+  /**
+   * 提取并保存封面图片
+   * @param picture 封面数据
+   * @param fileHash 音乐文件的 MD5
+   * @returns 封面文件路径
+   */
+  private async extractCover(picture: any, fileHash: string): Promise<string | null> {
+    try {
+      // 获取封面目录
+      const coversDir = join(app.getPath('userData'), 'covers')
+
+      // 确保目录存在
+      try {
+        await mkdir(coversDir, { recursive: true })
+      } catch (err) {
+        // 目录已存在，忽略错误
+      }
+
+      // 确定文件扩展名
+      let ext = '.jpg'
+      if (picture.format) {
+        const format = picture.format.toLowerCase()
+        if (format.includes('png')) ext = '.png'
+        else if (format.includes('jpeg') || format.includes('jpg')) ext = '.jpg'
+      }
+
+      // 使用音乐文件的 MD5 作为封面文件名
+      const coverFilename = `${fileHash}${ext}`
+      const coverPath = join(coversDir, coverFilename)
+
+      // 写入封面数据
+      await writeFile(coverPath, picture.data)
+
+      return coverPath
+    } catch (error) {
+      console.error('封面保存失败:', error)
+      return null
     }
   }
 

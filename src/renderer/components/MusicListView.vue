@@ -225,10 +225,7 @@
         <span class="menu-icon">🎶</span>
         <span>添加到歌单</span>
       </div>
-      <div class="menu-item" @click="openSimilarDialog(contextMenu.item)">
-        <span class="menu-icon">✨</span>
-        <span>相似推荐</span>
-      </div>
+
       <div class="menu-divider"></div>
       <div class="menu-item" @click="editMetadata(contextMenu.item)">
         <span class="menu-icon">✏️</span>
@@ -312,41 +309,7 @@
       @saved="handleMetadataSaved"
     />
 
-    <!-- 相似歌曲推荐 -->
-    <div v-if="similarDialog.show" class="dialog-overlay" @click.self="closeSimilarDialog">
-      <div class="dialog dialog-similar">
-        <h3>相似歌曲推荐</h3>
-        <p v-if="similarDialog.base" class="similar-base">
-          基于：{{ similarDialog.base.title }} - {{ similarDialog.base.artist }}
-        </p>
-        <div v-if="similarDialog.loading" class="similar-loading">正在分析...</div>
-        <div v-else class="similar-list">
-          <div v-if="similarDialog.songs.length === 0" class="empty-state">暂未找到相似歌曲</div>
-          <div
-            v-for="song in similarDialog.songs"
-            :key="song.id"
-            class="similar-item"
-            @dblclick="playSimilarSong(song)"
-          >
-            <div class="info">
-              <div class="title">{{ song.title }}</div>
-              <div class="meta">{{ song.artist }} · {{ song.album || '未知专辑' }}</div>
-            </div>
-            <div class="similarity-score" v-if="song.similarity !== undefined">
-              <span class="score-label">相似度</span>
-              <span class="score-value">{{ Math.round(song.similarity * 100) }}%</span>
-            </div>
-            <div class="actions">
-              <button @click.stop="queueSimilarSong(song)" title="添加到队列">➕</button>
-              <button @click.stop="playSimilarSong(song)" title="播放">▶️</button>
-            </div>
-          </div>
-        </div>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="closeSimilarDialog">关闭</button>
-        </div>
-      </div>
-    </div>
+
   </div>
 </template>
 
@@ -359,16 +322,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import MetadataEditDialog from './MetadataEditDialog.vue'
 import type { MusicItem, ScanProgress, AdvancedSearchCriteria } from '@shared/types/music'
 
-interface SimilarSong extends MusicItem {
-  similarity?: number
-}
 
-interface SimilarDialogState {
-  show: boolean
-  loading: boolean
-  songs: SimilarSong[]
-  base: MusicItem | null
-}
 
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
@@ -693,12 +647,7 @@ const showCreatePlaylistDialog = ref(false)
 const playlists = ref<any[]>([])
 const newPlaylistName = ref('')
 const newPlaylistDescription = ref('')
-const similarDialog = ref<SimilarDialogState>({
-  show: false,
-  loading: false,
-  songs: [],
-  base: null
-})
+
 
 const metadataEditDialog = ref({
   show: false,
@@ -833,36 +782,7 @@ const addToPlayQueue = (music: MusicItem | null) => {
   hideContextMenu()
 }
 
-const openSimilarDialog = async (music: MusicItem | null) => {
-  if (!music) return
-  hideContextMenu()
-  similarDialog.value.show = true
-  similarDialog.value.loading = true
-  similarDialog.value.base = music
-  try {
-    const songs = await window.electronAPI.getSimilarMusic(music.id, 30, 0.5)
-    similarDialog.value.songs = songs as SimilarSong[]
-  } catch (error) {
-    console.error('获取相似歌曲失败:', error)
-    alert('获取相似歌曲失败，请稍后重试')
-  } finally {
-    similarDialog.value.loading = false
-  }
-}
 
-const closeSimilarDialog = () => {
-  similarDialog.value.show = false
-  similarDialog.value.songs = []
-  similarDialog.value.base = null
-}
-
-const playSimilarSong = async (music: MusicItem) => {
-  await play(music)
-}
-
-const queueSimilarSong = (music: MusicItem) => {
-  playerStore.addToQueue(music)
-}
 
 // 显示添加到播放列表对话框
 const showAddToPlaylistDialog = async () => {

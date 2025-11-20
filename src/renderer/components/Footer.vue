@@ -4,8 +4,8 @@
       <div class="music-info">
         <div class="music-cover">
           <img
-            v-if="currentMusic?.coverPath"
-            :src="currentMusic.coverPath"
+            v-if="coverSrc"
+            :src="coverSrc"
             alt="封面"
             @error="handleImageError"
           />
@@ -103,6 +103,16 @@ const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
 const playMode = computed(() => playerStore.playMode)
+
+const coverSrc = computed(() => {
+  if (!currentMusic.value?.coverPath) return ''
+  // 如果已经是 local-file:// 开头则直接返回
+  if (currentMusic.value.coverPath.startsWith('local-file://')) {
+    return currentMusic.value.coverPath
+  }
+  // 否则添加协议前缀
+  return `local-file://${currentMusic.value.coverPath}`
+})
 
 const equalizerPresets = EQUALIZER_PRESETS
 

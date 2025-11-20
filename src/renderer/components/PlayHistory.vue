@@ -40,9 +40,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { usePlayer } from '@/composables/usePlayer'
 import type { MusicItem } from '@shared/types/music'
 
 const playerStore = usePlayerStore()
+const player = usePlayer()
 const history = ref<MusicItem[]>([])
 
 onMounted(async () => {
@@ -53,8 +55,18 @@ const loadHistory = async () => {
   history.value = await window.electronAPI.getPlayHistory()
 }
 
-const playMusic = (music: MusicItem) => {
-  playerStore.playMusic(music)
+const playMusic = async (music: MusicItem) => {
+  // 添加到播放队列（如果不在）
+  if (!playerStore.queue.find(m => m.id === music.id)) {
+    playerStore.addToQueue(music)
+  }
+  // 设置当前播放索引
+  const index = playerStore.queue.findIndex(m => m.id === music.id)
+  if (index >= 0) {
+    playerStore.setCurrentQueueIndex(index)
+  }
+  // 播放音乐
+  await player.play(music)
 }
 
 const clearHistory = async () => {
