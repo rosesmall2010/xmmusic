@@ -181,12 +181,12 @@
                 {{ isFileFavorite(item.filePath) ? '❤️' : '🤍' }}
               </button>
               <button
-                class="status-icon playlist"
-                :class="{ active: isInPlaylist(item.filePath) }"
-                @click.stop="togglePlaylist(item)"
-                title="播放列表"
+                class="status-icon queue"
+                :class="{ active: isInQueue(item.id) }"
+                @click.stop="toggleQueue(item)"
+                title="播放队列"
               >
-                {{ isInPlaylist(item.filePath) ? '🎵' : '➕' }}
+                {{ isInQueue(item.id) ? '📋' : '➕' }}
               </button>
             </div>
             <div class="item-actions">
@@ -240,10 +240,10 @@
       </div>
     </div>
 
-    <!-- 添加到播放列表对话框 -->
+    <!-- 添加到歌单对话框 -->
     <div v-if="showPlaylistDialog" class="dialog-overlay" @click.self="closePlaylistDialog">
       <div class="dialog">
-        <h3>添加到播放列表</h3>
+        <h3>添加到歌单</h3>
 
         <div class="playlist-list">
           <div
@@ -257,29 +257,29 @@
           </div>
 
           <div v-if="playlists.length === 0" class="empty-state">
-            <p>暂无播放列表</p>
-            <button @click="showCreateDialog" class="btn-create">创建新播放列表</button>
+            <p>暂无歌单</p>
+            <button @click="showCreateDialog" class="btn-create">创建新歌单</button>
           </div>
         </div>
 
         <div class="dialog-actions">
-          <button @click="showCreateDialog" class="btn-primary">新建播放列表</button>
+          <button @click="showCreateDialog" class="btn-primary">新建歌单</button>
           <button @click="closePlaylistDialog" class="btn-secondary">取消</button>
         </div>
       </div>
     </div>
 
-    <!-- 创建播放列表对话框 -->
+    <!-- 创建歌单对话框 -->
     <div v-if="showCreatePlaylistDialog" class="dialog-overlay" @click.self="closeCreateDialog">
       <div class="dialog">
-        <h3>创建播放列表</h3>
+        <h3>创建歌单</h3>
 
         <div class="form-group">
-          <label>播放列表名称 *</label>
+          <label>歌单名称 *</label>
           <input
             v-model="newPlaylistName"
             type="text"
-            placeholder="输入播放列表名称"
+            placeholder="输入歌单名称"
             @keyup.enter="confirmCreatePlaylist"
             autofocus
           />
@@ -289,7 +289,7 @@
           <label>描述（可选）</label>
           <textarea
             v-model="newPlaylistDescription"
-            placeholder="描述这个播放列表"
+            placeholder="描述这个歌单"
             rows="3"
           ></textarea>
         </div>
@@ -771,9 +771,11 @@ const toggleQueue = (music: MusicItem) => {
     const index = playerStore.queue.findIndex(m => m.id === music.id)
     if (index >= 0) {
       playerStore.removeFromQueue(index)
+      alert('已从播放队列移除')
     }
   } else {
     playerStore.addToQueue(music)
+    alert('已添加到播放队列')
   }
 }
 
@@ -880,10 +882,13 @@ const addToPlaylist = async (playlistId: number) => {
   if (contextMenu.value.item) {
     try {
       await window.electronAPI.addToPlaylist(playlistId, contextMenu.value.item.filePath)
-      // 更新缓存
-      playlistStatusCache.value.set(contextMenu.value.item.filePath, true)
+
+      // 重新加载缓存（更可靠）
+      await updatePlaylistStatusCache([contextMenu.value.item.filePath])
+
       showPlaylistDialog.value = false
       contextMenu.value.show = false
+      alert('已添加到歌单')
     } catch (error) {
       console.error('添加失败:', error)
       alert('添加失败，请重试')
@@ -910,7 +915,7 @@ const closeCreateDialog = () => {
 // 确认创建播放列表
 const confirmCreatePlaylist = async () => {
   if (!newPlaylistName.value.trim()) {
-    alert('请输入播放列表名称')
+    alert('请输入歌单名称')
     return
   }
 
@@ -927,7 +932,7 @@ const confirmCreatePlaylist = async () => {
     showCreatePlaylistDialog.value = false
     showPlaylistDialog.value = true
 
-    alert('播放列表创建成功！')
+    alert('歌单创建成功！')
   } catch (error) {
     console.error('创建失败:', error)
     alert('创建失败，请重试')

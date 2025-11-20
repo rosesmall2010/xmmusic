@@ -25,7 +25,12 @@ export default class MusicDatabase {
 
   initialize(dbPath?: string): void {
     try {
-      const path = dbPath || join(app.getPath('userData'), 'xmmusic.db')
+      // 根据环境变量选择数据库文件名
+      const isDev = process.env.NODE_ENV !== 'production'
+      const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
+      const path = dbPath || join(app.getPath('userData'), dbFileName)
+
+      console.log(`🌍 运行环境: ${isDev ? '开发环境' : '生产环境'}`)
       console.log(`📂 数据库路径: ${path}`)
       console.log(`🔧 尝试创建数据库连接...`)
 
