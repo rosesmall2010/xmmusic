@@ -21,7 +21,7 @@ asarUnpack:
   - node_modules/@vscode/sqlite3/**/*
   - node_modules/deasync/**/*
 
-publish: []
+publish: null
 
 mac:
   category: public.app-category.music
