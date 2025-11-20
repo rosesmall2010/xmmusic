@@ -19,14 +19,27 @@ export function usePlayer() {
     if (audioElement) {
       audioElement.pause()
       audioElement.src = ''
-      audioElement = null
+      // 不从 DOM 移除，均衡器需要它保持在 DOM 中
     }
 
     let hasStartedPlaying = false
     let loadTimeout: NodeJS.Timeout | null = null
 
     // 创建新的 Audio 元素
-    audioElement = new Audio()
+    if (!audioElement) {
+      audioElement = new Audio()
+      // 设置固定 ID 供均衡器使用
+      audioElement.id = 'xmmusic-audio-player'
+      // 隐藏元素（均衡器需要它在 DOM 中）
+      audioElement.style.display = 'none'
+
+      // 添加到 DOM（如果还没有）
+      if (!document.getElementById('xmmusic-audio-player')) {
+        document.body.appendChild(audioElement)
+        console.log('✅ 音频元素已添加到 DOM，供均衡器使用')
+      }
+    }
+
     // 使用自定义协议访问本地文件
     const localFileUrl = `local-file://${encodeURIComponent(music.filePath)}`
     console.log('🔗 使用协议:', localFileUrl)
@@ -246,6 +259,8 @@ export function usePlayer() {
     pause,
     resume,
     seek,
-    setVolume
+    setVolume,
+    // 供均衡器访问音频元素
+    getAudioElement: () => audioElement
   }
 }

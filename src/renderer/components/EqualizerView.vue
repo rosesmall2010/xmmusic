@@ -91,8 +91,10 @@
 import { ref, onMounted, watch } from 'vue'
 import { useEqualizer, type EqualizerPreset } from '@/composables/useEqualizer'
 import { usePlayerStore } from '@/stores/player'
+import { usePlayer } from '@/composables/usePlayer'
 
 const playerStore = usePlayerStore()
+const player = usePlayer()
 const equalizer = useEqualizer()
 const currentPreset = ref<string | null>(null)
 const newPresetName = ref('')
@@ -101,33 +103,35 @@ onMounted(() => {
   // 加载保存的均衡器设置
   loadEqualizerSettings()
 
-  // 尝试找到音频元素并初始化均衡器
-  const findAndInitAudio = () => {
-    const audio = document.querySelector('audio')
+  // 初始化均衡器
+  const initEqualizer = () => {
+    const audio = player.getAudioElement()
     if (audio) {
       equalizer.initAudioContext(audio)
-      return true
+      console.log('✅ 均衡器已连接到音频元素')
+    } else {
+      console.warn('⚠️ 音频元素尚未创建，等待播放开始')
     }
-    return false
   }
 
-  // 立即尝试
-  findAndInitAudio()
+  // 立即尝试初始化
+  initEqualizer()
 
-  // 如果没找到，延迟再试（音频元素可能稍后才创建）
-  setTimeout(() => {
-    findAndInitAudio()
-  }, 1000)
-})
+  // 监听当前音乐变化，重新初始化均衡器
+  watch(() => playerStore.currentMusic, () => {
+    setTimeout(() => {
+      initEqualizer()
+    }, 200)
+  })
 
-// 监听当前音乐变化，重新初始化均衡器
-watch(() => playerStore.currentMusic, () => {
-  setTimeout(() => {
-    const audio = document.querySelector('audio')
-    if (audio) {
-      equalizer.initAudioContext(audio)
+  // 监听播放状态变化，确保均衡器在播放开始时初始化
+  watch(() => playerStore.isPlaying, (isPlaying) => {
+    if (isPlaying) {
+      setTimeout(() => {
+        initEqualizer()
+      }, 200)
     }
-  }, 500)
+  })
 })
 
 const formatFrequency = (freq: number): string => {
@@ -138,6 +142,8 @@ const formatFrequency = (freq: number): string => {
 }
 
 const formatGain = (gain: number): string => {
+  // 防御性检查：处理 undefined、null 和 NaN
+  if (gain == null || isNaN(gain)) return '0'
   if (gain === 0) return '0'
   return gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1)
 }
@@ -191,15 +197,30 @@ const saveEqualizerSettings = async () => {
 }
 
 const loadEqualizerSettings = async () => {
-  const settings = await window.electronAPI.getSettings()
-  if (settings?.equalizer) {
-    equalizer.enabled = settings.equalizer.enabled || false
-    if (settings.equalizer.gains) {
-      equalizer.gains = settings.equalizer.gains
+  try {
+    const settings = await window.electronAPI.getSettings()
+    if (settings?.equalizer) {
+      equalizer.enabled = settings.equalizer.enabled || false
+
+      // 验证 gains 数组
+      if (Array.isArray(settings.equalizer.gains) && settings.equalizer.gains.length === 10) {
+        // 确保所有值都是有效数字
+        const validGains = settings.equalizer.gains.map((g: any) => {
+          const num = Number(g)
+          return isNaN(num) ? 0 : num
+        })
+        equalizer.gains = validGains
+      }
+
+      if (Array.isArray(settings.equalizer.customPresets)) {
+        equalizer.customPresets = settings.equalizer.customPresets
+      }
     }
-    if (settings.equalizer.customPresets) {
-      equalizer.customPresets = settings.equalizer.customPresets
-    }
+  } catch (error) {
+    console.error('加载均衡器设置失败:', error)
+    // 使用默认值
+    equalizer.enabled = false
+    equalizer.gains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   }
 }
 </script>
