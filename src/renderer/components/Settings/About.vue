@@ -2,18 +2,42 @@
   <div class="about">
     <div class="app-info">
       <h1 class="app-name">xmmusic</h1>
-      <p class="app-version">版本 1.0.0</p>
+      <p class="app-version">版本 1.0.1</p>
       <p class="app-desc">基于 Electron + Vue + TypeScript 的跨平台音乐播放器</p>
     </div>
 
     <div class="tech-stack">
       <h3>技术栈</h3>
-      <ul>
-        <li>Electron 32.3.3</li>
-        <li>Vue 3.5.24</li>
-        <li>TypeScript 5.9</li>
-        <li>SQLite (better-sqlite3)</li>
-      </ul>
+      <div class="tech-list">
+        <div class="tech-item">
+          <div class="tech-name">Electron 39.2.1</div>
+          <div class="tech-desc">跨平台桌面应用框架</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Vue 3.5.24</div>
+          <div class="tech-desc">渐进式前端框架，构建用户界面</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">TypeScript 5.9.3</div>
+          <div class="tech-desc">类型安全的 JavaScript 超集</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Vite 7.2.2</div>
+          <div class="tech-desc">极速前端构建工具</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">SQLite (@vscode/sqlite3 5.1.2)</div>
+          <div class="tech-desc">轻量级本地数据库，存储音乐库信息</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Pinia 3.0.4</div>
+          <div class="tech-desc">Vue 官方状态管理库</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-name">Howler.js 2.2.4</div>
+          <div class="tech-desc">音频播放引擎，处理音乐播放</div>
+        </div>
+      </div>
     </div>
 
     <div class="links">
@@ -80,6 +104,37 @@ h3 {
   font-size: 18px;
   color: var(--text-color);
   margin-bottom: 15px;
+}
+
+.tech-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tech-item {
+  padding: 12px 16px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.tech-item:hover {
+  border-color: #ff4757;
+  transform: translateX(4px);
+}
+
+.tech-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 4px;
+}
+
+.tech-desc {
+  font-size: 12px;
+  color: var(--secondary-text-color);
 }
 
 ul {
