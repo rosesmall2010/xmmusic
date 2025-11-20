@@ -1,0 +1,6 @@
+
+FROM node:18-windowsservercore-ltsc2022
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --platform=win32 --arch=x64
+CMD ["powershell"]

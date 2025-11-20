@@ -1,0 +1,156 @@
+name: Build Multi-Platform
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Python 3.11
+        run: |
+          brew install python@3.11
+          echo "PYTHON=/opt/homebrew/bin/python3.11" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: PYTHON=/opt/homebrew/bin/python3.11 npm install
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package macOS (x64 + arm64)
+        run: npm run dist:mac
+        env:
+          NODE_ENV: production
+
+      - name: Upload macOS x64 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmmusic-macos-x64
+          path: dist/xmmusic-*.dmg
+          if-no-files-found: error
+
+      - name: Upload macOS arm64 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmmusic-macos-arm64
+          path: dist/xmmusic-*-arm64.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package Windows
+        run: npm run dist:win
+        env:
+          NODE_ENV: production
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmmusic-windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package Linux
+        run: npm run dist -- --linux
+        env:
+          NODE_ENV: production
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: xmmusic-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

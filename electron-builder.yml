@@ -2,6 +2,11 @@ appId: com.zdhsoft.xmmusic
 productName: xmmusic
 copyright: Copyright © 2024 zdhsoft
 
+# 不要在交叉编译时重新构建原生模块
+buildDependenciesFromSource: false
+nodeGypRebuild: false
+npmRebuild: false
+
 directories:
   buildResources: build
   output: dist
@@ -36,7 +41,6 @@ win:
     - target: nsis
       arch:
         - x64
-        - ia32
 
 linux:
   icon: build/icon.png

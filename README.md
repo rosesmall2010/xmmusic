@@ -1,4 +1,6 @@
-# xmmusic
+# xmmusic 🎵
+
+跨平台音乐播放器 - 基于 Electron + Vue 3 + TypeScript
 
 一个基于 Electron + Vue 3 + TypeScript 的跨平台桌面音乐播放器，专注于本地音乐管理和大规模音乐库（10万+）的高性能处理。
 
@@ -22,7 +24,7 @@
 - Node.js 18+ (LTS)
 - npm/yarn/pnpm
 
-### 安装
+### 安装与开发
 
 ```bash
 # 克隆项目
@@ -32,19 +34,63 @@ cd xmmusic
 # 安装依赖
 npm install
 
+# macOS 上需要指定 Python（用于编译原生模块）
+# PYTHON=/opt/homebrew/bin/python3.11 npm install
+
 # 开发模式
 npm run dev
 
 # 构建
 npm run build
 
-# 打包
+# 打包当前平台
 npm run pack
 ```
+
+### 跨平台构建
+
+#### 方法 1：GitHub Actions（推荐）🌟
+
+**无需手动操作，自动构建所有平台！**
+
+```bash
+# 推送代码到 GitHub
+git push
+
+# 访问 GitHub Actions 页面
+# Actions → Build Multi-Platform → 下载构建产物
+```
+
+- ✅ 自动构建 macOS (x64 + arm64)
+- ✅ 自动构建 Windows (x64)
+- ✅ 自动构建 Linux (AppImage + deb + rpm)
+- ✅ Tag 推送时自动创建 Release
+
+#### 方法 2：本地构建特定平台
+
+```bash
+# macOS 版本（仅在 macOS 上）
+npm run dist:mac
+
+# Windows 版本（仅在 Windows 上）
+npm run dist:win
+
+# Linux 版本（仅在 Linux 上）
+npm run dist -- --linux
+```
+
+**⚠️ 重要**：由于原生模块限制，**无法直接交叉编译**。详见 [跨平台构建说明](./docs/CROSS_PLATFORM_BUILD.md)
 
 ---
 
 ## 📚 文档
+
+### 🔥 快速开始
+
+- [快速开始](./QUICK_START.md) - 5 分钟上手指南
+- [跨平台构建说明](./docs/CROSS_PLATFORM_BUILD.md) - **如何在 macOS 上构建 Windows 版本**
+- [Python 环境配置](./docs/PYTHON_SETUP.md) - macOS 原生模块编译配置
+- [问题排查](./TROUBLESHOOTING.md) - 常见问题解决
 
 ### 架构文档
 

@@ -14,7 +14,13 @@
     "build:electron": "NODE_ENV=production tsc -p tsconfig.electron.json && npm run copy:migrations",
     "copy:migrations": "mkdir -p dist/electron/main/database/migrations && cp src/main/database/migrations/*.sql dist/electron/main/database/migrations/",
     "pack": "NODE_ENV=production electron-builder",
-    "dist": "npm run build && NODE_ENV=production electron-builder"
+    "dist": "npm run build && NODE_ENV=production electron-builder",
+    "dist:mac": "npm run build && NODE_ENV=production electron-builder --mac",
+    "dist:win": "npm run build && NODE_ENV=production electron-builder --win --x64",
+    "trigger:build": "gh workflow run build.yml",
+    "trigger:watch": "gh run watch",
+    "trigger:list": "gh run list --workflow=build.yml --limit=5",
+    "trigger:script": "./scripts/trigger-build.sh"
   },
   "keywords": [
     "音乐",
