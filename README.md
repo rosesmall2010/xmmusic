@@ -21,7 +21,7 @@
 
 ### 环境要求
 
-- Node.js 18+ (LTS)
+- Node.js 20.19+ (Vite 7 requirement)
 - npm/yarn/pnpm
 
 ### 安装与开发

@@ -23,7 +23,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          # Vite 7 requires Node.js >= 20.19
+          node-version: '20.19.0'
           cache: 'npm'
 
       - name: Install Python 3.11
@@ -67,7 +68,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20.19.0'
           cache: 'npm'
 
       - name: Install dependencies
@@ -99,7 +100,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20.19.0'
           cache: 'npm'
 
       - name: Install dependencies
