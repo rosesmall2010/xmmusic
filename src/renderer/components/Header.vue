@@ -56,7 +56,7 @@
             </div>
             <button class="header-btn" @click="toggleTheme">
               <span v-if="theme === 'light'">🌙</span>
-              <span v-else">☀️</span>
+              <span v-else>☀️</span>
             </button>
             <button class="header-btn" @click="toggleLanguage">
               {{ currentLanguage === 'zh' ? 'EN' : '中文' }}

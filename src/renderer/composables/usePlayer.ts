@@ -41,7 +41,8 @@ export function usePlayer() {
     }
 
     // 使用自定义协议访问本地文件
-    const localFileUrl = `local-file://${encodeURIComponent(music.filePath)}`
+    // 注意：不要使用 encodeURIComponent，因为它会把路径分隔符 / 也编码
+    const localFileUrl = `local-file://${music.filePath}`
     console.log('🔗 使用协议:', localFileUrl)
     audioElement.src = localFileUrl
     audioElement.volume = playerStore.volume / 100
@@ -144,7 +145,7 @@ export function usePlayer() {
     }
 
     // 备用：使用 Howler.js
-    const localFileUrl = `local-file://${encodeURIComponent(music.filePath)}`
+    const localFileUrl = `local-file://${music.filePath}`
     howl = new Howl({
       src: [localFileUrl],
       html5: true,

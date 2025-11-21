@@ -334,17 +334,26 @@ watch(() => currentPreset.value, (newPreset) => {
 .music-details {
   display: flex;
   flex-direction: column;
+  min-width: 200px;
+  max-width: 200px;
+  overflow: hidden;
 }
 
 .music-title {
   font-weight: bold;
   font-size: 14px;
   color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .music-artist {
   font-size: 12px;
   color: var(--secondary-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .playback-controls {
@@ -354,12 +363,12 @@ watch(() => currentPreset.value, (newPreset) => {
 }
 
 .control-btn {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 24px;
   border-radius: 50%;
   transition: background-color 0.2s;
 }

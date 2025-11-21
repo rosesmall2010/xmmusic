@@ -237,17 +237,21 @@ app.whenReady().then(async () => {
         console.error('❌ 设置 Dock 图标失败:', error)
       }
     } else {
-      console.warn('⚠️ Dock 图标文件不存在:', dockIconPath)
+    console.warn('⚠️ Dock 图标文件不存在:', dockIconPath)
     }
   }
 
   // 注册自定义协议来访问本地文件
   protocol.registerFileProtocol('local-file', (request, callback) => {
+    // 移除协议前缀
     const url = request.url.replace('local-file://', '')
+    console.log('🔍 原始URL (移除协议后):', url)
     try {
-      const decodedPath = decodeURIComponent(url)
-      console.log('📂 访问本地文件:', decodedPath)
-      callback({ path: decodedPath })
+      // 浏览器会自动对URL中的中文字符进行编码，所以需要解码
+      const filePath = decodeURIComponent(url)
+      console.log('📂 解码后的文件路径:', filePath)
+      console.log('📁 文件是否存在:', existsSync(filePath))
+      callback({ path: filePath })
     } catch (error) {
       console.error('文件访问错误:', error)
       callback({ error: -2 }) // FILE_NOT_FOUND
