@@ -765,7 +765,18 @@ const updatePlaylistStatusCache = async (filePaths: string[]) => {
   }
 }
 
+// 防抖：防止快速双击触发多次播放
+let lastPlayTime = 0
+const PLAY_DEBOUNCE_MS = 300
+
 const playAndAddToQueue = async (music: MusicItem) => {
+  const now = Date.now()
+  if (now - lastPlayTime < PLAY_DEBOUNCE_MS) {
+    console.log('⏭️ 双击过快，忽略')
+    return
+  }
+  lastPlayTime = now
+
   if (!isInQueue(music.id)) {
     playerStore.addToQueue(music)
   }

@@ -7,6 +7,9 @@ import FileMonitor from './services/fileMonitor'
 import ShortcutManager from './services/shortcutManager'
 import TrayService from './services/trayService'
 
+// 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
+app.name = 'xmmusic'
+
 // 修复 Electron 39 网络服务崩溃问题
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
 app.commandLine.appendSwitch('disable-site-isolation-trials')

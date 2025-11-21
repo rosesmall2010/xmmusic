@@ -253,6 +253,13 @@ const handleSearch = () => {
   color: var(--active-text);
 }
 
+/* macOS: 为红绿灯按钮留出空间，并垂直居中内容 */
+@supports (-webkit-app-region: drag) {
+  .header-left {
+    padding-left: 60px; /* macOS 红绿灯按钮宽度 */
+  }
+}
+
 .search-wrapper {
   position: relative;
   -webkit-app-region: no-drag;

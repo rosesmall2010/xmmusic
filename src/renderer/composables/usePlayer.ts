@@ -8,6 +8,7 @@ let howl: Howl | null = null
 let progressTimer: NodeJS.Timeout | null = null
 let audioElement: HTMLAudioElement | null = null
 let useNativeAudio = false
+let isPlaybackInProgress = false // 播放锁，防止并发播放
 
 export function usePlayer() {
   const playerStore = usePlayerStore()
@@ -91,16 +92,9 @@ export function usePlayer() {
     audioElement.onerror = (e) => {
       // 只在还没开始播放时才显示错误
       if (!hasStartedPlaying) {
-        console.error('❌ 原生 Audio 播放失败:', e)
-        // 不立即弹窗，等待一下看是否能恢复
+        console.error('❌ 原生 Audio 加载失败:', e)
+        // 不立即跳过，等待外层处理（会尝试 Howler.js）
         if (loadTimeout) clearTimeout(loadTimeout)
-        loadTimeout = setTimeout(() => {
-          if (!hasStartedPlaying) {
-            console.error('确认播放失败，显示错误提示')
-            playerStore.isPlaying = false
-            stopProgressUpdate()
-          }
-        }, 1000)
       }
     }
 
@@ -109,96 +103,154 @@ export function usePlayer() {
       playerStore.currentMusic = music
       useNativeAudio = true
     } catch (error) {
-      console.error('播放失败:', error)
-      if (!hasStartedPlaying) {
-        throw error // 让外层捕获，尝试 Howler.js
+      console.error('❌ audioElement.play() 调用失败:', error)
+      // 清理资源
+      if (audioElement) {
+        audioElement.pause()
+        audioElement.src = ''
       }
+      // throw 让外层 play() 尝试 Howler.js
+      throw error
     }
   }
 
   const play = async (music: MusicItem) => {
-    // 停止当前播放
-    if (howl) {
-      howl.unload()
-      howl = null
-    }
-    if (audioElement) {
-      audioElement.pause()
-      audioElement.src = ''
-      audioElement = null
-    }
-
-    // 记录播放
-    await window.electronAPI.recordPlay(music.id)
-
-    console.log('🎵 播放音乐:', music.title)
-    console.log('📁 原始路径:', music.filePath)
-    console.log('📝 文件扩展名:', music.fileExtension)
-
-    // 先尝试使用原生 Audio（更兼容）
-    try {
-      await playWithNativeAudio(music)
-      console.log('✅ 使用原生 Audio 播放成功')
+    // 检查播放锁，防止并发播放
+    if (isPlaybackInProgress) {
+      console.log('⏭️ 播放正在进行中，忽略此次请求')
       return
-    } catch (error) {
-      console.log('⚠️ 原生 Audio 失败，尝试 Howler.js:', error)
     }
 
-    // 备用：使用 Howler.js
-    const localFileUrl = `local-file://${music.filePath}`
-    howl = new Howl({
-      src: [localFileUrl],
-      html5: true,
-      format: [music.fileExtension.replace('.', '').toLowerCase()],
-      volume: playerStore.volume / 100,
-      onload: () => {
-        console.log('✅ Howler 加载成功')
-        playerStore.duration = howl!.duration()
-      },
-      onplay: () => {
-        console.log('▶️ Howler 开始播放')
-        playerStore.isPlaying = true
-        startProgressUpdate()
-      },
-      onpause: () => {
-        playerStore.isPlaying = false
-        stopProgressUpdate()
-      },
-      onend: () => {
-        playerStore.isPlaying = false
-        stopProgressUpdate()
-        // 自动播放下一首（根据播放模式）
-        const next = playerStore.getNext()
-        if (next) {
-          const index = playerStore.queue.findIndex(m => m.id === next.id)
-          if (index >= 0) {
-            playerStore.setCurrentQueueIndex(index)
-            setTimeout(async () => {
-              await play(next)
-            }, 500)
+    try {
+      // 设置播放锁
+      isPlaybackInProgress = true
+
+      // 停止当前播放并清理资源
+      if (howl) {
+        howl.unload()
+        howl = null
+      }
+      if (audioElement) {
+        audioElement.pause()
+        audioElement.src = ''
+        audioElement = null
+      }
+      stopProgressUpdate()
+      playerStore.isPlaying = false
+
+      // 记录播放
+      await window.electronAPI.recordPlay(music.id)
+
+      console.log('🎵 播放音乐:', music.title)
+      console.log('📁 原始路径:', music.filePath)
+      console.log('📝 文件扩展名:', music.fileExtension)
+
+      // 先尝试使用原生 Audio（更兼容）
+      try {
+        await playWithNativeAudio(music)
+        console.log('✅ 使用原生 Audio 播放成功')
+        // 播放成功，释放锁
+        isPlaybackInProgress = false
+        return
+      } catch (error) {
+        console.log('⚠️ 原生 Audio 失败，尝试 Howler.js:', error)
+      }
+
+      // 备用：使用 Howler.js
+      const localFileUrl = `local-file://${music.filePath}`
+      howl = new Howl({
+        src: [localFileUrl],
+        html5: true,
+        format: [music.fileExtension.replace('.', '').toLowerCase()],
+        volume: playerStore.volume / 100,
+        onload: () => {
+          console.log('✅ Howler 加载成功')
+          playerStore.duration = howl!.duration()
+        },
+        onplay: () => {
+          console.log('▶️ Howler 开始播放')
+          playerStore.isPlaying = true
+          startProgressUpdate()
+          // 播放开始成功，释放锁
+          isPlaybackInProgress = false
+        },
+        onpause: () => {
+          playerStore.isPlaying = false
+          stopProgressUpdate()
+        },
+        onend: () => {
+          playerStore.isPlaying = false
+          stopProgressUpdate()
+          // 自动播放下一首（根据播放模式）
+          const next = playerStore.getNext()
+          if (next) {
+            const index = playerStore.queue.findIndex(m => m.id === next.id)
+            if (index >= 0) {
+              playerStore.setCurrentQueueIndex(index)
+              setTimeout(async () => {
+                await play(next)
+              }, 500)
+            }
+          }
+        },
+        onloaderror: (_id, error) => {
+          console.error('❌ Howler 加载失败，错误代码:', error)
+
+          let errorMsg = '未知错误'
+          switch(error) {
+            case 1: errorMsg = '中止加载'; break
+            case 2: errorMsg = '网络错误'; break
+            case 3: errorMsg = '解码错误'; break
+            case 4: errorMsg = '不支持的格式或文件损坏'; break
+          }
+
+          console.error(`跳过损坏文件: ${music.title} - ${errorMsg}`)
+          playerStore.isPlaying = false
+          stopProgressUpdate()
+
+          // 释放播放锁
+          isPlaybackInProgress = false
+
+          // 自动播放下一首
+          const next = playerStore.getNext()
+          if (next) {
+            const index = playerStore.queue.findIndex(m => m.id === next.id)
+            if (index >= 0) {
+              playerStore.setCurrentQueueIndex(index)
+              setTimeout(async () => {
+                await play(next)
+              }, 300)
+            }
           }
         }
-      },
-      onloaderror: (id, error) => {
-        console.error('❌ Howler 加载失败，错误代码:', error)
+      })
 
-        let errorMsg = '未知错误'
-        switch(error) {
-          case 1: errorMsg = '中止加载'; break
-          case 2: errorMsg = '网络错误'; break
-          case 3: errorMsg = '解码错误'; break
-          case 4: errorMsg = '不支持的格式或文件损坏'; break
+      howl.play()
+      playerStore.currentMusic = music
+      useNativeAudio = false
+    } catch (error) {
+      // 捕获所有未处理的错误（如 NotSupportedError）
+      console.error('❌ 播放完全失败:', error)
+      console.error('🔄 自动跳到下一首')
+
+      playerStore.isPlaying = false
+      stopProgressUpdate()
+
+      // 释放播放锁
+      isPlaybackInProgress = false
+
+      // 自动播放下一首
+      const next = playerStore.getNext()
+      if (next) {
+        const index = playerStore.queue.findIndex(m => m.id === next.id)
+        if (index >= 0) {
+          playerStore.setCurrentQueueIndex(index)
+          setTimeout(async () => {
+            await play(next)
+          }, 300)
         }
-
-        alert(`无法加载音乐:\n${music.title}\n\n错误: ${errorMsg}\n\n该文件可能已损坏或使用了不标准的编码格式`)
-        playerStore.isPlaying = false
-        stopProgressUpdate()
       }
-    })
-
-    howl.play()
-    playerStore.currentMusic = music
-    useNativeAudio = false
+    }
   }
 
   const pause = () => {
