@@ -52,14 +52,19 @@
   "dependencies": {
     "@tanstack/vue-virtual": "^3.13.12",
     "@vscode/sqlite3": "^5.1.2",
+    "@vueuse/core": "^11.3.0",
     "chokidar": "^4.0.3",
+    "colorthief": "^2.4.0",
     "deasync": "^0.1.31",
     "exceljs": "^4.4.0",
+    "fuse.js": "^7.0.0",
     "howler": "^2.2.4",
     "iconv-lite": "^0.7.0",
     "music-metadata": "^11.10.1",
     "node-id3": "^0.2.9",
     "pinia": "^3.0.4",
-    "vue-i18n": "^11.1.12"
+    "sortablejs": "^1.15.3",
+    "vue-i18n": "^11.1.12",
+    "vue-router": "^4.4.5"
   }
 }

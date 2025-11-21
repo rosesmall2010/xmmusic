@@ -211,15 +211,16 @@ export function usePlayer() {
           // 释放播放锁
           isPlaybackInProgress = false
 
-          // 自动播放下一首
+          // 自动播放下一首，增加延迟避免鬼畜
           const next = playerStore.getNext()
           if (next) {
             const index = playerStore.queue.findIndex(m => m.id === next.id)
             if (index >= 0) {
               playerStore.setCurrentQueueIndex(index)
+              // 增加到 1000ms 延迟，给用户反应时间
               setTimeout(async () => {
                 await play(next)
-              }, 300)
+              }, 1000)
             }
           }
         }
@@ -239,7 +240,7 @@ export function usePlayer() {
       // 释放播放锁
       isPlaybackInProgress = false
 
-      // 自动播放下一首
+      // 自动播放下一首，增加延迟
       const next = playerStore.getNext()
       if (next) {
         const index = playerStore.queue.findIndex(m => m.id === next.id)
@@ -247,7 +248,7 @@ export function usePlayer() {
           playerStore.setCurrentQueueIndex(index)
           setTimeout(async () => {
             await play(next)
-          }, 300)
+          }, 1000)
         }
       }
     }

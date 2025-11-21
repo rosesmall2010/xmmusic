@@ -798,53 +798,43 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       if (!shortcutManager) return false
 
       let shortcuts: ShortcutConfig = {}
+      let settings: any = {}
       if (db) {
         try {
-          const settings = db.getAllSettings()
-          shortcuts = settings.shortcuts || {}
+          settings = db.getAllSettings()
         } catch (error) {
-          const settings = loadSettingsFromFile()
-          shortcuts = settings.shortcuts || {}
+          settings = loadSettingsFromFile()
         }
       } else {
-        const settings = loadSettingsFromFile()
-        shortcuts = settings.shortcuts || {}
+        settings = loadSettingsFromFile()
       }
 
-      // 如果没有保存的配置，使用默认值
-      if (Object.keys(shortcuts).length === 0) {
-        shortcuts = shortcutManager.getDefaultShortcuts()
+      if (settings.shortcuts) {
+        shortcuts = settings.shortcuts
+      } else {
+        shortcuts = await shortcutManager.getDefaultShortcuts()
       }
 
-      // 注册快捷键
-      const handlers: Record<string, () => void> = {
-        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
-        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
-        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
-        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
-        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
-        'toggle-window': () => {
-          if (mainWindow?.isVisible()) {
-            mainWindow.hide()
-          } else {
-            mainWindow?.show()
-            mainWindow?.focus()
-          }
-        },
-        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
-      }
-
-      const parsedShortcuts: Record<string, string> = {}
-      for (const [action, accelerator] of Object.entries(shortcuts)) {
-        if (accelerator) {
-          parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
-        }
-      }
-
-      shortcutManager.registerAll(parsedShortcuts, handlers)
-      return true
+      return shortcutManager.registerAll(shortcuts)
     })
   }
+
+  // 缓存管理
+  ipcMain.handle('clear-cache', async () => {
+    try {
+      if (mainWindow) {
+        await mainWindow.webContents.session.clearCache()
+        await mainWindow.webContents.session.clearStorageData({
+          storages: ['cachestorage', 'shadercache', 'serviceworkers']
+        })
+      }
+      return true
+    } catch (error) {
+      console.error('清除缓存失败:', error)
+      throw error
+    }
+  })
+
 
   // ========== 系统托盘功能 ==========
   if (trayService) {

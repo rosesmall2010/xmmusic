@@ -1,0 +1,330 @@
+/**
+ * 全局样式变量
+ * 使用 CSS 变量实现主题切换和设计系统
+ */
+
+/* ==================== 基础重置 ==================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* 字体 */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* 字体大小 */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 1rem;     /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.875rem;  /* 30px */
+  --font-size-4xl: 2.25rem;   /* 36px */
+
+  /* 间距 */
+  --spacing-xs: 0.25rem;   /* 4px */
+  --spacing-sm: 0.5rem;    /* 8px */
+  --spacing-md: 0.75rem;   /* 12px */
+  --spacing-base: 1rem;    /* 16px */
+  --spacing-lg: 1.5rem;    /* 24px */
+  --spacing-xl: 2rem;      /* 32px */
+  --spacing-2xl: 3rem;     /* 48px */
+
+  /* 圆角 */
+  --radius-sm: 0.25rem;    /* 4px */
+  --radius-base: 0.5rem;   /* 8px */
+  --radius-md: 0.75rem;    /* 12px */
+  --radius-lg: 1rem;       /* 16px */
+  --radius-xl: 1.5rem;     /* 24px */
+  --radius-full: 9999px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* 过渡 */
+  --transition-fast: 150ms;
+  --transition-base: 200ms;
+  --transition-slow: 300ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 布局 */
+  --header-height: 60px;
+  --footer-height: 80px;
+  --sidebar-width: 200px;
+  --sidebar-width-collapsed: 60px;
+
+  /* Z-index */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  --z-toast: 1080;
+}
+
+/* ==================== 浅色主题 ==================== */
+#app.light {
+  /* 主色调 - QQ音乐绿 */
+  --color-primary: #31c27c;
+  --color-primary-light: #4dd796;
+  --color-primary-dark: #28a569;
+  --color-primary-rgb: 49, 194, 124;
+
+  /* 辅助色 */
+  --color-accent-red: #ff4757;
+  --color-accent-orange: #ffa502;
+  --color-accent-yellow: #ffd32a;
+  --color-accent-blue: #3742fa;
+
+  /* 背景色 */
+  --bg-color: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f5f5f5;
+
+  /* 侧边栏 */
+  --sidebar-bg: #f8f9fa;
+  --sidebar-border: #e0e0e0;
+
+  /* 悬停和激活状态 */
+  --hover-bg: #e9ecef;
+  --active-bg: #dee2e6;
+
+  /* 文字颜色 */
+  --text-color: #1f1f1f;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --text-disabled: #cccccc;
+
+  /* 边框颜色 */
+  --border-color: #e0e0e0;
+  --border-secondary: #f0f0f0;
+
+  /* 语义化颜色 */
+  --color-success: #31c27c;
+  --color-warning: #ffa502;
+  --color-error: #ff4757;
+  --color-info: #3742fa;
+
+  /* 活动文本颜色 */
+  --active-text: #31c27c;
+
+  /* 卡片 */
+  --card-bg: #ffffff;
+  --card-shadow: var(--shadow-base);
+}
+
+/* ==================== 深色主题 ==================== */
+#app.dark {
+  /* 主色调 */
+  --color-primary: #31c27c;
+  --color-primary-light: #4dd796;
+  --color-primary-dark: #28a569;
+  --color-primary-rgb: 49, 194, 124;
+
+  /* 辅助色 */
+  --color-accent-red: #ff6b7a;
+  --color-accent-orange: #ffb733;
+  --color-accent-yellow: #ffe066;
+  --color-accent-blue: #5865f2;
+
+  /* 背景色 */
+  --bg-color: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #1e1e1e;
+
+  /* 侧边栏 */
+  --sidebar-bg: #1e1e1e;
+  --sidebar-border: #333333;
+
+  /* 悬停和激活状态 */
+  --hover-bg: #3d3d3d;
+  --active-bg: #4d4d4d;
+
+  /* 文字颜色 */
+  --text-color: #f5f5f5;
+  --text-secondary: #bbbbbb;
+  --text-tertiary: #888888;
+  --text-disabled: #555555;
+
+  /* 边框颜色 */
+  --border-color: #444444;
+  --border-secondary: #333333;
+
+  /* 语义化颜色 */
+  --color-success: #4dd796;
+  --color-warning: #ffb733;
+  --color-error: #ff6b7a;
+  --color-info: #5865f2;
+
+  /* 活动文本颜色 */
+  --active-text: #4dd796;
+
+  /* 卡片 */
+  --card-bg: #2d2d2d;
+  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.18);
+}
+
+/* ==================== 全局样式 ==================== */
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-base);
+  transition: background var(--transition-base) var(--transition-timing);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* 选中文本样式 */
+::selection {
+  background-color: rgba(var(--color-primary-rgb), 0.2);
+  color: var(--text-color);
+}
+
+/* ==================== 工具类 ==================== */
+
+/* 文字截断 */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Flexbox 工具类 */
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 过渡效果 */
+.transition {
+  transition: all var(--transition-base) var(--transition-timing);
+}
+
+/* 卡片 */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  padding: var(--spacing-lg);
+}
+
+/* ==================== 动画 ==================== */
+
+/* 淡入淡出 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 滑入滑出 */
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 缩放 */
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 应用动画的工具类 */
+.animate-fade-in {
+  animation: fadeIn var(--transition-base) var(--transition-timing);
+}
+
+.animate-slide-in-up {
+  animation: slideInUp var(--transition-slow) var(--transition-timing);
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--transition-base) var(--transition-timing);
+}

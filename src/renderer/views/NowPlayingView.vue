@@ -1,0 +1,680 @@
+<template>
+  <div class="now-playing-view" :style="backgroundStyle">
+    <!-- 返回按钮 -->
+    <div class="top-bar">
+      <button class="btn-back" @click="goBack">
+        <span class="icon">←</span>
+        <span>返回</span>
+      </button>
+
+      <div class="actions">
+        <button class="btn-action" @click="toggleQueue" title="播放队列">
+          <span class="icon">📋</span>
+        </button>
+        <button class="btn-action" @click="toggleLyrics" title="歌词">
+          <span class="icon">📝</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="content">
+      <!-- 专辑封面 -->
+      <div class="album-cover-container">
+        <div class="album-cover animate-scale-in">
+          <DefaultCover v-if="!currentMusic?.coverPath" size="large" />
+          <img v-else :src="currentMusic.coverPath" alt="封面" />
+        </div>
+      </div>
+
+      <!-- 歌曲信息 -->
+      <div class="song-info animate-slide-in-up">
+        <h1 class="song-title">{{ currentMusic?.title || '暂无播放' }}</h1>
+        <p class="song-artist">{{ currentMusic?.artist || '未知艺术家' }}</p>
+        <p class="song-album" v-if="currentMusic?.album">{{ currentMusic.album }}</p>
+      </div>
+
+      <!-- 进度条 -->
+      <div class="progress-section">
+        <div class="progress-bar" @click="handleSeek">
+          <div class="progress-fill" :style="{ width: progressPercentage + '%' }">
+            <div class="progress-thumb"></div>
+          </div>
+        </div>
+        <div class="progress-time">
+          <span>{{ formatTime(currentTime) }}</span>
+          <span>{{ formatTime(duration) }}</span>
+        </div>
+      </div>
+
+      <!-- 播放控制 -->
+      <div class="controls">
+        <button class="btn-control btn-secondary" @click="toggleFavorite" title="喜欢">
+          <span class="icon">{{ isFavorite ? '❤️' : '🤍' }}</span>
+        </button>
+
+        <button class="btn-control btn-secondary" @click="previous" title="上一首">
+          <span class="icon">⏮</span>
+        </button>
+
+        <button class="btn-control btn-primary" @click="togglePlay" title="播放/暂停">
+          <span class="icon">{{ isPlaying ? '⏸' : '▶' }}</span>
+        </button>
+
+        <button class="btn-control btn-secondary" @click="next" title="下一首">
+          <span class="icon">⏭</span>
+        </button>
+
+        <button class="btn-control btn-secondary" @click="togglePlayMode" :title="playModeText">
+          <span class="icon">{{ playModeIcon }}</span>
+        </button>
+      </div>
+
+      <!-- Tab 切换 -->
+      <div class="tabs">
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'lyrics' }"
+          @click="activeTab = 'lyrics'"
+        >
+          歌词
+        </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'similar' }"
+          @click="activeTab = 'similar'"
+        >
+          相似歌曲
+        </button>
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'info' }"
+          @click="activeTab = 'info'"
+        >
+          歌曲信息
+        </button>
+      </div>
+
+      <!-- Tab 内容 -->
+      <div class="tab-content">
+        <!-- 歌词 -->
+        <div v-if="activeTab === 'lyrics'" class="lyrics-panel">
+          <div class="lyrics-container" ref="lyricsContainerRef">
+            <p
+              v-for="(line, index) in lyrics"
+              :key="index"
+              class="lyrics-line"
+              :class="{ active: index === currentLyricIndex }"
+              @click="seek(line.time)"
+            >
+              {{ line.text }}
+            </p>
+            <p v-if="lyrics.length === 0" class="lyrics-line empty">暂无歌词</p>
+          </div>
+        </div>
+
+        <!-- 相似歌曲 -->
+        <div v-if="activeTab === 'similar'" class="similar-panel">
+          <p class="empty-hint">暂无相似歌曲推荐</p>
+        </div>
+
+        <!-- 歌曲信息 -->
+        <div v-if="activeTab === 'info'" class="info-panel">
+          <div class="info-item" v-if="currentMusic">
+            <span class="label">文件路径：</span>
+            <span class="value">{{ currentMusic.filePath }}</span>
+          </div>
+          <div class="info-item" v-if="currentMusic">
+            <span class="label">文件大小：</span>
+            <span class="value">{{ formatSize(currentMusic.fileSize) }}</span>
+          </div>
+          <div class="info-item" v-if="currentMusic">
+            <span class="label">播放次数：</span>
+            <span class="value">{{ currentMusic.playCount }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { usePlayerStore } from '@/stores/player'
+import { usePlayer } from '@/composables/usePlayer'
+import DefaultCover from '@/components/common/DefaultCover.vue'
+import { parseLrc, type LyricLine } from '@/utils/lrcParser'
+
+const router = useRouter()
+const playerStore = usePlayerStore()
+const { play, pause, resume, seek } = usePlayer()
+
+const activeTab = ref('lyrics')
+const backgroundColor = ref('#1a1a1a')
+const lyrics = ref<LyricLine[]>([])
+const currentLyricIndex = ref(-1)
+const lyricsContainerRef = ref<HTMLElement | null>(null)
+
+// 计算属性
+const currentMusic = computed(() => playerStore.currentMusic)
+const isPlaying = computed(() => playerStore.isPlaying)
+const currentTime = computed(() => playerStore.currentTime)
+const duration = computed(() => playerStore.duration)
+const playMode = computed(() => playerStore.playMode)
+
+const progressPercentage = computed(() => {
+  if (!duration.value) return 0
+  return (currentTime.value / duration.value) * 100
+})
+
+const playModeIcon = computed(() => {
+  const icons = {
+    sequential: '➡️',
+    random: '🔀',
+    repeat: '🔁',
+    single: '🔂',
+  }
+  return icons[playMode.value]
+})
+
+const playModeText = computed(() => {
+  const texts = {
+    sequential: '列表顺序',
+    random: '随机播放',
+    repeat: '列表循环',
+    single: '单曲循环',
+  }
+  return texts[playMode.value]
+})
+
+const backgroundStyle = computed(() => {
+  return {
+    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
+  }
+})
+
+const isFavorite = ref(false)
+
+// 方法
+const goBack = () => {
+  router.back()
+}
+
+const togglePlay = () => {
+  if (isPlaying.value) {
+    pause()
+  } else {
+    if (currentMusic.value) {
+      resume()
+    }
+  }
+}
+
+const previous = async () => {
+  const prev = playerStore.getPrevious()
+  if (prev) {
+    const index = playerStore.queue.findIndex(m => m.id === prev.id)
+    if (index >= 0) {
+      playerStore.setCurrentQueueIndex(index)
+      await play(prev)
+    }
+  }
+}
+
+const next = async () => {
+  const nextMusic = playerStore.getNext()
+  if (nextMusic) {
+    const index = playerStore.queue.findIndex(m => m.id === nextMusic.id)
+    if (index >= 0) {
+      playerStore.setCurrentQueueIndex(index)
+      await play(nextMusic)
+    }
+  }
+}
+
+const togglePlayMode = () => {
+  playerStore.togglePlayMode()
+}
+
+const toggleFavorite = async () => {
+  if (currentMusic.value) {
+    await window.electronAPI.toggleFavorite(currentMusic.value.filePath)
+    isFavorite.value = !isFavorite.value
+  }
+}
+
+const toggleQueue = () => {
+  // TODO: 实现队列显示
+  console.log('Toggle queue')
+}
+
+const toggleLyrics = () => {
+  activeTab.value = activeTab.value === 'lyrics' ? 'info' : 'lyrics'
+}
+
+const handleSeek = (e: MouseEvent) => {
+  if (!duration.value) return
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const percentage = x / rect.width
+  const time = percentage * duration.value
+  seek(time)
+}
+
+const formatTime = (seconds: number) => {
+  if (!seconds || isNaN(seconds)) return '00:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+const formatSize = (bytes: number) => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+}
+
+// 歌词逻辑
+const loadLyrics = async () => {
+  lyrics.value = []
+  currentLyricIndex.value = -1
+
+  if (!currentMusic.value) return
+
+  try {
+    // 尝试获取歌词
+    // 优先查找同名 lrc 文件
+    const lrcContent = await window.electronAPI.getLyrics(currentMusic.value.filePath)
+    if (lrcContent) {
+      lyrics.value = parseLrc(lrcContent)
+    } else {
+      // TODO: 如果本地没有，可以尝试在线搜索（未来功能）
+      lyrics.value = [{ time: 0, text: '暂无歌词' }]
+    }
+  } catch (error) {
+    console.error('Failed to load lyrics:', error)
+    lyrics.value = [{ time: 0, text: '歌词加载失败' }]
+  }
+}
+
+const scrollToCurrentLyric = () => {
+  if (!lyricsContainerRef.value || currentLyricIndex.value === -1) return
+
+  const activeLine = lyricsContainerRef.value.children[currentLyricIndex.value] as HTMLElement
+  if (activeLine) {
+    activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+// 监听当前音乐变化
+watch(currentMusic, async (music) => {
+  if (music) {
+    isFavorite.value = await window.electronAPI.isFileFavorite(music.filePath)
+    await loadLyrics()
+  }
+}, { immediate: true })
+
+// 监听播放进度更新歌词
+watch(currentTime, (time) => {
+  if (lyrics.value.length === 0) return
+
+  // 找到当前时间对应的歌词行
+  let index = lyrics.value.findIndex(line => line.time > time)
+
+  if (index === -1) {
+    // 如果没找到比当前时间大的，说明是最后一行
+    index = lyrics.value.length - 1
+  } else {
+    // 否则是前一行
+    index = Math.max(0, index - 1)
+  }
+
+  if (index !== currentLyricIndex.value) {
+    currentLyricIndex.value = index
+    scrollToCurrentLyric()
+  }
+})
+</script>
+
+<style scoped>
+.now-playing-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-xl);
+  color: white;
+  overflow-y: auto;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: none;
+  border: none;
+  color: white;
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-base);
+  transition: background var(--transition-base);
+}
+
+.btn-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.actions {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.btn-action {
+  background: none;
+  border: none;
+  color: white;
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-base);
+  transition: background var(--transition-base);
+}
+
+.btn-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.album-cover-container {
+  margin-bottom: var(--spacing-2xl);
+}
+
+.album-cover {
+  width: 300px;
+  height: 300px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-2xl);
+}
+
+.album-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.song-info {
+  text-align: center;
+  margin-bottom: var(--spacing-2xl);
+}
+
+.song-title {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+}
+
+.song-artist {
+  font-size: var(--font-size-lg);
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: var(--spacing-xs);
+}
+
+.song-album {
+  font-size: var(--font-size-base);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.progress-section {
+  width: 100%;
+  margin-bottom: var(--spacing-xl);
+}
+
+.progress-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+  margin-bottom: var(--spacing-xs);
+}
+
+.progress-fill {
+  height: 100%;
+  background: white;
+  border-radius: 2px;
+  position: relative;
+}
+
+.progress-thumb {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.progress-bar:hover .progress-thumb {
+  opacity: 1;
+}
+
+.progress-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-2xl);
+}
+
+.btn-control {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition-base);
+}
+
+.btn-control:hover {
+  transform: scale(1.1);
+}
+
+.btn-control:active {
+  transform: scale(0.95);
+}
+
+.btn-secondary {
+  font-size: 1.5rem;
+  width: 48px;
+  height: 48px;
+}
+
+.btn-primary {
+  font-size: 2.5rem;
+  width: 64px;
+  height: 64px;
+  background: white;
+  color: black;
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+}
+
+.btn-primary:hover {
+  background: #f0f0f0;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-base);
+}
+
+.tab:hover {
+  color: white;
+}
+
+.tab.active {
+  color: white;
+  border-bottom-color: white;
+}
+
+.tab-content {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lyrics-panel {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.lyrics-container {
+  height: 100%;
+  overflow-y: auto;
+  padding: 50% 0; /* Center the content initially */
+  text-align: center;
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.lyrics-container::-webkit-scrollbar {
+  display: none;
+}
+
+.lyrics-line {
+  font-size: var(--font-size-lg);
+  color: rgba(255, 255, 255, 0.6);
+  margin: var(--spacing-lg) 0;
+  transition: all var(--transition-base);
+  cursor: pointer;
+  min-height: 1.5em;
+}
+
+.lyrics-line:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.lyrics-line.active {
+  font-size: var(--font-size-2xl);
+  color: white;
+  font-weight: 700;
+  transform: scale(1.1);
+}
+
+.lyrics-line.empty {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.similar-panel,
+.info-panel {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.empty-hint {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: var(--spacing-2xl);
+}
+
+.info-item {
+  display: flex;
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.info-item .label {
+  color: rgba(255, 255, 255, 0.6);
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.info-item .value {
+  color: white;
+  word-break: break-all;
+}
+
+/* Animations */
+.animate-scale-in {
+  animation: scaleIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>

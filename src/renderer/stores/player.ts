@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, watch, toRaw } from 'vue'
 import type { MusicItem } from '@shared/types/music'
 
 const LOCAL_STORAGE_KEY = 'xmmusic_player_state'
@@ -211,8 +211,12 @@ export const usePlayerStore = defineStore('player', () => {
     isInitialized.value = true
   }
 
+  // Optimize: Don't deep clone if not necessary. Pinia state is already reactive objects.
+  // If we need to strip reactivity, we can use toRaw from vue.
+
+
   const toPlainQueue = () =>
-    queue.value.map(item => JSON.parse(JSON.stringify(item)))
+    queue.value.map(item => toRaw(item))
 
   const persistState = async () => {
     if (!isInitialized.value) return
@@ -235,6 +239,8 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     try {
+      // Throttle IPC calls: only save to disk if enough time has passed or important state changed
+      // For now, we keep it simple but rely on the debounce in schedulePersist
       await window.electronAPI.saveSettings(snapshot)
     } catch (error) {
       console.warn('保存播放状态到数据库失败:', error)
@@ -246,9 +252,10 @@ export const usePlayerStore = defineStore('player', () => {
     if (persistTimer) {
       clearTimeout(persistTimer)
     }
+    // Increase debounce time to 1 second to reduce IPC frequency
     persistTimer = window.setTimeout(() => {
       void persistState()
-    }, 200)
+    }, 1000)
   }
 
   if (typeof window !== 'undefined') {
@@ -261,10 +268,31 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   watch(queue, schedulePersist, { deep: true })
+
+  // Watch important state changes immediately
   watch(
-    [currentQueueIndex, playMode, volume, currentTime, isPlaying],
+    [currentQueueIndex, playMode, volume, isPlaying],
     schedulePersist
   )
+
+  // Throttle currentTime updates significantly (e.g. only save every 5 seconds if only time changes)
+  // Actually, we can just exclude currentTime from the main watcher and have a separate throttled watcher
+  // But for simplicity, let's just rely on the increased debounce of 1000ms for now,
+  // and maybe exclude currentTime from triggering the watcher if possible?
+  // If we include currentTime in the watcher with 1000ms debounce, it means we save every 1s during playback.
+  // That might still be too much for IPC.
+  // Let's remove currentTime from the watcher and only save it on pause/stop or via a separate very slow interval.
+
+  // Separate watcher for current time to save less frequently (e.g. every 10s)
+  let timeSaveTimer: number | null = null
+  watch(currentTime, () => {
+    if (!timeSaveTimer) {
+      timeSaveTimer = window.setTimeout(() => {
+        schedulePersist()
+        timeSaveTimer = null
+      }, 5000)
+    }
+  })
 
   return {
     currentMusic,

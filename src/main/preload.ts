@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 设置
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+  clearCache: () => ipcRenderer.invoke('clear-cache'),
 
   // ID3标签修复
   detectID3Encoding: (filePath: string) =>
@@ -223,6 +224,7 @@ declare global {
       deleteMusicDirectory: (id: string) => Promise<void>
       getSettings: () => Promise<any>
       saveSettings: (settings: any) => Promise<void>
+      clearCache: () => Promise<boolean>
       detectID3Encoding: (filePath: string) => Promise<any[]>
       fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) => Promise<any>
       fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>

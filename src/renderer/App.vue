@@ -1,119 +1,53 @@
 <template>
   <div id="app" :class="theme">
-    <Header />
-    <div class="main-container">
-      <Sidebar />
-      <MainContent />
+    <AppHeader />
+    <div class="app-body">
+      <AppSidebar />
+      <main class="app-content">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
     </div>
-    <LyricsView />
-    <Footer />
+    <PlayerBar @toggle-queue="toggleQueue" />
+    <PlayQueueDrawer v-model:visible="showQueue" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import Header from '@/components/Header.vue'
-import Sidebar from '@/components/Sidebar.vue'
-import MainContent from '@/components/MainContent.vue'
-import Footer from '@/components/Footer.vue'
-import LyricsView from '@/components/LyricsView.vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import AppHeader from '@/components/layout/AppHeader.vue'
+import AppSidebar from '@/components/layout/AppSidebar.vue'
+import PlayerBar from '@/components/layout/PlayerBar.vue'
+import PlayQueueDrawer from '@/components/layout/PlayQueueDrawer.vue'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
-import { useMusicStore } from '@/stores/music'
-import { useScanStore } from '@/stores/scan'
 
 const theme = ref('light')
+const showQueue = ref(false)
 const playerStore = usePlayerStore()
-const musicStore = useMusicStore()
-const scanStore = useScanStore()
 const player = usePlayer()
 
-// 全局扫描进度监听（统一管理，避免重复监听）
-let globalProgressUpdateTimer: number | null = null
-
-// 处理快捷键消息
-function handleShortcutAction(action: string) {
-  switch (action) {
-    case 'play-pause':
-      if (playerStore.isPlaying) {
-        player.pause()
-      } else {
-        if (playerStore.currentMusic) {
-          player.resume()
-        } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
-          player.play(playerStore.queue[playerStore.currentQueueIndex])
-        }
-      }
-      break
-    case 'previous':
-      player.previous()
-      break
-    case 'next':
-      player.next()
-      break
-    case 'volume-up':
-      playerStore.setVolume(Math.min(100, playerStore.volume + 5))
-      player.setVolume(playerStore.volume)
-      break
-    case 'volume-down':
-      playerStore.setVolume(Math.max(0, playerStore.volume - 5))
-      player.setVolume(playerStore.volume)
-      break
-    case 'toggle-favorite':
-      if (playerStore.currentMusic) {
-        window.electronAPI.toggleFavorite(playerStore.currentMusic.filePath)
-      }
-      break
-  }
+const toggleQueue = () => {
+  showQueue.value = !showQueue.value
 }
 
 onMounted(async () => {
+  // 加载设置
   const settings = await window.electronAPI.getSettings()
   theme.value = settings?.theme || 'light'
-  // 应用主题到 #app 元素
-  const appElement = document.getElementById('app')
-  if (appElement) {
-    appElement.className = theme.value
-  }
 
-  // 监听主题变化事件（从 Header 或其他组件触发）
+  // 监听主题变化
   window.addEventListener('theme-changed', ((e: CustomEvent) => {
     theme.value = e.detail
   }) as EventListener)
 
-  // 加载扫描状态（全局统一管理）
-  try {
-    const state = await window.electronAPI.getScanState()
-    scanStore.setScanning(state.isScanning)
-    scanStore.setPaused(state.isPaused)
-    scanStore.setProgress(state.progress)
-  } catch (error) {
-    console.error('加载扫描状态失败:', error)
-  }
-
-  // 全局监听扫描进度（统一管理，使用节流）
-  window.electronAPI.onScanProgress((progress) => {
-    // 使用 requestAnimationFrame 延迟更新，避免阻塞UI
-    if (globalProgressUpdateTimer) {
-      cancelAnimationFrame(globalProgressUpdateTimer)
-    }
-    globalProgressUpdateTimer = requestAnimationFrame(() => {
-      scanStore.setProgress(progress)
-      globalProgressUpdateTimer = null
-    })
-  })
-
-  // 全局监听扫描状态变化
-  window.electronAPI.onScanStateChanged((state) => {
-    // 使用 nextTick 避免阻塞
-    nextTick(() => {
-      scanStore.setScanning(state.isScanning)
-      scanStore.setPaused(state.isPaused)
-    })
-  })
-
+  // 初始化播放器
   await playerStore.initialize(settings)
 
+  // 自动恢复播放
   if (playerStore.shouldAutoResume && playerStore.currentMusic) {
     await player.play(playerStore.currentMusic)
     if (playerStore.resumePosition > 0) {
@@ -121,7 +55,7 @@ onMounted(async () => {
     }
   }
 
-  // 监听快捷键消息
+  // 监听快捷键
   window.electronAPI.onShortcutAction(handleShortcutAction)
 
   // 监听托盘操作
@@ -152,6 +86,42 @@ onMounted(async () => {
   }
 })
 
+// 处理快捷键
+function handleShortcutAction(action: string) {
+  switch (action) {
+    case 'play-pause':
+      if (playerStore.isPlaying) {
+        player.pause()
+      } else {
+        if (playerStore.currentMusic) {
+          player.resume()
+        } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
+          player.play(playerStore.queue[playerStore.currentQueueIndex])
+        }
+      }
+      break
+    case 'previous':
+      handlePrevious()
+      break
+    case 'next':
+      handleNext()
+      break
+    case 'volume-up':
+      playerStore.volume = Math.min(100, playerStore.volume + 5)
+      player.setVolume(playerStore.volume)
+      break
+    case 'volume-down':
+      playerStore.volume = Math.max(0, playerStore.volume - 5)
+      player.setVolume(playerStore.volume)
+      break
+    case 'toggle-favorite':
+      if (playerStore.currentMusic) {
+        window.electronAPI.toggleFavorite(playerStore.currentMusic.filePath)
+      }
+      break
+  }
+}
+
 // 处理托盘操作
 function handleTrayAction(action: string) {
   switch (action) {
@@ -167,22 +137,39 @@ function handleTrayAction(action: string) {
       }
       break
     case 'previous':
-      player.previous()
+      handlePrevious()
       break
     case 'next':
-      player.next()
+      handleNext()
       break
+  }
+}
+
+async function handlePrevious() {
+  const prev = playerStore.getPrevious()
+  if (prev) {
+    const index = playerStore.queue.findIndex(m => m.id === prev.id)
+    if (index >= 0) {
+      playerStore.setCurrentQueueIndex(index)
+      await player.play(prev)
+    }
+  }
+}
+
+async function handleNext() {
+  const next = playerStore.getNext()
+  if (next) {
+    const index = playerStore.queue.findIndex(m => m.id === next.id)
+    if (index >= 0) {
+      playerStore.setCurrentQueueIndex(index)
+      await player.play(next)
+    }
   }
 }
 
 onBeforeUnmount(() => {
   window.electronAPI.removeShortcutAction()
   window.electronAPI.removeTrayAction()
-  window.electronAPI.removeScanProgress()
-  window.electronAPI.removeScanStateChanged()
-  if (globalProgressUpdateTimer) {
-    cancelAnimationFrame(globalProgressUpdateTimer)
-  }
 })
 </script>
 
@@ -197,43 +184,58 @@ onBeforeUnmount(() => {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  transition: background-color 0.3s, color 0.3s;
+  font-family: var(--font-family-base);
+  transition: background-color var(--transition-slow), color var(--transition-slow);
 }
 
-/* 浅色主题 CSS 变量 */
-#app.light {
-  --bg-color: #ffffff;
-  --sidebar-bg: #f8f9fa;
-  --hover-bg: #e9ecef;
-  --active-bg: #dee2e6;
-  --text-color: #1f1f1f;
-  --secondary-text-color: #666666;
-  --border-color: #e0e0e0;
-  --sidebar-border: #dee2e6;
-  --active-text: #ff4757;
-  background-color: #f5f5f5;
-  color: #333;
-}
-
-/* 深色主题 CSS 变量 */
-#app.dark {
-  --bg-color: #2d2d2d;
-  --sidebar-bg: #1e1e1e;
-  --hover-bg: #3d3d3d;
-  --active-bg: #4d4d4d;
-  --text-color: #f5f5f5;
-  --secondary-text-color: #bbbbbb;
-  --border-color: #444444;
-  --sidebar-border: #333333;
-  --active-text: #ff6b7a;
-  background-color: #1a1a1a;
-  color: #fff;
-}
-
-.main-container {
+.app-body {
   flex: 1;
   display: flex;
   overflow: hidden;
+}
+
+.app-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 页面过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-base) var(--transition-timing);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-base);
+  transition: background var(--transition-base) var(--transition-timing);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* 选中文本样式 */
+::selection {
+  background-color: rgba(var(--color-primary-rgb), 0.2);
+  color: var(--text-color);
 }
 </style>
