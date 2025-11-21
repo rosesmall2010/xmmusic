@@ -815,7 +815,32 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         shortcuts = await shortcutManager.getDefaultShortcuts()
       }
 
-      return shortcutManager.registerAll(shortcuts)
+      // 注册快捷键
+      const handlers: Record<string, () => void> = {
+        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
+        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
+        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
+        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
+        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
+        'toggle-window': () => {
+          if (mainWindow?.isVisible()) {
+            mainWindow.hide()
+          } else {
+            mainWindow?.show()
+            mainWindow?.focus()
+          }
+        },
+        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+      }
+
+      const parsedShortcuts: Record<string, string> = {}
+      for (const [action, accelerator] of Object.entries(shortcuts)) {
+        if (accelerator) {
+          parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
+        }
+      }
+
+      return shortcutManager.registerAll(parsedShortcuts, handlers)
     })
   }
 

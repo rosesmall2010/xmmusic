@@ -31,7 +31,7 @@
         </button>
 
         <button class="control-btn play-btn" @click="togglePlay" title="播放/暂停">
-          <span class="icon">{{ isPlaying ? '⏸' : '▶' }}</span>
+          <span class="icon" :style="!isPlaying ? { marginLeft: '4px' } : {}">{{ isPlaying ? '⏸' : '▶' }}</span>
         </button>
 
         <button class="control-btn" @click="next" title="下一首">
@@ -343,17 +343,20 @@ volumeValue.value = playerStore.volume
 }
 
 .control-btn {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   border: none;
   background: transparent;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  line-height: 1;
   cursor: pointer;
   color: var(--text-color);
   transition: all var(--transition-base) var(--transition-timing);
+  font-size: 1.5rem;
 }
 
 .control-btn:hover {
@@ -361,10 +364,11 @@ volumeValue.value = playerStore.volume
 }
 
 .play-btn {
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
   background: var(--color-primary);
   color: white;
+  font-size: 2rem;
 }
 
 .play-btn:hover {

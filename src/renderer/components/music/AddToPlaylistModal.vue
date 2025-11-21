@@ -81,7 +81,7 @@ const selectPlaylist = async (playlist: any) => {
   if (!props.musicToAd) return
 
   try {
-    await window.electronAPI.addMusicToPlaylist(playlist.id, props.musicToAd.id)
+    await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
     // TODO: Show success toast
     emit('added')
     close()
