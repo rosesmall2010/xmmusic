@@ -146,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -377,6 +377,7 @@ watch(currentTime, (time) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-xl);
+  -webkit-app-region: drag;
 }
 
 .btn-back {
@@ -391,6 +392,7 @@ watch(currentTime, (time) => {
   padding: var(--spacing-sm);
   border-radius: var(--radius-base);
   transition: background var(--transition-base);
+  -webkit-app-region: no-drag;
 }
 
 .btn-back:hover {
@@ -411,6 +413,7 @@ watch(currentTime, (time) => {
   padding: var(--spacing-sm);
   border-radius: var(--radius-base);
   transition: background var(--transition-base);
+  -webkit-app-region: no-drag;
 }
 
 .btn-action:hover {
