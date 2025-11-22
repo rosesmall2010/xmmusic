@@ -43,7 +43,7 @@
           @dblclick="playMusic(music)"
         >
           <div class="music-cover">
-            <DefaultCover v-if="!music.coverPath" size="small" />
+            <DefaultCover v-if="!music.coverPath" mode="fill" />
             <img v-else :src="getCoverUrl(music.coverPath)" alt="封面" />
             <div class="play-overlay">▶</div>
           </div>
