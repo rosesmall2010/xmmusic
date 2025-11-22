@@ -81,6 +81,22 @@ onMounted(async () => {
   // 加载统计数据
   totalCount.value = await window.electronAPI.getMusicTotalCount()
 
+  // 加载最近播放数量
+  try {
+    const recentPlays = await window.electronAPI.getRecentPlays()
+    recentCount.value = recentPlays.length
+  } catch (error) {
+    console.error('Failed to load recent plays count:', error)
+  }
+
+  // 加载我喜欢数量
+  try {
+    const favorites = await window.electronAPI.getFavorites()
+    favoritesCount.value = favorites.length
+  } catch (error) {
+    console.error('Failed to load favorites count:', error)
+  }
+
   // 加载最近添加的歌曲
   const criteria = {
     sortBy: 'addedAt' as const,
