@@ -25,7 +25,7 @@
       <!-- 专辑封面 -->
       <div class="album-cover-container">
         <div class="album-cover animate-scale-in">
-          <DefaultCover v-if="!currentMusic?.coverPath" size="large" />
+          <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
           <img v-else :src="getCoverUrl(currentMusic.coverPath)" alt="封面" />
         </div>
       </div>
