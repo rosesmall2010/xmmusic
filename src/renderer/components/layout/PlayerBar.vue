@@ -5,7 +5,7 @@
       <div class="music-info" @click="openNowPlaying">
         <div class="music-cover">
           <DefaultCover v-if="!currentMusic?.coverPath" size="small" />
-          <img v-else :src="currentMusic.coverPath" alt="封面" />
+          <img v-else :src="getCoverUrl(currentMusic.coverPath)" alt="封面" />
         </div>
         <div class="music-details">
           <div class="music-title">{{ currentMusic?.title || '暂无播放' }}</div>
@@ -108,6 +108,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import { getCoverUrl } from '@/utils/media'
 
 const router = useRouter()
 const playerStore = usePlayerStore()

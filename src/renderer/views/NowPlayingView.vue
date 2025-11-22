@@ -23,7 +23,7 @@
       <div class="album-cover-container">
         <div class="album-cover animate-scale-in">
           <DefaultCover v-if="!currentMusic?.coverPath" size="large" />
-          <img v-else :src="currentMusic.coverPath" alt="封面" />
+          <img v-else :src="getCoverUrl(currentMusic.coverPath)" alt="封面" />
         </div>
       </div>
 
@@ -72,6 +72,13 @@
 
       <!-- Tab 切换 -->
       <div class="tabs">
+        <button
+          class="tab"
+          :class="{ active: activeTab === 'cover' }"
+          @click="activeTab = 'cover'"
+        >
+          封面
+        </button>
         <button
           class="tab"
           :class="{ active: activeTab === 'lyrics' }"
@@ -145,12 +152,13 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { parseLrc, type LyricLine } from '@/utils/lrcParser'
+import { getCoverUrl } from '@/utils/media'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
 const { play, pause, resume, seek } = usePlayer()
 
-const activeTab = ref('lyrics')
+const activeTab = ref('cover')
 const backgroundColor = ref('#1a1a1a')
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
@@ -291,13 +299,22 @@ const loadLyrics = async () => {
     const lrcContent = await window.electronAPI.loadLyrics(currentMusic.value.id)
     if (lrcContent) {
       lyrics.value = parseLrc(lrcContent)
+      // 如果有歌词，自动切换到歌词标签
+      if (lyrics.value.length > 0) {
+        activeTab.value = 'lyrics'
+      } else {
+        activeTab.value = 'cover'
+      }
     } else {
       // TODO: 如果本地没有，可以尝试在线搜索（未来功能）
       lyrics.value = [{ time: 0, text: '暂无歌词' }]
+      // 没有歌词时，显示封面模式
+      activeTab.value = 'cover'
     }
   } catch (error) {
     console.error('Failed to load lyrics:', error)
     lyrics.value = [{ time: 0, text: '歌词加载失败' }]
+    activeTab.value = 'cover'
   }
 }
 
