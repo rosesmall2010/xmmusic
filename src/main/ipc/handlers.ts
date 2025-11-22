@@ -461,6 +461,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getPlayHistory()
   })
 
+  ipcMain.handle('get-recent-plays', (_, limit?: number) => {
+    if (!db) return []
+    return db.getPlayHistory(limit)
+  })
+
   ipcMain.handle('clear-play-history', async () => {
     if (!db) return
     db.clearPlayHistory()

@@ -46,7 +46,7 @@
               <div class="item-artist" :title="music.artist">{{ music.artist }}</div>
             </div>
           </div>
-          <div class="col-album" :title="music.album">{{ music.album || '-' }}</div>
+          <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
         </div>
       </div>
@@ -60,26 +60,26 @@
 
     <!-- Context Menu -->
     <div
-      v-if="contextMenu.visible"
+      v-if="contextMenu.visible && contextMenu.music"
       class="context-menu"
       :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
     >
       <div class="menu-item" @click="handlePlay(contextMenu.music!)">
         播放
       </div>
-      <div class="menu-item" @click="openAddToPlaylist(contextMenu.music)">
+      <div class="menu-item" @click="openAddToPlaylist(contextMenu.music!)">
         <span class="icon">➕</span>
         添加到歌单
       </div>
       <div
         v-if="showRemoveFromPlaylist"
         class="menu-item delete"
-        @click="handleRemoveFromPlaylist(contextMenu.music)"
+        @click="handleRemoveFromPlaylist(contextMenu.music!)"
       >
         <span class="icon">🗑️</span>
         从歌单移除
       </div>
-      <div class="menu-item" @click="toggleFavorite(contextMenu.music)">
+      <div class="menu-item" @click="toggleFavorite(contextMenu.music!)">
         <span class="icon">{{ contextMenu.isFavorite ? '❤️' : '🤍' }}</span>
         {{ contextMenu.isFavorite ? '取消喜欢' : '喜欢' }}
       </div>
@@ -109,6 +109,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'play', music: MusicItem): void
   (e: 'remove-from-playlist', music: MusicItem): void
+  (e: 'load-more'): void
 }>()
 
 const playerStore = usePlayerStore()
@@ -124,6 +125,12 @@ const handleScroll = (e: Event) => {
   const target = e.target as HTMLElement
   requestAnimationFrame(() => {
     scrollTop.value = target.scrollTop
+
+    // Check if we need to load more
+    const { scrollHeight, clientHeight, scrollTop: st } = target
+    if (scrollHeight - st - clientHeight < 500) { // Threshold of 500px
+      emit('load-more')
+    }
   })
   closeContextMenu()
 }

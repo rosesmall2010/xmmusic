@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, shallowRef, triggerRef } from 'vue'
 import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
   // State
-  const musicList = ref<MusicItem[]>([])
+  const musicList = shallowRef<MusicItem[]>([])
   const totalCount = ref(0)
   const currentOffset = ref(0)
   const pageSize = ref(50)
@@ -25,14 +25,23 @@ export const useMusicStore = defineStore('music', () => {
   const isAdvancedMode = computed(() => !!advancedCriteria.value)
 
   // Actions
-  async function loadMusic(offset: number = 0, limit: number = pageSize.value) {
+  async function loadMusic(offset: number = 0, limit: number = pageSize.value, force: boolean = false) {
+    // If not forcing refresh and we already have data (and asking for first page), skip
+    if (!force && offset === 0 && musicList.value.length > 0) {
+      return
+    }
+
     loading.value = true
     try {
       const items = await window.electronAPI.getMusicList(offset, limit)
       if (offset === 0) {
         musicList.value = items
       } else {
+        // For shallowRef, we need to reassign or triggerRef.
+        // Reassigning is safer for immutability but pushing + triggerRef is more efficient for large arrays.
+        // Let's use push + triggerRef to avoid copying huge arrays.
         musicList.value.push(...items)
+        triggerRef(musicList)
       }
       currentOffset.value = offset + items.length
       totalCount.value = await window.electronAPI.getMusicTotalCount()
@@ -80,6 +89,7 @@ export const useMusicStore = defineStore('music', () => {
     const item = musicList.value.find(m => m.filePath === filePath)
     if (item) {
       item.favorite = !item.favorite
+      triggerRef(musicList) // Trigger update since we modified deep property of shallowRef
     }
   }
 
@@ -117,6 +127,7 @@ export const useMusicStore = defineStore('music', () => {
     toggleFavorite,
     setCurrentView,
     loadPlaylists,
-    selectPlaylist
+    selectPlaylist,
+    currentOffset
   }
 })

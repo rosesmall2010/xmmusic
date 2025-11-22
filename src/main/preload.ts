@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 播放历史
   getPlayHistory: () => ipcRenderer.invoke('get-play-history'),
+  getRecentPlays: (limit?: number) => ipcRenderer.invoke('get-recent-plays', limit),
   clearPlayHistory: () => ipcRenderer.invoke('clear-play-history'),
 
   // 音乐目录

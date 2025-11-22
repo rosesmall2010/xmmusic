@@ -86,7 +86,7 @@ const loadPlaylist = async () => {
 
     if (playlist.value) {
       // 获取歌单歌曲
-      songs.value = await window.electronAPI.getPlaylistMusic(id)
+      songs.value = await window.electronAPI.getPlaylistSongs(Number(id))
     }
   } catch (error) {
     console.error('Failed to load playlist:', error)

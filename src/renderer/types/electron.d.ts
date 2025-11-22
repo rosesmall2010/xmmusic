@@ -46,6 +46,7 @@ export interface ElectronAPI {
 
   // 播放历史
   getPlayHistory: () => Promise<any[]>
+  getRecentPlays: (limit?: number) => Promise<any[]>
   clearPlayHistory: () => Promise<void>
 
   // 音乐目录

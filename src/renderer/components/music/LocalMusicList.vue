@@ -13,7 +13,7 @@
     </div>
 
     <div class="music-list-container">
-      <SongList :songs="musicList" @play="playMusic">
+      <SongList :songs="musicList" @play="playMusic" @load-more="loadMore">
         <template #empty>
           <p>暂无音乐</p>
           <button class="btn-link" @click="handleScan">扫描音乐文件夹</button>
@@ -38,8 +38,33 @@ const { play } = usePlayer()
 const musicList = computed(() => musicStore.musicList)
 
 onMounted(async () => {
-  await musicStore.loadMusic(0, 1000) // Load more items
+  // Initial load of 20 items
+  await musicStore.loadMusic(0, 20)
+
+  // Start background loading
+  startBackgroundLoading()
 })
+
+const startBackgroundLoading = async () => {
+  // Check if there are more items to load
+  if (musicStore.hasMore) {
+    // Use requestIdleCallback or setTimeout to avoid blocking main thread
+    setTimeout(async () => {
+      if (musicStore.hasMore && !musicStore.loading) {
+        await musicStore.loadMusic(musicStore.currentOffset, 20)
+        // Continue loading next batch
+        startBackgroundLoading()
+      }
+    }, 100) // Small delay between batches
+  }
+}
+
+const loadMore = async () => {
+  // This is now handled by background loading, but we keep it for manual trigger if needed
+  if (!musicStore.loading && musicStore.hasMore) {
+    await musicStore.loadMusic(musicStore.currentOffset, 20)
+  }
+}
 
 const handleScan = async () => {
   const folders = await window.electronAPI.selectMusicFolder()
@@ -49,7 +74,8 @@ const handleScan = async () => {
     for (const folder of folders) {
       await window.electronAPI.scanMusicFolder(folder)
     }
-    await musicStore.loadMusic(0, 1000)
+    await musicStore.loadMusic(0, 20, true) // Force refresh initial batch
+    startBackgroundLoading() // Restart background loading
   } catch (error: any) {
     if (error.message !== '扫描已取消') {
       alert(`扫描失败: ${error.message}`)

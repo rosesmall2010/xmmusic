@@ -288,7 +288,7 @@ const loadLyrics = async () => {
   try {
     // 尝试获取歌词
     // 优先查找同名 lrc 文件
-    const lrcContent = await window.electronAPI.getLyrics(currentMusic.value.filePath)
+    const lrcContent = await window.electronAPI.loadLyrics(currentMusic.value.id)
     if (lrcContent) {
       lyrics.value = parseLrc(lrcContent)
     } else {
