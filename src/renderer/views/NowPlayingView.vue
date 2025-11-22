@@ -9,13 +9,13 @@
 
       <div class="actions">
         <button class="btn-action" @click="toggleDesktopLyrics" title="桌面歌词">
-          <span class="icon">🖥️</span>
+          <Monitor :size="20" />
         </button>
         <button class="btn-action" @click="toggleQueue" title="播放队列">
-          <span class="icon">📋</span>
+          <List :size="20" />
         </button>
         <button class="btn-action" @click="toggleLyrics" title="歌词">
-          <span class="icon">📝</span>
+          <FileText :size="20" />
         </button>
       </div>
     </div>
@@ -53,23 +53,24 @@
       <!-- 播放控制 -->
       <div class="controls">
         <button class="btn-control btn-secondary" @click="toggleFavorite" title="喜欢">
-          <span class="icon">{{ isFavorite ? '❤️' : '🤍' }}</span>
+          <Heart :size="24" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
         </button>
 
         <button class="btn-control btn-secondary" @click="previous" title="上一首">
-          <span class="icon">⏮</span>
+          <SkipBack :size="24" />
         </button>
 
         <button class="btn-control btn-primary" @click="togglePlay" title="播放/暂停">
-          <span class="icon">{{ isPlaying ? '⏸' : '▶' }}</span>
+          <Play v-if="!isPlaying" :size="32" />
+          <Pause v-else :size="32" />
         </button>
 
         <button class="btn-control btn-secondary" @click="next" title="下一首">
-          <span class="icon">⏭</span>
+          <SkipForward :size="24" />
         </button>
 
         <button class="btn-control btn-secondary" @click="togglePlayMode" :title="playModeText">
-          <span class="icon">{{ playModeIcon }}</span>
+          <component :is="PlayModeIcon" :size="24" />
         </button>
       </div>
 
@@ -145,7 +146,7 @@
                 <div class="similar-artist">{{ song.artist }}</div>
               </div>
               <div class="similar-action">
-                <span class="icon">▶</span>
+                <Play :size="16" />
               </div>
             </div>
           </div>
@@ -180,6 +181,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { parseLrc, type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
+import { Monitor, List, FileText, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -205,14 +207,13 @@ const progressPercentage = computed(() => {
   return (currentTime.value / duration.value) * 100
 })
 
-const playModeIcon = computed(() => {
-  const icons = {
-    sequential: '➡️',
-    random: '🔀',
-    repeat: '🔁',
-    single: '🔂',
-  }
-  return icons[playMode.value]
+const PlayModeIcon = computed(() => {
+  const mode = playMode.value
+  if (mode === 'random') return Shuffle
+  if (mode === 'repeat') return Repeat
+  if (mode === 'single') return Repeat1
+  if (mode === 'sequential') return ArrowRight
+  return ArrowRight
 })
 
 const playModeText = computed(() => {

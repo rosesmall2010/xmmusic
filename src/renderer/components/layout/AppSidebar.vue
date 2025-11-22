@@ -77,22 +77,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Music, Folder, Heart, Clock } from 'lucide-vue-next'
 
 const router = useRouter()
+const route = useRoute()
 const totalCount = ref(0)
 const playlists = ref<any[]>([])
 
-const mainNavItems = [
-  { path: '/discover', icon: '🎵', label: '发现音乐' },
-  { path: '/local', icon: '📁', label: '本地音乐' },
-]
-
-const myMusicItems = ref([
-  { path: '/favorites', icon: '❤️', label: '我喜欢', count: 0 },
-  { path: '/recent', icon: '🕐', label: '最近播放', count: 0 },
+const navItems = ref([
+  { path: '/discover', icon: Music, label: '发现音乐', section: 'main' },
+  { path: '/local', icon: Folder, label: '本地音乐', section: 'main' },
+  { path: '/favorites', icon: Heart, label: '我喜欢', count: 0, section: 'myMusic' },
+  { path: '/recent', icon: Clock, label: '最近播放', count: 0, section: 'myMusic' },
 ])
+
+const mainNavFilteredItems = computed(() => navItems.value.filter(item => item.section === 'main'));
+const myMusicFilteredItems = computed(() => navItems.value.filter(item => item.section === 'myMusic'));
 
 onMounted(async () => {
   // 加载统计信息

@@ -20,7 +20,7 @@
           :style="{ height: itemHeight + 'px' }"
         >
           <div class="col-index">
-            <span v-if="currentMusic?.id === music.id" class="playing-icon">🔊</span>
+            <Volume2 v-if="currentMusic?.id === music.id" :size="14" class="playing-icon" />
             <span v-else>{{ music.originalIndex + 1 }}</span>
           </div>
           <div class="col-title">
@@ -76,11 +76,11 @@
         class="menu-item delete"
         @click="handleRemoveFromPlaylist(contextMenu.music!)"
       >
-        <span class="icon">🗑️</span>
+        <Trash2 :size="16" class="icon" />
         从歌单移除
       </div>
       <div class="menu-item" @click="toggleFavorite(contextMenu.music!)">
-        <span class="icon">{{ contextMenu.isFavorite ? '❤️' : '🤍' }}</span>
+        <Heart :size="16" :fill="contextMenu.isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': contextMenu.isFavorite }" class="icon" />
         {{ contextMenu.isFavorite ? '取消喜欢' : '喜欢' }}
       </div>
     </div>
@@ -94,8 +94,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { getCoverUrl } from '@/utils/media'
+import { Volume2, Trash2, Heart } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'

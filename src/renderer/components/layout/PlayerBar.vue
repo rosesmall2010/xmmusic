@@ -19,7 +19,7 @@
         :class="{ active: isFavorite }"
         title="喜欢"
       >
-        <span>{{ isFavorite ? '❤️' : '🤍' }}</span>
+        <Heart :size="16" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
       </button>
     </div>
 
@@ -32,7 +32,7 @@
           title="上一首"
           :disabled="!hasMusic"
         >
-          <span class="icon">⏮</span>
+          <SkipBack :size="18" />
         </button>
 
         <button
@@ -41,7 +41,8 @@
           title="播放/暂停"
           :disabled="!hasMusic && queue.length === 0"
         >
-          <span class="icon" :style="!isPlaying ? { marginLeft: '4px' } : {}">{{ isPlaying ? '⏸' : '▶' }}</span>
+          <Play v-if="!isPlaying" :size="20" :style="{ marginLeft: '2px' }" />
+          <Pause v-else :size="20" />
         </button>
 
         <button
@@ -50,7 +51,7 @@
           title="下一首"
           :disabled="!hasMusic"
         >
-          <span class="icon">⏭</span>
+          <SkipForward :size="18" />
         </button>
 
         <button
@@ -58,11 +59,11 @@
           @click="togglePlayMode"
           :title="playModeText"
         >
-          <span class="icon">{{ playModeIcon }}</span>
+          <component :is="PlayModeIcon" v-if="PlayModeIcon" :size="18" />
         </button>
 
         <button class="control-btn" @click="toggleQueue" title="播放队列">
-          <span class="icon">📋</span>
+          <List :size="18" />
         </button>
       </div>
 
@@ -81,12 +82,12 @@
     <!-- 右侧：音量控制和其他按钮 -->
     <div class="player-right">
       <button class="control-icon-btn" @click="toggleLyrics" title="歌词">
-        <span>📝</span>
+        <FileText :size="18" />
       </button>
 
       <div class="volume-control">
         <button class="control-icon-btn" @click="toggleMute" title="音量">
-          <span>{{ volumeIcon }}</span>
+          <component :is="VolumeIcon" :size="18" />
         </button>
         <div class="volume-slider">
           <input
@@ -109,6 +110,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
+import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, FileText, Volume2, VolumeX } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -131,14 +133,12 @@ const progressPercentage = computed(() => {
   return (currentTime.value / duration.value) * 100
 })
 
-const playModeIcon = computed(() => {
-  const icons = {
-    sequential: '➡️',
-    random: '🔀',
-    repeat: '🔁',
-    single: '🔂',
-  }
-  return icons[playMode.value]
+const PlayModeIcon = computed(() => {
+  const mode = playMode.value
+  if (mode === 'random') return Shuffle
+  if (mode === 'repeat') return Repeat
+  if (mode === 'single') return Repeat1
+  return null
 })
 
 const playModeText = computed(() => {
@@ -151,10 +151,8 @@ const playModeText = computed(() => {
   return texts[playMode.value]
 })
 
-const volumeIcon = computed(() => {
-  if (volumeValue.value === 0) return '🔇'
-  if (volumeValue.value < 50) return '🔉'
-  return '🔊'
+const VolumeIcon = computed(() => {
+  return volumeValue.value === 0 ? VolumeX : Volume2
 })
 
 // 方法
