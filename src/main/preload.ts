@@ -14,9 +14,10 @@ import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types
 // 暴露安全的 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
   // 窗口控制
-  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
-  maximizeWindow: () => ipcRenderer.invoke('window-maximize'),
-  closeWindow: () => ipcRenderer.invoke('window-close'),
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  closeWindow: () => ipcRenderer.send('window-close'),
+  setMiniMode: (enabled: boolean) => ipcRenderer.invoke('set-mini-mode', enabled),
 
   // 文件操作
   selectMusicFolder: () => ipcRenderer.invoke('select-music-folder'),

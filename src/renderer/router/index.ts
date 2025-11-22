@@ -2,8 +2,14 @@ import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/',
-    redirect: '/discover',
+    path: '/mini',
+    name: 'MiniPlayer',
+    component: () => import('@/views/MiniPlayerView.vue'),
+    meta: { layout: 'blank' }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/discover'
   },
   {
     path: '/discover',

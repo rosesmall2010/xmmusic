@@ -1,8 +1,9 @@
 export interface ElectronAPI {
   // 窗口控制
   minimizeWindow: () => Promise<void>
-  maximizeWindow: () => Promise<void>
-  closeWindow: () => Promise<void>
+  maximizeWindow: () => void
+  closeWindow: () => void
+  setMiniMode: (enabled: boolean) => Promise<void>
 
   // 文件操作
   selectMusicFolder: () => Promise<string[]>

@@ -36,6 +36,31 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     mainWindow.close()
   })
 
+  // 迷你模式状态
+  let normalBounds: Electron.Rectangle | null = null
+
+  ipcMain.handle('set-mini-mode', async (_, enabled: boolean) => {
+    if (enabled) {
+      // 进入迷你模式
+      if (!mainWindow.isFullScreen()) {
+        normalBounds = mainWindow.getBounds()
+      }
+      mainWindow.setMinimumSize(300, 100)
+      mainWindow.setSize(320, 480, true)
+      mainWindow.setAlwaysOnTop(true)
+    } else {
+      // 退出迷你模式
+      mainWindow.setAlwaysOnTop(false)
+      mainWindow.setMinimumSize(800, 600)
+      if (normalBounds) {
+        mainWindow.setBounds(normalBounds, true)
+      } else {
+        mainWindow.setSize(1000, 680, true)
+        mainWindow.center()
+      }
+    }
+  })
+
   // 文件操作（部分不依赖数据库）
   ipcMain.handle('select-music-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

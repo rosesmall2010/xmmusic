@@ -27,6 +27,10 @@
     </div>
 
     <div class="header-right">
+      <button class="header-btn" @click="toggleMiniMode" title="迷你模式">
+        <span class="icon">🖥️</span>
+      </button>
+
       <button class="header-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'">
         <span class="icon">{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
       </button>
@@ -93,6 +97,11 @@ const toggleTheme = async () => {
   document.getElementById('app')?.setAttribute('class', theme.value)
   await window.electronAPI.saveSettings({ theme: theme.value })
   window.dispatchEvent(new CustomEvent('theme-changed', { detail: theme.value }))
+}
+
+const toggleMiniMode = async () => {
+  await window.electronAPI.setMiniMode(true)
+  router.push('/mini')
 }
 
 const openSettings = () => {
