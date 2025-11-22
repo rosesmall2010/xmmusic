@@ -290,6 +290,18 @@ onMounted(async () => {
   gap: var(--spacing-md);
 }
 
+/* macOS红绿灯按钮避让 */
+.header-left {
+  padding-left: 80px;
+}
+
+/* Windows下不需要额外padding */
+@media (not (platform: macos)) {
+  .header-left {
+    padding-left: 0;
+  }
+}
+
 .header-left {
   flex-shrink: 0;
 }
