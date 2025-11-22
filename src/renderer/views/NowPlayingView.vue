@@ -122,7 +122,31 @@
 
         <!-- 相似歌曲 -->
         <div v-if="activeTab === 'similar'" class="similar-panel">
-          <p class="empty-hint">暂无相似歌曲推荐</p>
+          <div v-if="loadingSimilar" class="loading-state">
+            <span class="loading-icon">⏳</span>
+            <p>加载中...</p>
+          </div>
+          <div v-else-if="similarSongs.length > 0" class="similar-list">
+            <div
+              v-for="song in similarSongs"
+              :key="song.id"
+              class="similar-item"
+              @click="playSimilarSong(song)"
+            >
+              <div class="similar-cover">
+                <DefaultCover v-if="!song.coverPath" size="small" />
+                <img v-else :src="getCoverUrl(song.coverPath)" alt="封面" />
+              </div>
+              <div class="similar-info">
+                <div class="similar-title">{{ song.title }}</div>
+                <div class="similar-artist">{{ song.artist }}</div>
+              </div>
+              <div class="similar-action">
+                <span class="icon">▶</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty-hint">暂无相似歌曲推荐</p>
         </div>
 
         <!-- 歌曲信息 -->
@@ -163,6 +187,8 @@ const backgroundColor = ref('#1a1a1a')
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
+const similarSongs = ref<any[]>([])
+const loadingSimilar = ref(false)
 
 // 计算属性
 const currentMusic = computed(() => playerStore.currentMusic)
@@ -327,11 +353,33 @@ const scrollToCurrentLyric = () => {
   }
 }
 
+// 相似歌曲逻辑
+const loadSimilarSongs = async () => {
+  similarSongs.value = []
+
+  if (!currentMusic.value) return
+
+  loadingSimilar.value = true
+  try {
+    const songs = await window.electronAPI.getSimilarMusic(currentMusic.value.id, 20, 0.3)
+    similarSongs.value = songs
+  } catch (error) {
+    console.error('Failed to load similar songs:', error)
+  } finally {
+    loadingSimilar.value = false
+  }
+}
+
+const playSimilarSong = async (song: any) => {
+  await play(song)
+}
+
 // 监听当前音乐变化
 watch(currentMusic, async (music) => {
   if (music) {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.filePath)
     await loadLyrics()
+    await loadSimilarSongs()
   }
 }, { immediate: true })
 
@@ -367,9 +415,10 @@ watch(currentTime, (time) => {
   z-index: var(--z-modal);
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-xl) 0;
   color: white;
   overflow-y: auto;
+  width: 100%;
 }
 
 .top-bar {
@@ -377,6 +426,7 @@ watch(currentTime, (time) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-xl);
+  padding: 0 var(--spacing-xl);
   -webkit-app-region: drag;
 }
 
@@ -402,6 +452,7 @@ watch(currentTime, (time) => {
 .actions {
   display: flex;
   gap: var(--spacing-md);
+  -webkit-app-region: no-drag;
 }
 
 .btn-action {
@@ -657,14 +708,104 @@ watch(currentTime, (time) => {
 }
 
 .info-item .label {
-  color: rgba(255, 255, 255, 0.6);
-  width: 80px;
-  flex-shrink: 0;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  min-width: 100px;
 }
 
 .info-item .value {
-  color: white;
+  color: rgba(255, 255, 255, 0.6);
   word-break: break-all;
+}
+
+/* 相似歌曲样式 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: var(--spacing-md);
+}
+
+.loading-icon {
+  font-size: var(--font-size-3xl);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.similar-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) 0;
+}
+
+.similar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.similar-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(4px);
+}
+
+.similar-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.similar-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.similar-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.similar-title {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.similar-artist {
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.similar-action {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: var(--font-size-lg);
 }
 
 /* Animations */

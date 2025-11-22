@@ -3,7 +3,7 @@
     <div class="list-header">
       <div>
         <h1 class="page-title">本地音乐</h1>
-        <div class="stats">{{ musicList.length }} 首歌曲</div>
+        <div class="stats">{{ totalCount }} 首歌曲</div>
       </div>
       <div class="header-actions">
         <button class="btn-primary" @click="handleScan">
@@ -36,6 +36,7 @@ const playerStore = usePlayerStore()
 const { play } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
+const totalCount = computed(() => musicStore.totalCount)
 
 onMounted(async () => {
   // Initial load of 20 items
