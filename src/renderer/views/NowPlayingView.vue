@@ -8,6 +8,9 @@
       </button>
 
       <div class="actions">
+        <button class="btn-action" @click="toggleMiniMode" title="迷你模式">
+          <Minimize2 :size="20" />
+        </button>
         <button class="btn-action" @click="toggleDesktopLyrics" title="桌面歌词">
           <Monitor :size="20" />
         </button>
@@ -181,7 +184,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { parseLrc, type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, FileText, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight } from 'lucide-vue-next'
+import { Monitor, List, FileText, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2 } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -285,6 +288,11 @@ const toggleFavorite = async () => {
 const toggleQueue = () => {
   // TODO: 实现队列显示
   console.log('Toggle queue')
+}
+
+const toggleMiniMode = async () => {
+  await window.electronAPI.setMiniMode(true)
+  router.push('/mini')
 }
 
 const toggleDesktopLyrics = async () => {
