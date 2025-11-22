@@ -94,9 +94,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { getCoverUrl } from '@/utils/media'
 import { Volume2, Trash2, Heart } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'

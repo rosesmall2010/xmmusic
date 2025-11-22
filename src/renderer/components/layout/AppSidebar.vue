@@ -2,7 +2,7 @@
   <aside class="app-sidebar">
     <nav class="sidebar-nav">
       <!-- 主要导航 -->
-      <div class="nav-section">
+      <nav class="nav-section">
         <router-link
           v-for="item in mainNavItems"
           :key="item.path"
@@ -10,10 +10,10 @@
           class="nav-item"
           active-class="active"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <component :is="item.icon" :size="20" class="nav-icon" />
           <span class="nav-label">{{ item.label }}</span>
         </router-link>
-      </div>
+      </nav>
 
       <!-- 分隔线 -->
       <div class="nav-divider"></div>
@@ -23,17 +23,19 @@
         <div class="section-header">
           <span class="section-title">我的音乐</span>
         </div>
-        <router-link
-          v-for="item in myMusicItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          active-class="active"
-        >
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span class="nav-label">{{ item.label }}</span>
-          <span v-if="item.count" class="nav-count">{{ item.count }}</span>
-        </router-link>
+        <nav class="nav-section">
+          <router-link
+            v-for="item in myMusicItems"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            active-class="active"
+          >
+            <component :is="item.icon" :size="20" class="nav-icon" />
+            <span class="nav-label">{{ item.label }}</span>
+            <span v-if="item.count !== undefined" class="count">{{ item.count }}</span>
+          </router-link>
+        </nav>
       </div>
 
       <!-- 分隔线 -->
@@ -78,7 +80,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { Music, Folder, Heart, Clock } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -87,14 +89,14 @@ const totalCount = ref(0)
 const playlists = ref<any[]>([])
 
 const navItems = ref([
-  { path: '/discover', icon: Music, label: '发现音乐', section: 'main' },
-  { path: '/local', icon: Folder, label: '本地音乐', section: 'main' },
-  { path: '/favorites', icon: Heart, label: '我喜欢', count: 0, section: 'myMusic' },
-  { path: '/recent', icon: Clock, label: '最近播放', count: 0, section: 'myMusic' },
+  { path: '/discover', icon: Music, label: '发现音乐' },
+  { path: '/local', icon: Folder, label: '本地音乐' },
+  { path: '/favorites', icon: Heart, label: '我喜欢', count: 0 },
+  { path: '/recent', icon: Clock, label: '最近播放', count: 0 },
 ])
 
-const mainNavFilteredItems = computed(() => navItems.value.filter(item => item.section === 'main'));
-const myMusicFilteredItems = computed(() => navItems.value.filter(item => item.section === 'myMusic'));
+const mainNavItems = computed(() => navItems.value.slice(0, 2))
+const myMusicItems = computed(() => navItems.value.slice(2))
 
 onMounted(async () => {
   // 加载统计信息
