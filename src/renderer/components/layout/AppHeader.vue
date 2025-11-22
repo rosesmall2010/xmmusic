@@ -272,14 +272,23 @@ onMounted(async () => {
 <style scoped>
 .app-header {
   height: var(--header-height);
-  background: var(--bg-color);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
-  padding: 0 var(--spacing-lg);
-  gap: var(--spacing-lg);
-  -webkit-app-region: drag;
-  user-select: none;
+  justify-content: space-between;
+  padding: 0 var(--spacing-md);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+  -webkit-app-region: drag; /* 整个header作为拖拽区域 */
+}
+
+/* 确保所有按钮都可以点击 */
+.header-btn,
+.nav-btn,
+.win-btn {
+  -webkit-app-region: no-drag;
 }
 
 .header-left,
