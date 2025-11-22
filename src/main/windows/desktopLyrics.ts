@@ -33,8 +33,16 @@ export function createDesktopLyricsWindow(): BrowserWindow | null {
 
   const isDev = !app.isPackaged
 
+  // Add error handling for failed loads
+  desktopLyricsWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Desktop lyrics window failed to load:', errorCode, errorDescription)
+    // Don't retry automatically to avoid spam
+  })
+
   if (isDev) {
-    desktopLyricsWindow.loadURL('http://localhost:5173/#/desktop-lyrics')
+    // Use the same dev server URL as the main window
+    const devServerURL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+    desktopLyricsWindow.loadURL(`${devServerURL}/#/desktop-lyrics`)
   } else {
     desktopLyricsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
       hash: 'desktop-lyrics'
