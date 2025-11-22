@@ -287,7 +287,8 @@ onMounted(async () => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+  -webkit-app-region: no-drag; /* 确保按钮可点击 */
 }
 
 /* macOS红绿灯按钮避让 */
