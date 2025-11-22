@@ -12,6 +12,7 @@ import TrayService from '../services/trayService'
 import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
 import scanManager from '../services/scanManager'
+import * as desktopLyrics from '../windows/desktopLyrics'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData } from '../../shared/types/lyrics'
@@ -59,6 +60,19 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         mainWindow.center()
       }
     }
+  })
+
+  // 桌面歌词控制
+  ipcMain.handle('toggle-desktop-lyrics', () => {
+    return desktopLyrics.toggleDesktopLyricsWindow()
+  })
+
+  ipcMain.handle('set-desktop-lyrics-locked', (_, locked: boolean) => {
+    desktopLyrics.setDesktopLyricsLocked(locked)
+  })
+
+  ipcMain.handle('is-desktop-lyrics-open', () => {
+    return desktopLyrics.isDesktopLyricsOpen()
   })
 
   // 文件操作（部分不依赖数据库）

@@ -12,17 +12,64 @@
     </div>
 
     <div class="header-center">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="搜索音乐、艺术家、专辑..."
-          @keyup.enter="handleSearch"
-        />
-        <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-          <span>×</span>
-        </button>
+      <div class="search-wrapper" @keydown="handleSearchKeydown">
+        <div class="search-box" :class="{ focused: showDropdown }">
+          <span class="search-icon">🔍</span>
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索音乐、艺术家、专辑..."
+            @keyup.enter="handleSearch"
+            @focus="handleSearchFocus"
+            @blur="handleSearchBlur"
+            @input="handleSearchInput"
+          />
+          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+            <span>×</span>
+          </button>
+        </div>
+
+        <!-- Search Dropdown -->
+        <div v-if="showDropdown" class="search-dropdown">
+          <!-- Search History -->
+          <div v-if="searchHistory.length > 0 && !searchQuery" class="dropdown-section">
+            <div class="section-header">
+              <span>搜索历史</span>
+              <button class="clear-history-btn" @click="clearHistory">清除</button>
+            </div>
+            <div
+              v-for="(item, index) in searchHistory.slice(0, 5)"
+              :key="'history-' + index"
+              class="dropdown-item"
+              :class="{ selected: selectedIndex === index }"
+              @mousedown.prevent="selectHistoryItem(item)"
+            >
+              <span class="item-icon">🕐</span>
+              <span class="item-text">{{ item.keyword }}</span>
+            </div>
+          </div>
+
+          <!-- Search Suggestions -->
+          <div v-if="searchSuggestions.length > 0 && searchQuery" class="dropdown-section">
+            <div class="section-header">搜索建议</div>
+            <div
+              v-for="(suggestion, index) in searchSuggestions.slice(0, 5)"
+              :key="'suggestion-' + index"
+              class="dropdown-item"
+              :class="{ selected: selectedIndex === index }"
+              @mousedown.prevent="selectSuggestion(suggestion)"
+            >
+              <span class="item-icon">🔍</span>
+              <span class="item-text">{{ suggestion }}</span>
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <div v-if="searchQuery && searchSuggestions.length === 0" class="dropdown-empty">
+            暂无搜索建议
+          </div>
+        </div>
       </div>
     </div>
 
@@ -55,14 +102,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const searchQuery = ref('')
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const showDropdown = ref(false)
+const searchSuggestions = ref<string[]>([])
+const searchHistory = ref<any[]>([])
+const selectedIndex = ref(-1)
 const theme = ref<'light' | 'dark'>('light')
-// Check if running on Mac by checking user agent
 const isMac = ref(navigator.userAgent.includes('Mac'))
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const canGoBack = computed(() => router.options.history.state.back !== null)
 const canGoForward = computed(() => router.options.history.state.forward !== null)
@@ -79,8 +131,49 @@ const goForward = () => {
   }
 }
 
+const handleSearchInput = () => {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+  }
+
+  debounceTimer = setTimeout(async () => {
+    if (searchQuery.value.trim().length >= 2) {
+      try {
+        searchSuggestions.value = await window.electronAPI.getSearchSuggestions(searchQuery.value)
+      } catch (error) {
+        console.error('Failed to get search suggestions:', error)
+      }
+    } else {
+      searchSuggestions.value = []
+    }
+    selectedIndex.value = -1
+  }, 300)
+}
+
+const handleSearchFocus = async () => {
+  showDropdown.value = true
+
+  // Load search history when focusing
+  if (!searchQuery.value) {
+    try {
+      searchHistory.value = await window.electronAPI.getSearchHistory()
+    } catch (error) {
+      console.error('Failed to load search history:', error)
+    }
+  }
+}
+
+const handleSearchBlur = () => {
+  // Delay to allow click on dropdown items
+  setTimeout(() => {
+    showDropdown.value = false
+    selectedIndex.value = -1
+  }, 200)
+}
+
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
+    showDropdown.value = false
     router.push({
       name: 'Search',
       query: { q: searchQuery.value }
@@ -90,6 +183,53 @@ const handleSearch = () => {
 
 const clearSearch = () => {
   searchQuery.value = ''
+  searchSuggestions.value = []
+  searchInputRef.value?.focus()
+}
+
+const selectSuggestion = (suggestion: string) => {
+  searchQuery.value = suggestion
+  handleSearch()
+}
+
+const selectHistoryItem = (item: any) => {
+  searchQuery.value = item.keyword
+  handleSearch()
+}
+
+const clearHistory = async () => {
+  try {
+    await window.electronAPI.clearSearchHistory()
+    searchHistory.value = []
+  } catch (error) {
+    console.error('Failed to clear search history:', error)
+  }
+}
+
+const handleSearchKeydown = (e: KeyboardEvent) => {
+  if (!showDropdown.value) return
+
+  const itemCount = searchQuery.value
+    ? searchSuggestions.value.length
+    : searchHistory.value.length
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    selectedIndex.value = (selectedIndex.value + 1) % itemCount
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    selectedIndex.value = selectedIndex.value <= 0 ? itemCount - 1 : selectedIndex.value - 1
+  } else if (e.key === 'Enter' && selectedIndex.value >= 0) {
+    e.preventDefault()
+    if (searchQuery.value && searchSuggestions.value[selectedIndex.value]) {
+      selectSuggestion(searchSuggestions.value[selectedIndex.value])
+    } else if (!searchQuery.value && searchHistory.value[selectedIndex.value]) {
+      selectHistoryItem(searchHistory.value[selectedIndex.value])
+    }
+  } else if (e.key === 'Escape') {
+    showDropdown.value = false
+    searchInputRef.value?.blur()
+  }
 }
 
 const toggleTheme = async () => {
@@ -121,10 +261,10 @@ const closeWindow = () => {
 }
 
 // 初始化主题
-;(async () => {
+onMounted(async () => {
   const settings = await window.electronAPI.getSettings()
   theme.value = settings?.theme || 'light'
-})()
+})
 </script>
 
 <style scoped>
@@ -195,9 +335,13 @@ const closeWindow = () => {
 }
 
 /* 搜索框 */
-.search-box {
+.search-wrapper {
   flex: 1;
   max-width: 500px;
+  position: relative;
+}
+
+.search-box {
   height: 40px;
   background: var(--bg-secondary);
   border-radius: var(--radius-full);
@@ -209,7 +353,7 @@ const closeWindow = () => {
   transition: all var(--transition-base) var(--transition-timing);
 }
 
-.search-box:focus-within {
+.search-box.focused {
   background: var(--hover-bg);
   box-shadow: 0 0 0 2px var(--color-primary);
 }
@@ -251,6 +395,91 @@ const closeWindow = () => {
 .clear-btn:hover {
   background: var(--active-bg);
   color: var(--text-color);
+}
+
+/* 搜索下拉菜单 */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 1000;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dropdown-section {
+  padding: var(--spacing-sm) 0;
+}
+
+.dropdown-section + .dropdown-section {
+  border-top: 1px solid var(--border-color);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.clear-history-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.clear-history-btn:hover {
+  background: var(--hover-bg);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.dropdown-item:hover,
+.dropdown-item.selected {
+  background: var(--hover-bg);
+}
+
+.item-icon {
+  font-size: var(--font-size-base);
+  opacity: 0.6;
+}
+
+.item-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-empty {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
 }
 
 /* Header按钮 */

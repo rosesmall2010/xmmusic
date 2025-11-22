@@ -8,6 +8,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: 'blank' }
   },
   {
+    path: '/desktop-lyrics',
+    name: 'DesktopLyrics',
+    component: () => import('@/views/DesktopLyricsWindow.vue'),
+    meta: { layout: 'blank' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/discover'
   },

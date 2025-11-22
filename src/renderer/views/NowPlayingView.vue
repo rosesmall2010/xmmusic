@@ -8,6 +8,9 @@
       </button>
 
       <div class="actions">
+        <button class="btn-action" @click="toggleDesktopLyrics" title="桌面歌词">
+          <span class="icon">🖥️</span>
+        </button>
         <button class="btn-action" @click="toggleQueue" title="播放队列">
           <span class="icon">📋</span>
         </button>
@@ -281,6 +284,10 @@ const toggleFavorite = async () => {
 const toggleQueue = () => {
   // TODO: 实现队列显示
   console.log('Toggle queue')
+}
+
+const toggleDesktopLyrics = async () => {
+  await window.electronAPI.toggleDesktopLyrics()
 }
 
 const toggleLyrics = () => {

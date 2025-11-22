@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   setMiniMode: (enabled: boolean) => ipcRenderer.invoke('set-mini-mode', enabled),
+  toggleDesktopLyrics: () => ipcRenderer.invoke('toggle-desktop-lyrics'),
+  setDesktopLyricsLocked: (locked: boolean) => ipcRenderer.invoke('set-desktop-lyrics-locked', locked),
+  isDesktopLyricsOpen: () => ipcRenderer.invoke('is-desktop-lyrics-open'),
 
   // 文件操作
   selectMusicFolder: () => ipcRenderer.invoke('select-music-folder'),

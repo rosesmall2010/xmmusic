@@ -4,6 +4,9 @@ export interface ElectronAPI {
   maximizeWindow: () => void
   closeWindow: () => void
   setMiniMode: (enabled: boolean) => Promise<void>
+  toggleDesktopLyrics: () => Promise<boolean>
+  setDesktopLyricsLocked: (locked: boolean) => Promise<void>
+  isDesktopLyricsOpen: () => Promise<boolean>
 
   // 文件操作
   selectMusicFolder: () => Promise<string[]>
