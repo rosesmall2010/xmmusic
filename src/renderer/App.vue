@@ -1,23 +1,35 @@
 <template>
   <div id="app" :class="theme">
-    <AppHeader />
-    <div class="app-body">
-      <AppSidebar />
-      <main class="app-content">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </main>
-    </div>
-    <PlayerBar @toggle-queue="toggleQueue" />
+    <template v-if="!isBlankLayout">
+      <AppHeader />
+      <div class="app-body">
+        <AppSidebar />
+        <main class="app-content">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </main>
+      </div>
+      <PlayerBar @toggle-queue="toggleQueue" />
+    </template>
+
+    <template v-else>
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </template>
+
     <PlayQueueDrawer v-model:visible="showQueue" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import PlayerBar from '@/components/layout/PlayerBar.vue'
@@ -25,10 +37,13 @@ import PlayQueueDrawer from '@/components/layout/PlayQueueDrawer.vue'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 
+const route = useRoute()
 const theme = ref('light')
 const showQueue = ref(false)
 const playerStore = usePlayerStore()
 const player = usePlayer()
+
+const isBlankLayout = computed(() => route.meta.layout === 'blank')
 
 const toggleQueue = () => {
   showQueue.value = !showQueue.value
