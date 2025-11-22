@@ -19,7 +19,8 @@
       <div class="cover-section">
         <div class="cover-wrapper" :class="{ playing: isPlaying }">
           <img v-if="currentMusic?.coverPath" :src="getCoverUrl(currentMusic.coverPath)" alt="cover" />
-          <div v-else class="default-cover">🎵</div>
+          <div v-else class="default-cover">
+            <Music :size="48" />
         </div>
       </div>
 
@@ -37,11 +38,14 @@
 
       <!-- 控制栏 -->
       <div class="controls-section">
-        <button class="control-btn" @click="previous">⏮</button>
+        <button class="control-btn" @click="previous">
+          <SkipBack :size="20" />
         <button class="control-btn play-btn" @click="togglePlay">
-          {{ isPlaying ? '⏸' : '▶' }}
+          <Play v-if="!isPlaying" :size="24" />
+          <Pause v-else :size="24" />
         </button>
-        <button class="control-btn" @click="next">⏭</button>
+        <button class="control-btn" @click="next">
+          <SkipForward :size="20" />
       </div>
     </div>
   </div>
@@ -53,6 +57,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
+import { SkipBack, Play, Pause, SkipForward, Music } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()

@@ -22,7 +22,8 @@
         >
           <div class="cover-container">
             <div class="cover-placeholder">🎵</div>
-            <div class="play-overlay">▶</div>
+            <div class="play-overlay">
+              <Play :size="32" />
           </div>
           <div class="playlist-info">
             <h3 class="playlist-name">{{ playlist.name }}</h3>
@@ -33,7 +34,7 @@
 
       <div v-else class="empty-state">
         <div class="empty-placeholder">
-          <span class="icon">🎶</span>
+          <Heart :size="20" class="icon" />
           <p>还没有创建歌单</p>
           <button class="btn-link" @click="showCreateModal = true">创建一个吧</button>
         </div>
