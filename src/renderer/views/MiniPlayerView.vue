@@ -40,15 +40,18 @@
       <div class="controls-section">
         <button class="control-btn" @click="previous">
           <SkipBack :size="20" />
+        </button>
         <button class="control-btn play-btn" @click="togglePlay">
           <Play v-if="!isPlaying" :size="24" />
           <Pause v-else :size="24" />
         </button>
         <button class="control-btn" @click="next">
           <SkipForward :size="20" />
+        </button>
       </div>
     </div>
   </div>
+</template>
 </template>
 
 <script setup lang="ts">

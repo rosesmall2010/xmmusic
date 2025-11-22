@@ -24,6 +24,7 @@
             <div class="cover-placeholder">🎵</div>
             <div class="play-overlay">
               <Play :size="32" />
+            </div>
           </div>
           <div class="playlist-info">
             <h3 class="playlist-name">{{ playlist.name }}</h3>
@@ -32,9 +33,9 @@
         </div>
       </div>
 
-      <div v-else class="empty-state">
+      <div v-if="playlists.length === 0" class="empty-state">
         <div class="empty-placeholder">
-          <Heart :size="20" class="icon" />
+          <Heart :size="48" class="icon" />
           <p>还没有创建歌单</p>
           <button class="btn-link" @click="showCreateModal = true">创建一个吧</button>
         </div>
@@ -51,6 +52,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { Play, Heart } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 
 const router = useRouter()
