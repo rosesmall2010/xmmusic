@@ -21,6 +21,7 @@
           <img v-if="currentMusic?.coverPath" :src="getCoverUrl(currentMusic.coverPath)" alt="cover" />
           <div v-else class="default-cover">
             <Music :size="48" />
+          </div>
         </div>
       </div>
 
