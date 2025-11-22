@@ -3,26 +3,40 @@
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#ff4757;stop-opacity:1" />
+          <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
         </linearGradient>
+        <radialGradient id="vinylGradient" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:0.3" />
+          <stop offset="70%" style="stop-color:#000000;stop-opacity:0.1" />
+          <stop offset="100%" style="stop-color:#000000;stop-opacity:0" />
+        </radialGradient>
       </defs>
 
-      <!-- 背景 -->
+      <!-- Background -->
       <rect width="100" height="100" fill="url(#bgGradient)" />
 
-      <!-- 音符 -->
-      <g fill="white" opacity="0.9">
-        <!-- 第一个音符 -->
-        <circle cx="35" cy="65" r="8" />
-        <circle cx="42" cy="63" r="8" />
-        <rect x="42" y="35" width="3" height="28" />
-        <path d="M 42 35 Q 55 32 55 38 L 55 45 Q 55 40 42 42 Z" />
+      <!-- Vinyl Record Effect -->
+      <circle cx="50" cy="50" r="40" fill="url(#vinylGradient)" opacity="0.4" />
+      <circle cx="50" cy="50" r="35" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
+      <circle cx="50" cy="50" r="25" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
+      <circle cx="50" cy="50" r="15" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
 
-        <!-- 第二个音符 -->
-        <circle cx="60" cy="70" r="6" />
-        <rect x="65" y="45" width="2.5" height="25" />
+      <!-- Center Music Icon -->
+      <g transform="translate(50, 50)" fill="white" opacity="0.9">
+        <!-- Music Note -->
+        <circle cx="-8" cy="8" r="4" />
+        <circle cx="0" cy="6" r="4" />
+        <rect x="0" y="-8" width="1.5" height="14" />
+        <path d="M 0 -8 Q 8 -10 8 -6 L 8 0 Q 8 -4 0 -3 Z" />
+
+        <!-- Second Note -->
+        <circle cx="10" cy="10" r="3" />
+        <rect x="13" y="-2" width="1.2" height="12" />
       </g>
+
+      <!-- Shine Effect -->
+      <circle cx="30" cy="30" r="8" fill="white" opacity="0.1" />
     </svg>
   </div>
 </template>
@@ -51,20 +65,27 @@ const coverClasses = computed(() => ({
 .default-cover {
   width: 50px;
   height: 50px;
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.default-cover:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .default-cover.small {
   width: 40px;
   height: 40px;
+  border-radius: 4px;
 }
 
 .default-cover.large {
   width: 150px;
   height: 150px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .default-cover.fill {
