@@ -3,10 +3,10 @@
     <div class="header-left">
       <div class="nav-buttons">
         <button class="nav-btn" @click="goBack" :disabled="!canGoBack" title="后退">
-          <span class="icon">←</span>
+          <ChevronLeft :size="20" />
         </button>
         <button class="nav-btn" @click="goForward" :disabled="!canGoForward" title="前进">
-          <span class="icon">→</span>
+          <ChevronRight :size="20" />
         </button>
       </div>
     </div>
@@ -75,15 +75,16 @@
 
     <div class="header-right">
       <button class="header-btn" @click="toggleMiniMode" title="迷你模式">
-        <span class="icon">🖥️</span>
+        <Minimize2 :size="18" />
       </button>
 
       <button class="header-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'">
-        <span class="icon">{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+        <Moon v-if="theme === 'light'" :size="18" />
+        <Sun v-else :size="18" />
       </button>
 
       <button class="header-btn" @click="openSettings" title="设置">
-        <span class="icon">⚙️</span>
+        <Settings :size="18" />
       </button>
 
       <div class="window-controls" v-if="!isMac">
@@ -104,6 +105,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2 } from 'lucide-vue-next'
 
 const router = useRouter()
 const searchQuery = ref('')

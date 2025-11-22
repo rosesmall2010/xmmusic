@@ -7,25 +7,25 @@
       <h2 class="section-title">智能推荐</h2>
       <div class="recommendation-grid">
         <div class="recommendation-card" @click="goToRecent">
-          <div class="card-icon">🕐</div>
+          <div class="card-icon"><Clock :size="48" stroke-width="1.5" /></div>
           <h3>最近播放</h3>
           <p>{{ recentCount }} 首歌曲</p>
         </div>
 
         <div class="recommendation-card" @click="goToFavorites">
-          <div class="card-icon">❤️</div>
+          <div class="card-icon"><Heart :size="48" stroke-width="1.5" /></div>
           <h3>我喜欢</h3>
           <p>{{ favoritesCount }} 首歌曲</p>
         </div>
 
         <div class="recommendation-card" @click="goToLocalMusic">
-          <div class="card-icon">📁</div>
+          <div class="card-icon"><Folder :size="48" stroke-width="1.5" /></div>
           <h3>本地音乐</h3>
           <p>{{ totalCount }} 首歌曲</p>
         </div>
 
         <div class="recommendation-card">
-          <div class="card-icon">🎲</div>
+          <div class="card-icon"><Shuffle :size="48" stroke-width="1.5" /></div>
           <h3>随机播放</h3>
           <p>打乱播放所有歌曲</p>
         </div>
@@ -65,6 +65,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
+import { Clock, Heart, Folder, Shuffle } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 
 const router = useRouter()
@@ -174,8 +175,10 @@ const playMusic = async (music: MusicItem) => {
 }
 
 .card-icon {
-  font-size: 3rem;
+  color: var(--color-primary);
   margin-bottom: var(--spacing-md);
+  display: flex;
+  justify-content: center;
 }
 
 .recommendation-card h3 {
