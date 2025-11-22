@@ -44,7 +44,7 @@
         >
           <div class="music-cover">
             <DefaultCover v-if="!music.coverPath" size="small" />
-            <img v-else :src="music.coverPath" alt="封面" />
+            <img v-else :src="getCoverUrl(music.coverPath)" alt="封面" />
             <div class="play-overlay">▶</div>
           </div>
           <div class="music-info">
@@ -64,6 +64,7 @@ import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
 
 const router = useRouter()
