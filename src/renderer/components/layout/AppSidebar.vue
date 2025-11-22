@@ -84,7 +84,6 @@ import { useRouter } from 'vue-router'
 import { Music, Folder, Heart, Clock } from 'lucide-vue-next'
 
 const router = useRouter()
-const route = useRoute()
 const totalCount = ref(0)
 const playlists = ref<any[]>([])
 
