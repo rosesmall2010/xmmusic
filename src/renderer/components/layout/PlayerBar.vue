@@ -26,15 +26,30 @@
     <!-- 中间：播放控制 -->
     <div class="player-center">
       <div class="playback-controls">
-        <button class="control-btn" @click="previous" title="上一首">
+        <button
+          class="control-btn"
+          @click="previous"
+          title="上一首"
+          :disabled="!hasMusic"
+        >
           <span class="icon">⏮</span>
         </button>
 
-        <button class="control-btn play-btn" @click="togglePlay" title="播放/暂停">
+        <button
+          class="control-btn play-btn"
+          @click="togglePlay"
+          title="播放/暂停"
+          :disabled="!hasMusic && queue.length === 0"
+        >
           <span class="icon" :style="!isPlaying ? { marginLeft: '4px' } : {}">{{ isPlaying ? '⏸' : '▶' }}</span>
         </button>
 
-        <button class="control-btn" @click="next" title="下一首">
+        <button
+          class="control-btn"
+          @click="next"
+          title="下一首"
+          :disabled="!hasMusic"
+        >
           <span class="icon">⏭</span>
         </button>
 
@@ -54,6 +69,7 @@
       <div class="progress-section">
         <span class="time">{{ formatTime(currentTime) }}</span>
         <div class="progress-bar" @click="handleSeek">
+          <div class="progress-bg"></div>
           <div class="progress-fill" :style="{ width: progressPercentage + '%' }">
             <div class="progress-thumb"></div>
           </div>
@@ -106,6 +122,8 @@ const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
 const playMode = computed(() => playerStore.playMode)
+const queue = computed(() => playerStore.queue)
+const hasMusic = computed(() => !!currentMusic.value || queue.value.length > 0)
 
 const progressPercentage = computed(() => {
   if (!duration.value) return 0
@@ -359,8 +377,14 @@ volumeValue.value = playerStore.volume
   font-size: 1.5rem;
 }
 
-.control-btn:hover {
+.control-btn:hover:not(:disabled) {
   background: var(--hover-bg);
+  transform: scale(1.1);
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .play-btn {
@@ -369,11 +393,13 @@ volumeValue.value = playerStore.volume
   background: var(--color-primary);
   color: white;
   font-size: 2rem;
+  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
 }
 
-.play-btn:hover {
+.play-btn:hover:not(:disabled) {
   background: var(--color-primary-light);
   transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(var(--color-primary-rgb), 0.4);
 }
 
 .control-icon-btn {
@@ -393,6 +419,7 @@ volumeValue.value = playerStore.volume
 
 .control-icon-btn:hover {
   background: var(--hover-bg);
+  color: var(--text-color);
 }
 
 .control-icon-btn.active {
@@ -412,41 +439,52 @@ volumeValue.value = playerStore.volume
   color: var(--text-secondary);
   min-width: 40px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .progress-bar {
   flex: 1;
   height: 4px;
-  background: var(--border-color);
   border-radius: var(--radius-full);
   cursor: pointer;
   position: relative;
+  padding: 6px 0; /* 增加点击区域 */
+  display: flex;
+  align-items: center;
+}
+
+.progress-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: var(--radius-full);
 }
 
 .progress-fill {
-  height: 100%;
+  height: 4px;
   background: var(--color-primary);
   border-radius: var(--radius-full);
   position: relative;
-  transition: width 100ms linear;
+  z-index: 1;
 }
 
 .progress-thumb {
   position: absolute;
   right: -6px;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translateY(-50%) scale(0);
   width: 12px;
   height: 12px;
   background: white;
   border-radius: 50%;
-  box-shadow: var(--shadow-sm);
-  opacity: 0;
-  transition: opacity var(--transition-base) var(--transition-timing);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .progress-bar:hover .progress-thumb {
-  opacity: 1;
+  transform: translateY(-50%) scale(1);
 }
 
 /* 音量控制 */

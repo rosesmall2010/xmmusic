@@ -44,9 +44,7 @@
       </div>
     </div>
   </Transition>
-  <Transition name="fade">
-    <div v-if="visible" class="drawer-overlay" @click="close"></div>
-  </Transition>
+
 </template>
 
 <script setup lang="ts">
@@ -129,15 +127,7 @@ const scrollToCurrent = () => {
   border-left: 1px solid var(--border-color);
 }
 
-.drawer-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: var(--footer-height);
-  background: rgba(0, 0, 0, 0.3);
-  z-index: var(--z-drawer-overlay);
-}
+
 
 .drawer-header {
   padding: var(--spacing-md) var(--spacing-lg);
