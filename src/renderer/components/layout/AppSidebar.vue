@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Music, Folder, Heart, Clock } from 'lucide-vue-next'
 
@@ -120,12 +120,26 @@ onMounted(async () => {
   }
 
   // 加载歌单列表
+  await loadPlaylists()
+
+  // 监听歌单更新事件
+  window.addEventListener('playlist-updated', loadPlaylists)
+  window.addEventListener('song-added-to-playlist', loadPlaylists)
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  window.removeEventListener('playlist-updated', loadPlaylists)
+  window.removeEventListener('song-added-to-playlist', loadPlaylists)
+})
+
+const loadPlaylists = async () => {
   try {
     playlists.value = await window.electronAPI.getPlaylists()
   } catch (error) {
     console.error('Failed to load playlists:', error)
   }
-})
+}
 
 const createPlaylist = () => {
   router.push('/playlists')

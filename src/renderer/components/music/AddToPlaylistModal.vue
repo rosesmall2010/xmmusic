@@ -82,7 +82,8 @@ const selectPlaylist = async (playlist: any) => {
 
   try {
     await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
-    // TODO: Show success toast
+    // 触发全局事件通知歌单更新
+    window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
     emit('added')
     close()
   } catch (error) {
