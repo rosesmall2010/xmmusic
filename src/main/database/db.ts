@@ -681,7 +681,9 @@ export default class MusicDatabase {
   }
 
   getPlaylists(): Playlist[] {
-    const stmt = this.db!.prepare('SELECT * FROM playlist ORDER BY created_at DESC')
+    const stmt = this.db!.prepare(
+      'SELECT * FROM playlist ORDER BY display_order ASC, created_at DESC'
+    )
     const rows = stmt.all() as any[]
     return rows.map(this.mapRowToPlaylist)
   }
