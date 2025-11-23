@@ -115,6 +115,38 @@ export default class MusicDatabase {
       }
     }
 
+    // 执行收藏表迁移
+    try {
+      const favoritesPath = join(__dirname, 'migrations', '004_create_favorites_table.sql')
+      if (existsSync(favoritesPath)) {
+        const sql = readFileSync(favoritesPath, 'utf8')
+        this.db!.exec(sql)
+      }
+    } catch (error: any) {
+      // 表可能已存在
+      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('already exists')) {
+        console.error('Favorites table migration error:', error)
+      }
+    }
+
+    // 执行歌单增强迁移
+    try {
+      const playlistEnhancementsPath = join(
+        __dirname,
+        'migrations',
+        '005_playlist_enhancements.sql'
+      )
+      if (existsSync(playlistEnhancementsPath)) {
+        const sql = readFileSync(playlistEnhancementsPath, 'utf8')
+        this.db!.exec(sql)
+      }
+    } catch (error: any) {
+      // 列可能已存在
+      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('duplicate column')) {
+        console.error('Playlist enhancements migration error:', error)
+      }
+    }
+
     // 执行播放列表迁移（从 music_id 改为 file_path）
     try {
       // 检查 playlist_item 表是否存在
