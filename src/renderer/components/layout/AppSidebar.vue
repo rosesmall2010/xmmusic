@@ -56,7 +56,7 @@
           class="nav-item"
           active-class="active"
         >
-          <span class="nav-icon">🎵</span>
+          <ListMusic :size="20" class="nav-icon" />
           <span class="nav-label">{{ playlist.name }}</span>
           <span class="nav-count">{{ playlist.songCount }}</span>
         </router-link>
@@ -81,7 +81,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Music, Folder, Heart, Clock } from 'lucide-vue-next'
+import { Music, Folder, Heart, Clock, ListMusic } from 'lucide-vue-next'
 
 const router = useRouter()
 const totalCount = ref(0)

@@ -1,5 +1,5 @@
 <template>
-  <div class="mini-player">
+  <div class="mini-player" :class="{ 'has-cover': !!currentMusic?.coverPath }">
     <!-- 背景模糊 -->
     <div class="background-layer" :style="backgroundStyle"></div>
     <div class="overlay-layer"></div>
@@ -9,7 +9,7 @@
       <div class="drag-region"></div>
       <div class="window-controls">
         <button class="control-btn close" @click="exitMiniMode" title="退出迷你模式">
-          <span>↗</span>
+          <Maximize2 :size="20" />
         </button>
       </div>
     </div>
@@ -60,7 +60,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Music } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Music, Maximize2 } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -82,7 +82,7 @@ const backgroundStyle = computed(() => {
       backgroundImage: `url(${getCoverUrl(currentMusic.value.coverPath)})`
     }
   }
-  return { background: '#2c3e50' }
+  return {}
 })
 
 const exitMiniMode = async () => {
@@ -141,8 +141,15 @@ const handleSeek = (e: MouseEvent) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  color: white;
+  color: var(--text-color);
+  background: var(--bg-color);
   user-select: none;
+  transition: all 0.3s ease;
+}
+
+.mini-player.has-cover {
+  color: white;
+  background: #2c3e50; /* Fallback */
 }
 
 .background-layer {
@@ -155,6 +162,12 @@ const handleSeek = (e: MouseEvent) => {
   background-position: center;
   filter: blur(20px) brightness(0.6);
   z-index: -2;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.mini-player.has-cover .background-layer {
+  opacity: 1;
 }
 
 .overlay-layer {
@@ -165,6 +178,11 @@ const handleSeek = (e: MouseEvent) => {
   bottom: 0;
   background: rgba(0, 0, 0, 0.2);
   z-index: -1;
+  opacity: 0;
+}
+
+.mini-player.has-cover .overlay-layer {
+  opacity: 1;
 }
 
 .mini-header {
@@ -193,15 +211,25 @@ const handleSeek = (e: MouseEvent) => {
 .control-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-color);
   cursor: pointer;
   padding: 4px;
   font-size: 14px;
   transition: color 0.2s;
 }
 
+.mini-player.has-cover .control-btn {
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
 .control-btn:hover {
+  opacity: 0.8;
+}
+
+.mini-player.has-cover .control-btn:hover {
   color: white;
+  opacity: 1;
 }
 
 .mini-content {
@@ -224,7 +252,7 @@ const handleSeek = (e: MouseEvent) => {
   height: 100%;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
 }
 
 .cover-wrapper img {
@@ -236,11 +264,17 @@ const handleSeek = (e: MouseEvent) => {
 .default-cover {
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 48px;
+  color: var(--text-secondary);
+}
+
+.mini-player.has-cover .default-cover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
 }
 
 .info-section {
@@ -259,19 +293,27 @@ const handleSeek = (e: MouseEvent) => {
 
 .music-artist {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.mini-player.has-cover .music-artist {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .progress-section {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--bg-secondary);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
+}
+
+.mini-player.has-cover .progress-section {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .progress-section:hover {
@@ -299,21 +341,25 @@ const handleSeek = (e: MouseEvent) => {
 
 .control-btn {
   font-size: 24px;
-  color: white;
-  opacity: 0.9;
 }
 
 .play-btn {
   font-size: 40px;
   width: 56px;
   height: 56px;
-  background: white;
-  color: black;
+  background: var(--text-color);
+  color: var(--bg-color);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 1;
+  box-shadow: var(--shadow-md);
+}
+
+.mini-player.has-cover .play-btn {
+  background: white;
+  color: black;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 

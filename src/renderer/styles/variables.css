@@ -16,30 +16,50 @@
   --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 
   /* 字体大小 */
-  --font-size-xs: 0.75rem;    /* 12px */
-  --font-size-sm: 0.875rem;   /* 14px */
-  --font-size-base: 1rem;     /* 16px */
-  --font-size-lg: 1.125rem;   /* 18px */
-  --font-size-xl: 1.25rem;    /* 20px */
-  --font-size-2xl: 1.5rem;    /* 24px */
-  --font-size-3xl: 1.875rem;  /* 30px */
-  --font-size-4xl: 2.25rem;   /* 36px */
+  --font-size-xs: 0.75rem;
+  /* 12px */
+  --font-size-sm: 0.875rem;
+  /* 14px */
+  --font-size-base: 1rem;
+  /* 16px */
+  --font-size-lg: 1.125rem;
+  /* 18px */
+  --font-size-xl: 1.25rem;
+  /* 20px */
+  --font-size-2xl: 1.5rem;
+  /* 24px */
+  --font-size-3xl: 1.875rem;
+  /* 30px */
+  --font-size-4xl: 2.25rem;
+  /* 36px */
 
   /* 间距 */
-  --spacing-xs: 0.25rem;   /* 4px */
-  --spacing-sm: 0.5rem;    /* 8px */
-  --spacing-md: 0.75rem;   /* 12px */
-  --spacing-base: 1rem;    /* 16px */
-  --spacing-lg: 1.5rem;    /* 24px */
-  --spacing-xl: 2rem;      /* 32px */
-  --spacing-2xl: 3rem;     /* 48px */
+  --spacing-xs: 0.25rem;
+  /* 4px */
+  --spacing-sm: 0.5rem;
+  /* 8px */
+  --spacing-md: 0.75rem;
+  /* 12px */
+  --spacing-base: 1rem;
+  /* 16px */
+  --spacing-lg: 1.5rem;
+  /* 24px */
+  --spacing-xl: 2rem;
+  /* 32px */
+  --spacing-2xl: 3rem;
+  /* 48px */
 
   /* 圆角 */
-  --radius-sm: 0.25rem;    /* 4px */
-  --radius-base: 0.5rem;   /* 8px */
-  --radius-md: 0.75rem;    /* 12px */
-  --radius-lg: 1rem;       /* 16px */
-  --radius-xl: 1.5rem;     /* 24px */
+  --radius-sm: 0.25rem;
+  /* 4px */
+  --radius-base: 0.5rem;
+  /* 8px */
+  --radius-md: 0.75rem;
+  /* 12px */
+  --radius-lg: 1rem;
+  /* 16px */
+  --radius-xl: 1.5rem;
+  /* 24px */
   --radius-full: 9999px;
 
   /* 阴影 */
@@ -121,6 +141,13 @@
   /* 卡片 */
   --card-bg: #ffffff;
   --card-shadow: var(--shadow-base);
+
+  /* 缺失变量补充 */
+  --bg-primary: var(--bg-color);
+  --bg-elevated: #ffffff;
+  --text-primary: var(--text-color);
+  --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
+  --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
 }
 
 /* ==================== 深色主题 ==================== */
@@ -172,6 +199,13 @@
   /* 卡片 */
   --card-bg: #2d2d2d;
   --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.18);
+
+  /* 缺失变量补充 */
+  --bg-primary: var(--bg-color);
+  --bg-elevated: #2d2d2d;
+  --text-primary: var(--text-color);
+  --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
+  --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
 }
 
 /* ==================== 全局样式 ==================== */
@@ -267,6 +301,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -276,6 +311,7 @@ body {
   from {
     opacity: 1;
   }
+
   to {
     opacity: 0;
   }
@@ -287,6 +323,7 @@ body {
     transform: translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -298,6 +335,7 @@ body {
     transform: translateY(-20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -310,6 +348,7 @@ body {
     transform: scale(0.95);
     opacity: 0;
   }
+
   to {
     transform: scale(1);
     opacity: 1;

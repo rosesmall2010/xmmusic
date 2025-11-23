@@ -104,6 +104,7 @@ const handleCreatePlaylist = async (name: string) => {
   try {
     await window.electronAPI.createPlaylist(name)
     await loadPlaylists()
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to create playlist:', error)
   }
@@ -122,6 +123,7 @@ const handleDragEnd = async () => {
   try {
     const playlistIds = playlists.value.map(p => p.id)
     await window.electronAPI.updatePlaylistOrder(playlistIds)
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to update playlist order:', error)
   }

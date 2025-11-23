@@ -16,8 +16,8 @@
       <SongList :songs="songs" @play="playMusic">
         <template #empty>
           <div class="empty-placeholder">
-            <span class="icon">🕐</span>
-            <p>暂无播放记录</p>
+            <Clock :size="48" class="icon" />
+            <p>还没有播放记录</p>
             <p class="sub-text">去听听歌吧</p>
           </div>
         </template>
@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Clock } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'

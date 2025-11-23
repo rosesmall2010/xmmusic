@@ -16,7 +16,7 @@
       <SongList :songs="songs" @play="playMusic">
         <template #empty>
           <div class="empty-placeholder">
-            <span class="icon">❤️</span>
+            <Heart :size="48" class="icon" />
             <p>还没有收藏任何歌曲</p>
             <p class="sub-text">在播放时点击爱心图标即可收藏</p>
           </div>
@@ -28,6 +28,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Heart } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'

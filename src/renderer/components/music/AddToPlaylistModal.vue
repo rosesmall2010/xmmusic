@@ -49,6 +49,7 @@ import type { MusicItem } from '@shared/types/music'
 const props = defineProps<{
   modelValue: boolean
   musicToAd?: MusicItem | null
+  musicListToAd?: MusicItem[]
 }>()
 
 const emit = defineEmits<{
@@ -78,10 +79,19 @@ const close = () => {
 }
 
 const selectPlaylist = async (playlist: any) => {
-  if (!props.musicToAd) return
+  if (!props.musicToAd && !props.musicListToAd) return
 
   try {
-    await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
+    if (props.musicListToAd && props.musicListToAd.length > 0) {
+      // 批量添加
+      const filePaths = props.musicListToAd.map(m => m.filePath)
+      const result = await window.electronAPI.batchAddToPlaylist(playlist.id, filePaths)
+      console.log(`Batch added ${result.added} songs`)
+    } else if (props.musicToAd) {
+      // 单个添加
+      await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
+    }
+
     // 触发全局事件通知歌单更新
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
     emit('added')
@@ -96,6 +106,7 @@ const handleCreatePlaylist = async (name: string) => {
   try {
     await window.electronAPI.createPlaylist(name)
     await loadPlaylists()
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to create playlist:', error)
   }

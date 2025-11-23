@@ -3,7 +3,13 @@
     <div class="page-header" v-if="playlist">
       <div class="header-content">
         <div class="playlist-cover">
-          <span class="icon">🎵</span>
+          <img
+            v-if="playlistCover"
+            :src="playlistCover"
+            class="cover-image"
+            @error="handleCoverError"
+          />
+          <Music v-else :size="64" class="icon" />
         </div>
         <div class="playlist-info">
           <h1 class="page-title">{{ playlist.name }}</h1>
@@ -28,20 +34,23 @@
     </div>
 
     <div class="content">
-      <SongList
-        :songs="songs"
-        :show-remove-from-playlist="true"
-        @play="playMusic"
-        @remove-from-playlist="removeSong"
-      >
-        <template #empty>
-          <div class="empty-placeholder">
-            <span class="icon">🎵</span>
-            <p>歌单还是空的</p>
-            <p class="sub-text">去添加一些歌曲吧</p>
-          </div>
-        </template>
-      </SongList>
+        <SongList
+          v-if="playlist"
+          :songs="songs"
+          :show-remove-from-playlist="true"
+          :playlist-id="playlist.id"
+          @play="playMusic"
+          @remove-from-playlist="removeSong"
+          @songs-updated="loadPlaylist"
+        >
+          <template #empty>
+            <div class="empty-placeholder">
+              <span class="icon">🎵</span>
+              <p>歌单还是空的</p>
+              <p class="sub-text">去添加一些歌曲吧</p>
+            </div>
+          </template>
+        </SongList>
     </div>
 
     <CreatePlaylistModal
@@ -54,13 +63,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
+import { Music } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -75,6 +85,16 @@ onMounted(async () => {
   await loadPlaylist()
 })
 
+// 监听路由参数变化，切换歌单时重新加载
+watch(() => route.params.id as string, async (newId: string, oldId: string) => {
+  if (newId !== oldId) {
+    // 重置数据防止旧数据残留
+    playlist.value = null
+    songs.value = []
+    await loadPlaylist()
+  }
+})
+
 const loadPlaylist = async () => {
   const id = route.params.id as string
   if (!id) return
@@ -82,11 +102,13 @@ const loadPlaylist = async () => {
   try {
     // 获取歌单详情
     const playlists = await window.electronAPI.getPlaylists()
-    playlist.value = playlists.find((p: any) => p.id === id)
+    // 路由参数id是字符串，数据库id是数字，需要转换
+    const playlistId = Number(id)
+    playlist.value = playlists.find((p: any) => p.id === playlistId)
 
     if (playlist.value) {
       // 获取歌单歌曲
-      songs.value = await window.electronAPI.getPlaylistSongs(Number(id))
+      songs.value = await window.electronAPI.getPlaylistSongs(playlistId)
     }
   } catch (error) {
     console.error('Failed to load playlist:', error)
@@ -146,6 +168,21 @@ const deletePlaylist = async () => {
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
+
+const playlistCover = computed(() => {
+  if (songs.value.length > 0) {
+    const firstSongWithCover = songs.value.find(s => s.coverPath)
+    if (firstSongWithCover) {
+      return `local-file://${firstSongWithCover.coverPath}`
+    }
+  }
+  return null
+})
+
+const handleCoverError = (e: Event) => {
+  const target = e.target as HTMLImageElement
+  target.style.display = 'none'
+}
 </script>
 
 <style scoped>
@@ -175,6 +212,14 @@ const formatDate = (dateStr: string) => {
   justify-content: center;
   font-size: 4rem;
   box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  position: relative;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .playlist-info {

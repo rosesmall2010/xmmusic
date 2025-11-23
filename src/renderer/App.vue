@@ -201,6 +201,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   font-family: var(--font-family-base);
   transition: background-color var(--transition-slow), color var(--transition-slow);
+  background-color: var(--bg-color);
+  color: var(--text-color);
 }
 
 .app-body {

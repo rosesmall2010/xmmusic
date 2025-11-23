@@ -63,21 +63,22 @@
           </div>
           <div class="col-title">
             <div class="item-cover">
+               <!-- Fallback/Default Cover Strategy:
+                    1. If no coverPath, show DefaultCover directly.
+                    2. If coverPath exists, show DefaultCover absolutely positioned BEHIND the img.
+                       If img loads, it covers the DefaultCover.
+                       If img fails, we hide the img, revealing the DefaultCover.
+               -->
                <DefaultCover v-if="!music.coverPath" size="small" />
-               <img
-                 v-else
-                 :src="`local-file://${music.coverPath}`"
-                 alt="封面"
-                 loading="lazy"
-                 @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
-               />
-               <!-- Fallback if image fails to load but we have a path -->
-               <DefaultCover
-                 v-if="music.coverPath"
-                 class="fallback-cover"
-                 size="small"
-                 style="display: none;"
-               />
+               <template v-else>
+                 <DefaultCover class="fallback-cover" size="small" />
+                 <img
+                   :src="`local-file://${music.coverPath}`"
+                   alt="封面"
+                   loading="lazy"
+                   @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+                 />
+               </template>
             </div>
             <div class="item-info">
               <div class="item-title" :title="music.title">{{ music.title }}</div>
@@ -136,7 +137,7 @@
     <AddToPlaylistModal
       v-model="showBatchAddToPlaylist"
       v-if="selectedSongs.size > 0"
-      :music-to-ad="props.songs.find(s => s.filePath === Array.from(selectedSongs)[0])!"
+      :music-list-to-ad="Array.from(selectedSongs).map(filePath => props.songs.find(s => s.filePath === filePath)!).filter(Boolean)"
       @added="handleBatchAddedToPlaylist"
     />
   </div>
