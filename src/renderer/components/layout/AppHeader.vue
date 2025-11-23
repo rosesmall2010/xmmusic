@@ -139,9 +139,10 @@ const handleSearchInput = () => {
   }
 
   debounceTimer = setTimeout(async () => {
-    if (searchQuery.value.trim().length >= 2) {
+    const query = searchQuery.value || ''
+    if (query.trim().length >= 2) {
       try {
-        searchSuggestions.value = await window.electronAPI.getSearchSuggestions(searchQuery.value)
+        searchSuggestions.value = await window.electronAPI.getSearchSuggestions(query)
       } catch (error) {
         console.error('Failed to get search suggestions:', error)
       }
@@ -181,23 +182,35 @@ const handleSearch = () => {
     router.push({
       name: 'Search',
       query: { q: searchQuery.value }
-    })
+const handleSearch = async () => {
+  if (!searchQuery.value || searchQuery.value.trim().length === 0) {
+    return
   }
+
+  showDropdown.value = false
+
+  try {
+    await window.electronAPI.addSearchHistory(searchQuery.value.trim())
+  } catch (error) {
+    console.error('Failed to save search history:', error)
+  }
+
+  router.push(`/search?q=${encodeURIComponent(searchQuery.value.trim())}`)
 }
 
 const clearSearch = () => {
   searchQuery.value = ''
   searchSuggestions.value = []
-  searchInputRef.value?.focus()
 }
 
 const selectSuggestion = (suggestion: string) => {
-  searchQuery.value = suggestion
+  searchQuery.value = suggestion || ''
   handleSearch()
 }
 
 const selectHistoryItem = (item: any) => {
-  searchQuery.value = item.keyword
+  const keyword = typeof item === 'string' ? item : (item.keyword || item.query || '')
+  searchQuery.value = keyword
   handleSearch()
 }
 
