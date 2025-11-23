@@ -13,13 +13,18 @@
     </div>
 
     <div class="content">
-      <div class="playlist-grid" v-if="playlists.length > 0">
-        <div
-          v-for="playlist in playlists"
-          :key="playlist.id"
-          class="playlist-card"
-          @click="openPlaylist(playlist.id)"
-        >
+      <draggable
+        v-model="playlists"
+        class="playlist-grid"
+        item-key="id"
+        @end="handleDragEnd"
+        v-if="playlists.length > 0"
+      >
+        <template #item="{ element: playlist }">
+          <div
+            class="playlist-card"
+            @click="openPlaylist(playlist.id)"
+          >
           <div class="cover-container">
             <div class="cover-placeholder">🎵</div>
             <div class="play-overlay">
@@ -30,8 +35,8 @@
             <h3 class="playlist-name">{{ playlist.name }}</h3>
             <p class="playlist-count">{{ playlist.songCount }} 首歌曲</p>
           </div>
-        </div>
-      </div>
+        </template>
+      </draggable>
 
       <div v-if="playlists.length === 0" class="empty-state">
         <div class="empty-placeholder">
@@ -53,6 +58,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Play, Heart } from 'lucide-vue-next'
+import draggable from 'vuedraggable'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 
 const router = useRouter()
@@ -82,6 +88,15 @@ const handleCreatePlaylist = async (name: string) => {
 
 const openPlaylist = (id: string) => {
   router.push(`/playlist/${id}`)
+}
+
+const handleDragEnd = async () => {
+  try {
+    const playlistIds = playlists.value.map(p => p.id)
+    await window.electronAPI.updatePlaylistOrder(playlistIds)
+  } catch (error) {
+    console.error('Failed to update playlist order:', error)
+  }
 }
 </script>
 
