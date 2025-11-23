@@ -480,6 +480,7 @@ onMounted(async () => {
   padding: var(--spacing-md);
   cursor: pointer;
   transition: background var(--transition-fast);
+  min-height: 40px; /* 确保足够的高度 */
 }
 
 .dropdown-item:hover,
@@ -495,10 +496,11 @@ onMounted(async () => {
 .item-text {
   flex: 1;
   font-size: var(--font-size-sm);
-  color: var(--text-color);
+  color: var(--text-color); /* 确保文字可见 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.5; /* 确保文字垂直居中 */
 }
 
 .dropdown-empty {
