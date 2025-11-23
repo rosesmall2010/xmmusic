@@ -176,26 +176,27 @@ const handleSearchBlur = () => {
   }, 200)
 }
 
-const handleSearch = () => {
-  if (searchQuery.value.trim()) {
-    showDropdown.value = false
-    router.push({
-      name: 'Search',
-      query: { q: searchQuery.value }
 const handleSearch = async () => {
-  if (!searchQuery.value || searchQuery.value.trim().length === 0) {
+  const query = searchQuery.value || ''
+  if (query.trim().length === 0) {
     return
   }
 
   showDropdown.value = false
 
   try {
-    await window.electronAPI.addSearchHistory(searchQuery.value.trim())
+    // 保存搜索历史（如果API存在）
+    if (window.electronAPI.addSearchHistory) {
+      await window.electronAPI.addSearchHistory(query.trim())
+    }
   } catch (error) {
     console.error('Failed to save search history:', error)
   }
 
-  router.push(`/search?q=${encodeURIComponent(searchQuery.value.trim())}`)
+  router.push({
+    name: 'Search',
+    query: { q: query }
+  })
 }
 
 const clearSearch = () => {
