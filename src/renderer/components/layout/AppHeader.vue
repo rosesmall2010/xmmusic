@@ -46,7 +46,7 @@
               @mousedown.prevent="selectHistoryItem(item)"
             >
               <Clock :size="16" class="item-icon" />
-              <span class="item-text">{{ item.keyword }}</span>
+              <span class="item-text">{{ typeof item === 'string' ? item : (item.keyword || item.query || 'Unknown') }}</span>
             </div>
           </div>
 
@@ -496,11 +496,13 @@ onMounted(async () => {
 .item-text {
   flex: 1;
   font-size: var(--font-size-sm);
-  color: var(--text-color); /* 确保文字可见 */
+  color: var(--text-color) !important; /* 强制显示文字 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.5; /* 确保文字垂直居中 */
+  line-height: 1.5;
+  min-width: 0; /* 允许flex收缩 */
+  display: block; /* 确保显示为块级元素 */
 }
 
 .dropdown-empty {
