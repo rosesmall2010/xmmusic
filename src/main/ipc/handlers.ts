@@ -316,6 +316,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getPlaylists()
   })
 
+  ipcMain.handle('update-playlist-order', (_, playlistIds: number[]) => {
+    if (!db) return
+    db.updatePlaylistOrder(playlistIds)
+  })
+
   ipcMain.handle('add-to-playlist', async (_, playlistId: number, filePath: string) => {
     if (!db) return
     db.addToPlaylist(playlistId, filePath)

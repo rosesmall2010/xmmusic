@@ -688,6 +688,13 @@ export default class MusicDatabase {
     return rows.map(this.mapRowToPlaylist)
   }
 
+  updatePlaylistOrder(playlistIds: number[]): void {
+    const stmt = this.db!.prepare('UPDATE playlist SET display_order = ? WHERE id = ?')
+    playlistIds.forEach((id, index) => {
+      stmt.run(index, id)
+    })
+  }
+
   getPlaylistById(id: number): Playlist | null {
     const stmt = this.db!.prepare('SELECT * FROM playlist WHERE id = ?')
     const row = stmt.get(id) as any

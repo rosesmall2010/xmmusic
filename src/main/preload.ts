@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePlaylist: (id: number) =>
     ipcRenderer.invoke('delete-playlist', id),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
+  updatePlaylistOrder: (playlistIds: number[]) =>
+    ipcRenderer.invoke('update-playlist-order', playlistIds),
   addToPlaylist: (playlistId: number, filePath: string) =>
     ipcRenderer.invoke('add-to-playlist', playlistId, filePath),
   isFileInPlaylist: (filePath: string, playlistId?: number) =>
@@ -213,6 +215,7 @@ declare global {
       updatePlaylist: (id: number, updates: any) => Promise<void>
       deletePlaylist: (id: number) => Promise<void>
       getPlaylists: () => Promise<any[]>
+      updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
       addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
       isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
       getPlaylistsForFile: (filePath: string) => Promise<number[]>
