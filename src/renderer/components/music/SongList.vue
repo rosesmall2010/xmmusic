@@ -109,6 +109,11 @@
         <span class="icon">➕</span>
         添加到歌单
       </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="enableSelectionMode">
+        <Check :size="16" class="icon" />
+        批量操作
+      </div>
       <div
         v-if="showRemoveFromPlaylist"
         class="menu-item delete"
@@ -247,6 +252,12 @@ const toggleSelectAll = () => {
 const cancelSelection = () => {
   selectedSongs.value.clear()
   selectionMode.value = false
+}
+
+// 启用选择模式
+const enableSelectionMode = () => {
+  selectionMode.value = true
+  closeContextMenu()
 }
 
 // 批量添加到歌单
@@ -562,13 +573,19 @@ const formatDuration = (seconds: number) => {
 /* Context Menu */
 .context-menu {
   position: fixed;
-  background: var(--bg-secondary);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  padding: var(--spacing-xs) 0;
-  min-width: 160px;
-  z-index: var(--z-dropdown);
+  padding: var(--spacing-xs);
+  min-width: 180px;
+  z-index: 1000;
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: var(--spacing-xs) 0;
 }
 
 .menu-item {
