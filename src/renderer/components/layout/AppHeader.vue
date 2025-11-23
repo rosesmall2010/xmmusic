@@ -14,7 +14,7 @@
     <div class="header-center">
       <div class="search-wrapper" @keydown="handleSearchKeydown">
         <div class="search-box" :class="{ focused: showDropdown }">
-          <span class="search-icon">🔍</span>
+          <Search :size="18" class="search-icon" />
           <input
             ref="searchInputRef"
             v-model="searchQuery"
@@ -45,7 +45,7 @@
               :class="{ selected: selectedIndex === index }"
               @mousedown.prevent="selectHistoryItem(item)"
             >
-              <span class="item-icon">🕐</span>
+              <Clock :size="16" class="item-icon" />
               <span class="item-text">{{ item.keyword }}</span>
             </div>
           </div>
@@ -60,7 +60,7 @@
               :class="{ selected: selectedIndex === index }"
               @mousedown.prevent="selectSuggestion(suggestion)"
             >
-              <span class="item-icon">🔍</span>
+              <Search :size="16" class="item-icon" />
               <span class="item-text">{{ suggestion }}</span>
             </div>
           </div>
@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2 } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock } from 'lucide-vue-next'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -383,8 +383,8 @@ onMounted(async () => {
 }
 
 .search-icon {
-  font-size: var(--font-size-lg);
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .search-box input {
@@ -486,8 +486,8 @@ onMounted(async () => {
 }
 
 .item-icon {
-  font-size: var(--font-size-base);
-  opacity: 0.6;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .item-text {
