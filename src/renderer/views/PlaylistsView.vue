@@ -26,7 +26,15 @@
             @click="openPlaylist(playlist.id)"
           >
             <div class="cover-container">
-              <div class="cover-placeholder">🎵</div>
+              <img
+                v-if="playlist.firstSongCover"
+                :src="playlist.firstSongCover"
+                class="cover-image"
+                @error="handleImageError(playlist)"
+              />
+              <div v-else class="cover-placeholder">
+                <Music :size="48" />
+              </div>
               <div class="play-overlay">
                 <Play :size="32" />
               </div>
@@ -58,7 +66,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Play, Heart } from 'lucide-vue-next'
+import { Play, Heart, Music } from 'lucide-vue-next'
 import draggable from 'vuedraggable'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 
@@ -72,7 +80,21 @@ onMounted(async () => {
 
 const loadPlaylists = async () => {
   try {
-    playlists.value = await window.electronAPI.getPlaylists()
+    const playlistData = await window.electronAPI.getPlaylists()
+    // 为每个歌单加载第一首歌的封面
+    playlists.value = await Promise.all(
+      playlistData.map(async (playlist) => {
+        try {
+          const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
+          if (songs.length > 0 && songs[0].coverPath) {
+            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+          }
+        } catch (error) {
+          console.error(`Failed to load cover for playlist ${playlist.id}:`, error)
+        }
+        return playlist
+      })
+    )
   } catch (error) {
     console.error('Failed to load playlists:', error)
   }
@@ -89,6 +111,11 @@ const handleCreatePlaylist = async (name: string) => {
 
 const openPlaylist = (id: string) => {
   router.push(`/playlist/${id}`)
+}
+
+const handleImageError = (playlist: any) => {
+  // 封面加载失败时移除封面引用
+  playlist.firstSongCover = null
 }
 
 const handleDragEnd = async () => {
@@ -180,9 +207,19 @@ const handleDragEnd = async () => {
   box-shadow: var(--shadow-md);
 }
 
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .cover-placeholder {
   font-size: 4rem;
   opacity: 0.5;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .play-overlay {
