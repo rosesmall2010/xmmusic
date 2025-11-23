@@ -1,6 +1,33 @@
 <template>
   <div class="song-list" @click="closeContextMenu">
+    <!-- 批量操作栏 -->
+    <div v-if="selectionMode && selectedSongs.size > 0" class="batch-actions">
+      <div class="selection-info">
+        <Check :size="16" />
+        已选择 {{ selectedSongs.size }} 首
+      </div>
+      <button class="batch-btn" @click="handleBatchAddToPlaylist">
+        <Music :size="16" />
+        添加到歌单
+      </button>
+      <button v-if="showRemoveFromPlaylist" class="batch-btn danger" @click="handleBatchRemove">
+        <Trash2 :size="16" />
+        批量删除
+      </button>
+      <button class="batch-btn" @click="cancelSelection">
+        <X :size="16" />
+        取消
+      </button>
+    </div>
+
     <div class="list-header-row">
+      <div class="col-checkbox" v-if="selectionMode">
+        <input
+          type="checkbox"
+          :checked="isAllSelected"
+          @change="toggleSelectAll"
+        />
+      </div>
       <div class="col-index">#</div>
       <div class="col-title">标题</div>
       <div class="col-album">专辑</div>
@@ -16,9 +43,20 @@
           :key="music.id"
           @dblclick="handlePlay(music)"
           @contextmenu.prevent="showContextMenu($event, music)"
-          :class="{ playing: currentMusic?.id === music.id }"
+          :class="{
+            playing: currentMusic?.id === music.id,
+            selected: selectedSongs.has(music.filePath)
+          }"
           :style="{ height: itemHeight + 'px' }"
         >
+          <div class="col-checkbox" v-if="selectionMode">
+            <input
+              type="checkbox"
+              :checked="selectedSongs.has(music.filePath)"
+              @change="toggleSelect(music.filePath)"
+              @click.stop
+            />
+          </div>
           <div class="col-index">
             <Volume2 v-if="currentMusic?.id === music.id" :size="14" class="playing-icon" />
             <span v-else>{{ music.originalIndex + 1 }}</span>
@@ -90,13 +128,19 @@
       :music-to-ad="selectedMusic"
       @added="handleAddedToPlaylist"
     />
+    <AddToPlaylistModal
+      v-model="showBatchAddToPlaylist"
+      v-if="selectedSongs.size > 0"
+      :music-to-ad="props.songs.find(s => s.filePath === Array.from(selectedSongs)[0])!"
+      @added="handleBatchAddedToPlaylist"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { Volume2, Trash2, Heart } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
@@ -105,12 +149,14 @@ import { useElementSize } from '@vueuse/core'
 const props = defineProps<{
   songs: MusicItem[]
   showRemoveFromPlaylist?: boolean
+  playlistId?: number  // 用于批量删除
 }>()
 
 const emit = defineEmits<{
   (e: 'play', music: MusicItem): void
   (e: 'remove-from-playlist', music: MusicItem): void
   (e: 'load-more'): void
+  (e: 'songs-updated'): void  // 批量操作后通知父组件刷新
 }>()
 
 const playerStore = usePlayerStore()
@@ -168,6 +214,68 @@ const contextMenu = reactive({
   music: null as MusicItem | null,
   isFavorite: false
 })
+
+// 批量选择状态
+const selectionMode = ref(false)
+const selectedSongs = ref<Set<string>>(new Set())
+const showBatchAddToPlaylist = ref(false)
+
+// 全选状态
+const isAllSelected = computed(() => {
+  return props.songs.length > 0 && selectedSongs.value.size === props.songs.length
+})
+
+// 切换选择
+const toggleSelect = (filePath: string) => {
+  if (selectedSongs.value.has(filePath)) {
+    selectedSongs.value.delete(filePath)
+  } else {
+    selectedSongs.value.add(filePath)
+  }
+}
+
+// 全选/反选
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedSongs.value.clear()
+  } else {
+    selectedSongs.value = new Set(props.songs.map(s => s.filePath))
+  }
+}
+
+//取消选择
+const cancelSelection = () => {
+  selectedSongs.value.clear()
+  selectionMode.value = false
+}
+
+// 批量添加到歌单
+const handleBatchAddToPlaylist = () => {
+  if (selectedSongs.value.size === 0) return
+  showBatchAddToPlaylist.value = true
+}
+
+// 批量删除
+const handleBatchRemove = async () => {
+  if (!props.playlistId || selectedSongs.value.size === 0) return
+
+  try {
+    const filePaths = Array.from(selectedSongs.value)
+    const result = await window.electronAPI.batchRemoveFromPlaylist(props.playlistId, filePaths)
+    console.log(`Removed ${result.removed} songs`)
+    cancelSelection()
+    emit('songs-updated')
+    window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
+  } catch (error) {
+    console.error('Failed to batch remove:', error)
+  }
+}
+
+// 批量添加完成
+const handleBatchAddedToPlaylist = () => {
+  cancelSelection()
+  emit('songs-updated')
+}
 
 const handlePlay = (music: MusicItem) => {
   emit('play', music)
@@ -227,11 +335,64 @@ const formatDuration = (seconds: number) => {
 
 <style scoped>
 .song-list {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: var(--bg-primary);
   font-size: var(--font-size-sm);
   position: relative;
+}
+
+/* 批量操作栏 */
+.batch-actions {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.selection-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.batch-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.batch-btn:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.batch-btn.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.batch-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
 }
 
 .list-header-row {
@@ -280,15 +441,34 @@ const formatDuration = (seconds: number) => {
 }
 
 .list-item.playing {
-  background: var(--active-bg);
+  background: var(--color-primary-alpha-5);
 }
 
-.list-item.playing .item-title,
-.list-item.playing .playing-icon {
+.list-item.playing .col-index {
   color: var(--color-primary);
 }
 
-/* Columns */
+.list-item.selected {
+  background: var(--color-primary-alpha-10);
+  border-left: 3px solid var(--color-primary);
+  padding-left: calc(var(--spacing-md) - 3px);
+}
+
+/* List columns */
+.col-checkbox {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.col-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
 .col-index {
   width: 40px;
   text-align: center;
