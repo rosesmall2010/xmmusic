@@ -59,6 +59,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-playlist-order', playlistIds),
   addToPlaylist: (playlistId: number, filePath: string) =>
     ipcRenderer.invoke('add-to-playlist', playlistId, filePath),
+  batchAddToPlaylist: (playlistId: number, filePaths: string[]) =>
+    ipcRenderer.invoke('batch-add-to-playlist', playlistId, filePaths),
+  batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) =>
+    ipcRenderer.invoke('batch-remove-from-playlist', playlistId, filePaths),
   isFileInPlaylist: (filePath: string, playlistId?: number) =>
     ipcRenderer.invoke('is-file-in-playlist', filePath, playlistId),
   getPlaylistsForFile: (filePath: string) =>
@@ -217,6 +221,8 @@ declare global {
       getPlaylists: () => Promise<any[]>
       updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
       addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
+      batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number }>
+      batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; removed: number }>
       isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
       getPlaylistsForFile: (filePath: string) => Promise<number[]>
       removeFromPlaylistByPath: (playlistId: number, filePath: string) => Promise<void>

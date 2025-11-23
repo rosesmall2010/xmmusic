@@ -326,6 +326,37 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     db.addToPlaylist(playlistId, filePath)
   })
 
+  // 批量添加到歌单
+  ipcMain.handle('batch-add-to-playlist', async (_, playlistId: number, filePaths: string[]) => {
+    if (!db) return { success: false, added: 0 }
+    let added = 0
+    filePaths.forEach(filePath => {
+      try {
+        db.addToPlaylist(playlistId, filePath)
+        added++
+      } catch (error) {
+        // 跳过已存在的歌曲
+        console.log(`Skipped existing: ${filePath}`)
+      }
+    })
+    return { success: true, added }
+  })
+
+  // 批量从歌单删除
+  ipcMain.handle('batch-remove-from-playlist', async (_, playlistId: number, filePaths: string[]) => {
+    if (!db) return { success: false, removed: 0 }
+    let removed = 0
+    filePaths.forEach(filePath => {
+      try {
+        db.removeFromPlaylistByPath(playlistId, filePath)
+        removed++
+      } catch (error) {
+        console.error(`Failed to remove: ${filePath}`, error)
+      }
+    })
+    return { success: true, removed }
+  })
+
   ipcMain.handle('is-file-in-playlist', async (_, filePath: string, playlistId?: number) => {
     if (!db) return false
     return db.isFileInPlaylist(filePath, playlistId)
