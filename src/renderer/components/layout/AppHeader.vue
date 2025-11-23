@@ -159,8 +159,10 @@ const handleSearchFocus = async () => {
   if (!searchQuery.value) {
     try {
       searchHistory.value = await window.electronAPI.getSearchHistory()
+      console.log('Search history loaded:', searchHistory.value)
     } catch (error) {
       console.error('Failed to load search history:', error)
+      searchHistory.value = []
     }
   }
 }
