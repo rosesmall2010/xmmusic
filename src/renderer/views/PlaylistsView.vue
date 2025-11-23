@@ -25,15 +25,16 @@
             class="playlist-card"
             @click="openPlaylist(playlist.id)"
           >
-          <div class="cover-container">
-            <div class="cover-placeholder">🎵</div>
-            <div class="play-overlay">
-              <Play :size="32" />
+            <div class="cover-container">
+              <div class="cover-placeholder">🎵</div>
+              <div class="play-overlay">
+                <Play :size="32" />
+              </div>
             </div>
-          </div>
-          <div class="playlist-info">
-            <h3 class="playlist-name">{{ playlist.name }}</h3>
-            <p class="playlist-count">{{ playlist.songCount }} 首歌曲</p>
+            <div class="playlist-info">
+              <h3 class="playlist-name">{{ playlist.name }}</h3>
+              <p class="playlist-count">{{ playlist.songCount }} 首歌曲</p>
+            </div>
           </div>
         </template>
       </draggable>

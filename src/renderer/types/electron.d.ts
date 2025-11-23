@@ -37,6 +37,7 @@ export interface ElectronAPI {
   updatePlaylist: (id: number, updates: any) => Promise<void>
   deletePlaylist: (id: number) => Promise<void>
   getPlaylists: () => Promise<any[]>
+  updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
   addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
   isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
   getPlaylistsForFile: (filePath: string) => Promise<number[]>
