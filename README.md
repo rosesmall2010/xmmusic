@@ -1,230 +1,176 @@
-# xmmusic 🎵
+# XM Music
 
-跨平台音乐播放器 - 基于 Electron + Vue 3 + TypeScript
+> 基于 Electron + Vue 3 + TypeScript 的高颜值本地音乐播放器
 
-一个基于 Electron + Vue 3 + TypeScript 的跨平台桌面音乐播放器，专注于本地音乐管理和大规模音乐库（10万+）的高性能处理。
-
----
+[![GitHub release](https://img.shields.io/github/v/release/zdhsoft/xmmusic)](https://github.com/zdhsoft/xmmusic/releases)
+[![License](https://img.shields.io/github/license/zdhsoft/xmmusic)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 
 ## ✨ 特性
 
-- 🎵 **专注本地**: 无需联网，保护隐私
-- ⚡ **高性能**: 支持 10 万+ 音乐库，毫秒级搜索
-- 🎨 **现代化 UI**: 年轻人喜爱的设计风格
-- 🧠 **智能化**: 去重、推荐、修复等智能功能
-- 🌍 **跨平台**: Windows、macOS、Linux
-- 💰 **完全免费开源**
+- � **现代化UI设计** - 仿QQ音乐设计风格,视觉体验出色
+- �🎵 **本地音乐管理** - 智能扫描、元数据编辑、封面提取
+- 📁 **歌单管理** - 创建、编辑、导入导出歌单
+- ❤️ **收藏功能** - 快速收藏喜欢的音乐
+- � **高品质播放** - 基于Howler.js,支持多种音频格式
+- 🎛️ **均衡器** - 内置多种预设音效,可自定义调节
+- 🔍 **智能搜索** - 支持歌曲、艺术家、专辑多维度搜索
+- � **歌词显示** - 支持LRC格式歌词,桌面歌词窗口
+- 🎨 **主题切换** - 浅色/深色/跟随系统
+- 📱 **迷你模式** - 简洁的迷你播放器窗口
+- 🖥️ **跨平台** - 支持 macOS、Windows、Linux
 
----
+## 🎯 最新版本 v1.0.3
 
-## 🚀 快速开始
+### v1.0.3 更新内容
+- 修复GitHub Actions构建失败问题
 
-### 环境要求
+### v1.0.2 重大更新
+- **UI全面重构** - 采用仿QQ音乐设计风格
+- **图标系统升级** - 使用Lucide Icons替换emoji
+- **性能大幅优化** - 解决窗口切换卡顿和GPU错误
+- **macOS体验改进** - 修复红绿灯失焦颜色问题
 
-- Node.js 20.19+ (Vite 7 requirement)
-- npm/yarn/pnpm
+详见 [CHANGELOG.md](CHANGELOG.md)
 
-### 安装与开发
+## 🛠️ 技术栈
+
+### 核心框架
+- **Electron** `39.2.1` - 跨平台桌面应用框架
+- **Vue 3** `3.5.24` - 渐进式JavaScript框架
+- **TypeScript** `5.9.3` - JavaScript的超集
+- **Vite** `7.2.2` - 新一代前端构建工具
+
+### 状态管理 & 路由
+- **Pinia** `3.0.4` - Vue 3状态管理
+- **Vue Router** `4.4.5` - Vue官方路由
+
+### 音频 & 媒体
+- **Howler.js** `2.2.4` - 音频播放引擎
+- **music-metadata** `11.10.1` - 音频元数据提取
+- **node-id3** `0.2.9` - ID3标签编辑
+
+### UI组件 & 图标
+- **Lucide Icons** `0.554.0` - 现代化图标库
+- **@vueuse/core** `11.3.0` - Vue组合式API工具集
+- **@tanstack/vue-virtual** `3.13.12` - 虚拟滚动
+
+### 数据 & 工具
+- **@vscode/sqlite3** `5.1.2` - SQLite数据库
+- **ExcelJS** `4.4.0` - Excel导入导出
+- **Fuse.js** `7.0.0` - 模糊搜索
+- **Chokidar** `4.0.3` - 文件监控
+
+## � 安装
+
+### 下载安装包
+
+从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
+
+- **macOS**:
+  - Intel: `xmmusic-1.0.3.dmg`
+  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.3-arm64.dmg`
+- **Windows**: `xmmusic-Setup-1.0.3.exe`
+- **Linux**: `xmmusic-1.0.3.AppImage`
+
+### 从源码构建
 
 ```bash
-# 克隆项目
+# 克隆仓库
 git clone https://github.com/zdhsoft/xmmusic.git
 cd xmmusic
 
 # 安装依赖
 npm install
 
-# macOS 上需要指定 Python（用于编译原生模块）
-# PYTHON=/opt/homebrew/bin/python3.11 npm install
-
 # 开发模式
 npm run dev
 
-# 构建
+# 构建应用
 npm run build
 
-# 打包当前平台
-npm run pack
+# 打包
+npm run dist        # 当前平台
+npm run dist:mac    # macOS
+npm run dist:win    # Windows
 ```
 
-### 跨平台构建
+## 🚀 使用指南
 
-#### 方法 1：GitHub Actions（推荐）🌟
+### 首次使用
 
-**无需手动操作，自动构建所有平台！**
+1. **添加音乐目录** - 在设置中添加本地音乐文件夹
+2. **扫描音乐库** - 自动扫描并提取音乐信息和封面
+3. **开始播放** - 双击歌曲即可播放
 
-```bash
-# 推送代码到 GitHub
-git push
+### 快捷键
 
-# 访问 GitHub Actions 页面
-# Actions → Build Multi-Platform → 下载构建产物
-```
+| 功能 | macOS | Windows/Linux |
+|------|-------|---------------|
+| 播放/暂停 | `Space` | `Space` |
+| 上一曲 | `⌘+←` | `Ctrl+←` |
+| 下一曲 | `⌘+→` | `Ctrl+→` |
+| 音量增加 | `⌘+Shift+↑` | `Ctrl+Shift+↑` |
+| 音量减小 | `⌘+Shift+↓` | `Ctrl+Shift+↓` |
+| 切换收藏 | `⌘+Shift+F` | `Ctrl+Shift+F` |
+| 迷你模式 | `⌘+Option+M` | `Ctrl+Alt+M` |
 
-- ✅ 自动构建 macOS (x64 + arm64)
-- ✅ 自动构建 Windows (x64)
-- ✅ 自动构建 Linux (AppImage + deb + rpm)
-- ✅ Tag 推送时自动创建 Release
+## 📸 截图
 
-#### 方法 2：本地构建特定平台
+> 待添加应用截图
 
-```bash
-# macOS 版本（仅在 macOS 上）
-npm run dist:mac
+## � 开发
 
-# Windows 版本（仅在 Windows 上）
-npm run dist:win
-
-# Linux 版本（仅在 Linux 上）
-npm run dist -- --linux
-```
-
-**⚠️ 重要**：由于原生模块限制，**无法直接交叉编译**。详见 [跨平台构建说明](./docs/CROSS_PLATFORM_BUILD.md)
-
----
-
-## 📚 文档
-
-### 🔥 快速开始
-
-- [快速开始](./QUICK_START.md) - 5 分钟上手指南
-- [跨平台构建说明](./docs/CROSS_PLATFORM_BUILD.md) - **如何在 macOS 上构建 Windows 版本**
-- [Python 环境配置](./docs/PYTHON_SETUP.md) - macOS 原生模块编译配置
-- [问题排查](./TROUBLESHOOTING.md) - 常见问题解决
-
-### 架构文档
-
-- [系统架构文档](./docs/SYSTEM_ARCHITECTURE.md) - 完整系统架构设计
-- [前端架构文档](./docs/FRONTEND_ARCHITECTURE.md) - 前端架构设计
-- [API 接口设计](./docs/API_DESIGN.md) - IPC API 接口定义
-- [数据库设计](./docs/DATABASE_DESIGN.md) - 数据库设计文档
-
-### 技术文档
-
-- [技术设计文档](./docs/TECHNICAL_DESIGN.md) - 技术实现细节
-- [技术选型文档](./docs/TECHNOLOGY_SELECTION.md) - 技术选型理由
-- [性能优化方案](./docs/PERFORMANCE_OPTIMIZATION.md) - 性能优化策略
-- [安全架构设计](./docs/SECURITY_ARCHITECTURE.md) - 安全架构设计
-- [基础设施规划](./docs/INFRASTRUCTURE_PLAN.md) - 基础设施规划
-
-### 设计文档
-
-- [UI 设计文档](./docs/UI_DESIGN.md) - 用户界面设计
-- [架构文档索引](./docs/ARCHITECTURE_INDEX.md) - 文档导航
-
-### 产品文档
-
-- [产品需求文档](./docs/PRD.md) - 产品需求文档
-- [功能史诗](./docs/EPICS.md) - 功能史诗
-- [用户故事](./docs/USER_STORIES.md) - 用户故事
-- [开发计划](./docs/DEVELOPMENT_PLAN.md) - 开发计划
-
----
-
-## 🛠️ 技术栈
-
-- **Electron**: 39.2.1 - 桌面应用框架
-- **Vue**: 3.5.24 - 前端框架
-- **TypeScript**: 5.9 - 类型系统
-- **SQLite**: @vscode/sqlite3 - 本地数据库（兼容 Electron 39）
-- **Vite**: 构建工具
-- **Pinia**: 状态管理
-- **Howler.js**: 音频播放
-- **music-metadata**: 元数据解析
-
----
-
-## 📁 项目结构
+### 项目结构
 
 ```
 xmmusic/
 ├── src/
-│   ├── main/           # Electron 主进程
-│   ├── renderer/       # Vue 渲染进程
-│   └── shared/         # 共享代码
-├── docs/               # 文档
-├── tests/              # 测试
-└── dist/               # 构建输出
+│   ├── main/           # Electron主进程
+│   │   ├── database/   # 数据库
+│   │   ├── ipc/        # IPC通信
+│   │   ├── services/   # 服务(托盘、快捷键等)
+│   │   └── main.ts     # 主进程入口
+│   └── renderer/       # Vue渲染进程
+│       ├── components/ # 组件
+│       ├── views/      # 页面
+│       ├── stores/     # Pinia状态
+│       ├── composables/# 组合式函数
+│       └── utils/      # 工具函数
+├── build/              # 构建资源
+└── scripts/            # 构建脚本
 ```
 
-详细结构参见 [技术设计文档](./docs/TECHNICAL_DESIGN.md)
+### 开发环境要求
 
----
+- Node.js >= 18
+- npm >= 9
 
-## 🎯 核心功能
+### 调试
 
-### MVP 功能
-- ✅ 多目录管理（最多 10 个）
-- ✅ 文件扫描和索引
-- ✅ MD5 计算和去重
-- ✅ 基础播放控制
-- ✅ 音乐列表展示（虚拟滚动）
-- ✅ 基础搜索
-- ✅ 播放列表管理
-- ✅ ID3 标签修复
-- ✅ 主题切换
-- ✅ 多语言支持
+```bash
+# 启动开发服务器(带DevTools)
+npm run dev
 
-### V1.0 功能
-- ✅ 文件监控
-- ✅ 高级搜索
-- ✅ 相似乐曲推荐
-- ✅ Excel 导出
-- ✅ 自动更新
-
----
-
-## 📊 性能指标
-
-- **扫描速度**: 10 万首歌曲 < 30 分钟
-- **搜索响应**: < 100ms
-- **列表滚动**: 60fps
-- **内存占用**: < 200MB (10 万首)
-
----
-
-## 🔒 安全
-
-- Context Isolation 启用
-- Sandbox 模式启用
-- Node Integration 禁用
-- IPC 输入验证
-- 文件路径验证
-
-详细安全设计参见 [安全架构文档](./docs/SECURITY_ARCHITECTURE.md)
-
----
+# 重新构建原生模块
+npm run rebuild
+```
 
 ## 🤝 贡献
 
-欢迎贡献代码、报告问题或提出建议！
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
----
+欢迎提交 Issue 和 Pull Request!
 
 ## 📄 许可证
 
-MIT License
+[MIT License](LICENSE)
+
+## � 致谢
+
+- [Electron](https://www.electronjs.org/)
+- [Vue.js](https://vuejs.org/)
+- [Howler.js](https://howlerjs.com/)
+- [Lucide Icons](https://lucide.dev/)
 
 ---
 
-## 👥 作者
-
-zdhsoft
-
----
-
-## 🙏 致谢
-
-感谢所有开源项目的贡献者！
-
----
-
-**项目状态**: 🚧 开发中
-**当前版本**: 规划阶段
-**目标版本**: V1.0
+<p align="center">Made with ❤️ by zdhsoft</p>
