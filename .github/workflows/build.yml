@@ -45,18 +45,11 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Upload macOS x64 DMG
+      - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xmmusic-macos-x64
-          path: dist/xmmusic-*.dmg
-          if-no-files-found: error
-
-      - name: Upload macOS arm64 DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: xmmusic-macos-arm64
-          path: dist/xmmusic-*-arm64.dmg
+          name: xmmusic-macos
+          path: dist/*.dmg
           if-no-files-found: error
 
   build-windows:
