@@ -8,10 +8,10 @@
         </div>
         <div class="header-actions">
           <button class="action-btn" @click="clearQueue" title="清空队列">
-            <span class="icon">🗑️</span>
+            <Trash2 :size="18" />
           </button>
           <button class="close-btn" @click="close" title="关闭">
-            <span class="icon">×</span>
+            <X :size="24" />
           </button>
         </div>
       </div>
@@ -25,7 +25,7 @@
           @dblclick="playItem(index)"
         >
           <div class="item-status">
-            <span v-if="currentQueueIndex === index" class="playing-icon">🔊</span>
+            <Volume2 v-if="currentQueueIndex === index" :size="14" class="playing-icon" />
             <span v-else class="index">{{ index + 1 }}</span>
           </div>
           <div class="item-info">
@@ -51,6 +51,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
+import { Volume2, Trash2, X } from 'lucide-vue-next'
 
 const props = defineProps<{
   visible: boolean
