@@ -119,7 +119,7 @@ const loadMusicData = (music: MusicItem) => {
 
   formData.value = {
     artist: parsed.artist || music.artist,
-    album: parsed.album || music.album || '',
+    album: music.album || '', // 使用现有专辑信息，不自动填充
     title: parsed.title || music.title
   }
 }
@@ -144,14 +144,18 @@ const save = async () => {
       // 触发刷新事件
       window.dispatchEvent(new CustomEvent('music-metadata-updated'))
       emit('saved')
-      close()
+      // 短暂延迟后关闭对话框，确保刷新完成
+      setTimeout(() => {
+        loading.value = false
+        close()
+      }, 100)
     } else {
       alert('保存失败，请重试')
+      loading.value = false
     }
   } catch (error: any) {
     console.error('保存标签失败:', error)
     alert(`保存失败: ${error.message}`)
-  } finally {
     loading.value = false
   }
 }
@@ -171,6 +175,45 @@ const close = () => {
 </script>
 
 <style scoped>
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.dialog {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: var(--spacing-xl);
+  position: relative;
+  animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .edit-tag-dialog {
   width: 500px;
   max-width: 90%;
