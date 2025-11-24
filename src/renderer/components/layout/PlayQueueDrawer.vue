@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { Volume2, Trash2, X } from 'lucide-vue-next'
@@ -109,6 +109,23 @@ const scrollToCurrent = () => {
   const activeItem = listRef.value.querySelector('.queue-item.active')
   if (activeItem) {
     activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
+}
+
+onMounted(() => {
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
+
+const handleMetadataUpdate = (event: CustomEvent) => {
+  const updatedMusic = event.detail
+  const index = playerStore.queue.findIndex(m => m.id === updatedMusic.id)
+  if (index !== -1) {
+    playerStore.queue[index] = { ...playerStore.queue[index], ...updatedMusic }
   }
 }
 </script>

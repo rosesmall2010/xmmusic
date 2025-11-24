@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -83,7 +83,21 @@ const showEditModal = ref(false)
 
 onMounted(async () => {
   await loadPlaylist()
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
+
+const handleMetadataUpdate = (event: CustomEvent) => {
+  const updatedMusic = event.detail as MusicItem
+  const index = songs.value.findIndex(m => m.id === updatedMusic.id)
+  if (index !== -1) {
+    songs.value[index] = { ...songs.value[index], ...updatedMusic }
+  }
+}
 
 // 监听路由参数变化，切换歌单时重新加载
 watch(() => route.params.id as string, async (newId: string, oldId: string) => {

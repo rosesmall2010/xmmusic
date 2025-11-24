@@ -67,9 +67,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
@@ -78,7 +77,6 @@ import { Clock, Heart, Folder, Shuffle, Play } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 
 const router = useRouter()
-const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const { play } = usePlayer()
 
@@ -115,7 +113,22 @@ onMounted(async () => {
   }
   const results = await window.electronAPI.advancedSearch(criteria)
   recentlyAdded.value = results
+
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
+
+const handleMetadataUpdate = (event: CustomEvent) => {
+  const updatedMusic = event.detail as MusicItem
+  const index = recentlyAdded.value.findIndex(m => m.id === updatedMusic.id)
+  if (index !== -1) {
+    recentlyAdded.value[index] = { ...recentlyAdded.value[index], ...updatedMusic }
+  }
+}
 
 const goToRecent = () => {
   router.push('/recent')
