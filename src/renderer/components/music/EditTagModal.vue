@@ -141,10 +141,19 @@ const save = async () => {
     const success = await window.electronAPI.updateMusicMetadata(props.music.id, updates)
 
     if (success) {
-      // 触发刷新事件
-      window.dispatchEvent(new CustomEvent('music-metadata-updated'))
+      // 创建更新后的音乐对象
+      const updatedMusic = {
+        ...props.music,
+        ...updates
+      }
+
+      // 触发全局事件，传递更新后的音乐信息
+      window.dispatchEvent(new CustomEvent('music-metadata-updated', {
+        detail: updatedMusic
+      }))
+
       emit('saved')
-      // 短暂延迟后关闭对话框，确保刷新完成
+      // 短暂延迟后关闭对话框
       setTimeout(() => {
         loading.value = false
         close()

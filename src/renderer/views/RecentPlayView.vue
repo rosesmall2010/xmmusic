@@ -40,16 +40,29 @@ const songs = ref<MusicItem[]>([])
 
 onMounted(async () => {
   await loadRecent()
-  // 监听元数据更新事件
-  window.addEventListener('music-metadata-updated', loadRecent)
+  // 监听元数据更新事件，只更新被修改的歌曲
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('music-metadata-updated', loadRecent)
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
 })
 
 const loadRecent = async () => {
   songs.value = await window.electronAPI.getRecentPlays()
+}
+
+// 监听元数据更新事件，只更新被修改的歌曲
+const handleMetadataUpdate = (event: CustomEvent) => {
+  const updatedMusic = event.detail
+  if (!updatedMusic) return
+
+  // 在当前列表中查找并更新这首歌
+  const index = songs.value.findIndex(m => m.id === updatedMusic.id)
+  if (index !== -1) {
+    // 直接更新列表中的这首歌
+    songs.value[index] = { ...songs.value[index], ...updatedMusic }
+  }
 }
 
 const playMusic = async (music: MusicItem) => {

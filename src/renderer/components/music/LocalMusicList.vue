@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -84,10 +84,38 @@ const handleScan = async () => {
   }
 }
 
-const handleSongsUpdated = async () => {
-  // 重新加载音乐列表
-  await musicStore.loadMusic(0, musicStore.musicList.length || 20, true)
+const handleSongsUpdated = () => {
+  // 这个是从 SongList 发出的事件，只需要触发数据更新
+  // 实际的更新由 music-metadata-updated 事件处理
 }
+
+// 监听元数据更新事件，只更新被修改的歌曲
+const handleMetadataUpdate = (event: CustomEvent) => {
+  const updatedMusic = event.detail
+  if (!updatedMusic) return
+
+  // 在当前列表中查找并更新这首歌
+  const index = musicStore.musicList.findIndex(m => m.id === updatedMusic.id)
+  if (index !== -1) {
+    // 直接更新列表中的这首歌
+    musicStore.musicList[index] = { ...musicStore.musicList[index], ...updatedMusic }
+  }
+}
+
+onMounted(async () => {
+  // Initial load of 20 items
+  await musicStore.loadMusic(0, 20)
+
+  // Start background loading
+  startBackgroundLoading()
+
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+})
 
 const playMusic = async (music: MusicItem) => {
   // 如果播放列表不同，替换播放列表
