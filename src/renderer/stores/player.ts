@@ -164,6 +164,11 @@ export const usePlayerStore = defineStore('player', () => {
       const idx = Math.min(Math.max(state.currentQueueIndex, 0), queue.value.length - 1)
       currentQueueIndex.value = idx
       currentMusic.value = queue.value[idx]
+
+      // 恢复歌曲时长（从音乐数据中）
+      if (currentMusic.value?.duration) {
+        duration.value = currentMusic.value.duration
+      }
     }
     if (state.playMode) {
       playMode.value = state.playMode

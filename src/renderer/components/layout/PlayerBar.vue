@@ -177,14 +177,34 @@ const VolumeIcon = computed(() => {
 })
 
 // 方法
-const togglePlay = () => {
+const togglePlay = async () => {
   if (isPlaying.value) {
     pause()
   } else {
     if (currentMusic.value) {
-      resume()
+      // 检查是否有实际的音频实例
+      // 如果没有（比如启动时恢复状态），需要重新play
+      const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement
+      const hasAudioInstance = audioElement?.src || false
+
+      if (hasAudioInstance) {
+        // 有音频实例，直接恢复播放
+        resume()
+      } else {
+        // 没有音频实例（启动后首次播放），重新加载音乐
+        console.log('🔄 首次播放，重新加载音乐')
+        await play(currentMusic.value)
+
+        // 如果有保存的恢复位置，跳转到该位置
+        if (playerStore.resumePosition > 0) {
+          setTimeout(() => {
+            seek(playerStore.resumePosition)
+            playerStore.resumePosition = 0 // 清除恢复位置，避免重复跳转
+          }, 300)
+        }
+      }
     } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
-      play(playerStore.queue[playerStore.currentQueueIndex])
+      await play(playerStore.queue[playerStore.currentQueueIndex])
     }
   }
 }

@@ -58,7 +58,10 @@ onMounted(async () => {
 
   // 同步窗口外观,确保红绿灯颜色正确
   try {
-    await window.electronAPI.setWindowTheme(theme.value)
+    const validTheme = (theme.value === 'light' || theme.value === 'dark' || theme.value === 'system')
+      ? theme.value as 'light' | 'dark' | 'system'
+      : 'light'
+    await window.electronAPI.setWindowTheme(validTheme)
   } catch (error) {
     console.error('同步窗口外观失败:', error)
   }
@@ -68,16 +71,11 @@ onMounted(async () => {
     theme.value = e.detail
   }) as EventListener)
 
-  // 初始化播放器
+  // 初始化播放器（会恢复上次的播放状态：队列、当前音乐、播放位置）
   await playerStore.initialize(settings)
 
-  // 自动恢复播放
-  if (playerStore.shouldAutoResume && playerStore.currentMusic) {
-    await player.play(playerStore.currentMusic)
-    if (playerStore.resumePosition > 0) {
-      player.seek(playerStore.resumePosition)
-    }
-  }
+  // 注意：不自动播放，只恢复状态
+  // 用户可以通过点击播放按钮手动继续播放
 
   // 监听快捷键
   window.electronAPI.onShortcutAction(handleShortcutAction)
