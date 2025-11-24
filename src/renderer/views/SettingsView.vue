@@ -123,7 +123,7 @@
           </div>
           <div class="app-info">
             <h3 class="app-name">XM Music</h3>
-            <p class="app-version">Version 1.0.0</p>
+            <p class="app-version">Version 1.0.3</p>
             <p class="app-desc">一个基于 Electron + Vue 3 的高颜值本地音乐播放器</p>
           </div>
           <div class="app-links">
