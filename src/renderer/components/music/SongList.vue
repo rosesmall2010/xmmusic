@@ -73,7 +73,7 @@
                <template v-else>
                  <DefaultCover class="fallback-cover" size="small" />
                  <img
-                   :src="`local-file://${music.coverPath}`"
+                   :src="getCoverUrl(music.coverPath)"
                    alt="封面"
                    loading="lazy"
                    @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { getCoverUrl } from '@/utils/media'
 import { Volume2, Trash2, Heart, Music, Check, X } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
@@ -528,6 +529,8 @@ const formatDuration = (seconds: number) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
 }
 
 .fallback-cover {
@@ -536,6 +539,7 @@ const formatDuration = (seconds: number) => {
   left: 0;
   width: 100%;
   height: 100%;
+  z-index: 0;
 }
 
 .item-info {

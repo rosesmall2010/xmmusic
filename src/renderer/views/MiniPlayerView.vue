@@ -18,10 +18,15 @@
     <div class="mini-content">
       <div class="cover-section">
         <div class="cover-wrapper" :class="{ playing: isPlaying }">
-          <img v-if="currentMusic?.coverPath" :src="getCoverUrl(currentMusic.coverPath)" alt="cover" />
-          <div v-else class="default-cover">
-            <Music :size="48" />
-          </div>
+          <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
+          <template v-else>
+            <DefaultCover class="fallback-cover" mode="fill" />
+            <img
+              :src="getCoverUrl(currentMusic.coverPath)"
+              alt="cover"
+              @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+            />
+          </template>
         </div>
       </div>
 
@@ -60,7 +65,8 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Music, Maximize2 } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Maximize2 } from 'lucide-vue-next'
+import DefaultCover from '@/components/common/DefaultCover.vue'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -253,12 +259,24 @@ const handleSeek = (e: MouseEvent) => {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
+  position: relative;
 }
 
 .cover-wrapper img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
+}
+
+.fallback-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
 .default-cover {

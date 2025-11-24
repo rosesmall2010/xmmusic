@@ -217,11 +217,12 @@ const handleDragEnd = async () => {
 
 .cover-placeholder {
   font-size: 4rem;
-  opacity: 0.5;
   color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .play-overlay {

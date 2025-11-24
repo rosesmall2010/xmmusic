@@ -100,4 +100,15 @@ const coverClasses = computed(() => ({
   display: block;
   border-radius: inherit;
 }
+
+/* Override styles for fallback mode */
+.default-cover.fallback-cover {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  box-shadow: none !important;
+}
 </style>

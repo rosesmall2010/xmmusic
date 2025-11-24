@@ -29,7 +29,14 @@
       <div class="album-cover-container">
         <div class="album-cover animate-scale-in">
           <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
-          <img v-else :src="getCoverUrl(currentMusic.coverPath)" alt="封面" />
+          <template v-else>
+            <DefaultCover class="fallback-cover" mode="fill" />
+            <img
+              :src="getCoverUrl(currentMusic.coverPath)"
+              alt="封面"
+              @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+            />
+          </template>
         </div>
       </div>
 
@@ -502,17 +509,30 @@ watch(currentTime, (time) => {
 }
 
 .album-cover {
-  width: 300px;
-  height: 300px;
-  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 1;
+  border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
 }
 
 .album-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
+}
+
+.fallback-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
 .song-info {

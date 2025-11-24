@@ -214,6 +214,7 @@ const handleCoverError = (e: Event) => {
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   position: relative;
+  color: var(--text-tertiary);
 }
 
 .cover-image {

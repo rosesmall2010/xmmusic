@@ -44,7 +44,14 @@
         >
           <div class="music-cover">
             <DefaultCover v-if="!music.coverPath" mode="fill" />
-            <img v-else :src="getCoverUrl(music.coverPath)" alt="封面" />
+            <template v-else>
+              <DefaultCover class="fallback-cover" mode="fill" />
+              <img
+                :src="getCoverUrl(music.coverPath)"
+                alt="封面"
+                @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+              />
+            </template>
             <div class="play-overlay">▶</div>
           </div>
           <div class="music-info">
@@ -225,6 +232,17 @@ const playMusic = async (music: MusicItem) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
+}
+
+.fallback-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
 .play-overlay {

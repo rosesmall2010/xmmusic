@@ -5,7 +5,14 @@
       <div class="music-info" @click="openNowPlaying">
         <div class="music-cover">
           <DefaultCover v-if="!currentMusic?.coverPath" size="small" />
-          <img v-else :src="getCoverUrl(currentMusic.coverPath)" alt="封面" />
+          <template v-else>
+            <DefaultCover class="fallback-cover" size="small" />
+            <img
+              :src="getCoverUrl(currentMusic.coverPath)"
+              alt="封面"
+              @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+            />
+          </template>
         </div>
         <div class="music-details">
           <div class="music-title">{{ currentMusic?.title || '暂无播放' }}</div>
@@ -314,18 +321,30 @@ volumeValue.value = playerStore.volume
 }
 
 .music-cover {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-base);
   overflow: hidden;
   flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-secondary);
+  position: relative;
 }
 
 .music-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
+}
+
+.fallback-cover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
 .music-details {
