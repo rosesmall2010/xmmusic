@@ -13,7 +13,7 @@
     </div>
 
     <div class="content">
-      <SongList :songs="songs" @play="playMusic">
+      <SongList :songs="songs" @play="playMusic" @songs-updated="loadFavorites">
         <template #empty>
           <div class="empty-placeholder">
             <Heart :size="48" class="icon" />
@@ -43,11 +43,14 @@ onMounted(async () => {
 
   //监听收藏更新事件
   window.addEventListener('favorites-updated', loadFavorites)
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', loadFavorites)
 })
 
 onUnmounted(() => {
   // 清理事件监听
   window.removeEventListener('favorites-updated', loadFavorites)
+  window.removeEventListener('music-metadata-updated', loadFavorites)
 })
 
 const loadFavorites = async () => {

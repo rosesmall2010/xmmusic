@@ -13,7 +13,7 @@
     </div>
 
     <div class="content">
-      <SongList :songs="songs" @play="playMusic">
+      <SongList :songs="songs" @play="playMusic" @songs-updated="loadRecent">
         <template #empty>
           <div class="empty-placeholder">
             <Clock :size="48" class="icon" />
@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Clock } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -40,6 +40,12 @@ const songs = ref<MusicItem[]>([])
 
 onMounted(async () => {
   await loadRecent()
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', loadRecent)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', loadRecent)
 })
 
 const loadRecent = async () => {

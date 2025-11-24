@@ -13,7 +13,7 @@
     </div>
 
     <div class="music-list-container">
-      <SongList :songs="musicList" @play="playMusic" @load-more="loadMore">
+      <SongList :songs="musicList" @play="playMusic" @load-more="loadMore" @songs-updated="handleSongsUpdated">
         <template #empty>
           <p>暂无音乐</p>
           <button class="btn-link" @click="handleScan">扫描音乐文件夹</button>
@@ -82,6 +82,11 @@ const handleScan = async () => {
       alert(`扫描失败: ${error.message}`)
     }
   }
+}
+
+const handleSongsUpdated = async () => {
+  // 重新加载音乐列表
+  await musicStore.loadMusic(0, musicStore.musicList.length || 20, true)
 }
 
 const playMusic = async (music: MusicItem) => {
