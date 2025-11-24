@@ -119,7 +119,7 @@ const loadMusicData = (music: MusicItem) => {
 
   formData.value = {
     artist: parsed.artist || music.artist,
-    album: music.album || '', // 使用现有专辑信息，不自动填充
+    album: parsed.artist || music.artist, // 用解析的歌手名填充专辑
     title: parsed.title || music.title
   }
 }
@@ -165,6 +165,8 @@ const swapArtistAndTitle = () => {
   const temp = formData.value.artist
   formData.value.artist = formData.value.title
   formData.value.title = temp
+  // 专辑名和歌手名保持一致
+  formData.value.album = formData.value.artist
 }
 
 const close = () => {
