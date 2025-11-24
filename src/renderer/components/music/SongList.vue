@@ -31,6 +31,7 @@
       <div class="col-index">#</div>
       <div class="col-title">标题</div>
       <div class="col-album">专辑</div>
+      <div class="col-filename">文件名</div>
       <div class="col-duration">时长</div>
     </div>
 
@@ -86,6 +87,7 @@
             </div>
           </div>
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
+          <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
         </div>
       </div>
@@ -111,6 +113,10 @@
         添加到歌单
       </div>
       <div class="menu-divider"></div>
+      <div class="menu-item" @click="openEditTag(contextMenu.music!)">
+        <Edit :size="16" class="icon" />
+        编辑标签
+      </div>
       <div class="menu-item" @click="enableSelectionMode">
         <Check :size="16" class="icon" />
         批量操作
@@ -140,16 +146,23 @@
       :music-list-to-ad="Array.from(selectedSongs).map(filePath => props.songs.find(s => s.filePath === filePath)!).filter(Boolean)"
       @added="handleBatchAddedToPlaylist"
     />
+    <EditTagModal
+      :show="showEditTag"
+      :music="editingMusic"
+      @close="closeEditTag"
+      @saved="handleTagSaved"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
+import EditTagModal from '@/components/music/EditTagModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { useElementSize } from '@vueuse/core'
 
@@ -213,6 +226,11 @@ const offsetY = computed(() => visibleRange.value.start * itemHeight)
 // Context Menu & Modals
 const showAddToPlaylist = ref(false)
 const selectedMusic = ref<MusicItem | null>(null)
+const showBatchAddToPlaylist = ref(false)
+
+// Edit Tag Modal
+const showEditTag = ref(false)
+const editingMusic = ref<MusicItem | null>(null)
 
 const contextMenu = reactive({
   visible: false,
@@ -225,7 +243,6 @@ const contextMenu = reactive({
 // 批量选择状态
 const selectionMode = ref(false)
 const selectedSongs = ref<Set<string>>(new Set())
-const showBatchAddToPlaylist = ref(false)
 
 // 全选状态
 const isAllSelected = computed(() => {
@@ -344,6 +361,36 @@ const formatDuration = (seconds: number) => {
   const secs = Math.floor(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
+
+// Edit Tag Modal handlers
+const openEditTag = (music: MusicItem) => {
+  editingMusic.value = music
+  showEditTag.value = true
+  closeContextMenu()
+}
+
+const closeEditTag = () => {
+  showEditTag.value = false
+  editingMusic.value = null
+}
+
+const handleTagSaved = () => {
+  // Emit event to refresh the list
+  emit('songs-updated')
+}
+
+// Listen for metadata updates from other parts of the app
+onMounted(() => {
+  window.addEventListener('music-metadata-updated', () => {
+    emit('songs-updated')
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', () => {
+    emit('songs-updated')
+  })
+})
 </script>
 
 <style scoped>
@@ -499,7 +546,16 @@ const formatDuration = (seconds: number) => {
 }
 
 .col-album {
-  width: 25%;
+  width: 20%;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: var(--spacing-md);
+}
+
+.col-filename {
+  width: calc(20% + 20px);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;

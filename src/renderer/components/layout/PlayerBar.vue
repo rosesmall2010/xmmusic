@@ -88,6 +88,13 @@
 
     <!-- 右侧：音量控制和其他按钮 -->
     <div class="player-right">
+      <div class="equalizer-wrapper">
+        <button class="control-icon-btn" @click="toggleEqualizer" title="音效">
+          <Sliders :size="18" />
+        </button>
+        <EqualizerPanel v-model="showEqualizer" />
+      </div>
+
       <button class="control-icon-btn" @click="toggleLyrics" title="歌词">
         <FileText :size="18" />
       </button>
@@ -117,7 +124,9 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
-import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, FileText, Volume2, VolumeX } from 'lucide-vue-next'
+import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, FileText, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
+import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
+import { useEqualizer } from '@/composables/useEqualizer'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -125,6 +134,10 @@ const { play, pause, resume, seek, setVolume } = usePlayer()
 
 const volumeValue = ref(80)
 const isFavorite = ref(false)
+const showEqualizer = ref(false)
+
+// 均衡器
+const equalizer = useEqualizer()
 
 // 计算属性
 const currentMusic = computed(() => playerStore.currentMusic)
@@ -230,6 +243,9 @@ const toggleFavorite = async () => {
   if (currentMusic.value) {
     await window.electronAPI.toggleFavorite(currentMusic.value.filePath)
     isFavorite.value = !isFavorite.value
+
+    // 通知其他组件更新收藏状态
+    window.dispatchEvent(new Event('favorites-updated'))
   }
 }
 
@@ -244,6 +260,10 @@ const toggleQueue = () => {
 const toggleLyrics = () => {
   // TODO: 打开歌词面板
   console.log('Toggle lyrics')
+}
+
+const toggleEqualizer = () => {
+  showEqualizer.value = !showEqualizer.value
 }
 
 const openNowPlaying = () => {
@@ -265,6 +285,17 @@ watch(currentMusic, async (music) => {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.filePath)
   }
 })
+
+// 监听播放状态，初始化均衡器音频上下文
+watch(isPlaying, (playing) => {
+  if (playing) {
+    // 获取音频元素并初始化均衡器
+    const audioElement = document.getElementById('hidden-audio') as HTMLAudioElement
+    if (audioElement) {
+      equalizer.initAudioContext(audioElement)
+    }
+  }
+}, { immediate: true })
 
 // 初始化音量
 volumeValue.value = playerStore.volume
@@ -305,6 +336,11 @@ volumeValue.value = playerStore.volume
   flex: 1;
   justify-content: flex-end;
   min-width: 200px;
+}
+
+/* 均衡器容器 */
+.equalizer-wrapper {
+  position: relative;
 }
 
 /* 音乐信息 */
@@ -433,6 +469,7 @@ volumeValue.value = playerStore.volume
   cursor: pointer;
   font-size: var(--font-size-lg);
   cursor: pointer;
+  color: var(--text-secondary);
   transition: all var(--transition-base) var(--transition-timing);
 }
 
@@ -443,6 +480,36 @@ volumeValue.value = playerStore.volume
 
 .control-icon-btn.active {
   color: var(--color-primary);
+}
+
+/* Tooltip样式 */
+.control-icon-btn {
+  position: relative;
+}
+
+.control-icon-btn::before {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  color: var(--text-color);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base) var(--transition-timing);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+  z-index: 1000;
+}
+
+.control-icon-btn:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-8px);
 }
 
 /* 进度条 */

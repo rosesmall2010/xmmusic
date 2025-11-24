@@ -99,9 +99,35 @@ const myMusicItems = computed(() => navItems.value.slice(2))
 
 onMounted(async () => {
   // 加载统计信息
-  totalCount.value = await window.electronAPI.getMusicTotalCount()
+  await refreshCounts()
 
-  // 加载我喜欢数量
+  // 加载歌单列表
+  await loadPlaylists()
+
+  // 监听歌单更新事件
+  window.addEventListener('playlist-updated', loadPlaylists)
+  window.addEventListener('song if-added-to-playlist', loadPlaylists)
+
+  // 监听收藏和播放历史更新事件
+  window.addEventListener('favorites-updated', refreshFavoritesCount)
+  window.addEventListener('recent-plays-updated', refreshRecentPlaysCount)
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  window.removeEventListener('playlist-updated', loadPlaylists)
+  window.removeEventListener('song-added-to-playlist', loadPlaylists)
+  window.removeEventListener('favorites-updated', refreshFavoritesCount)
+  window.removeEventListener('recent-plays-updated', refreshRecentPlaysCount)
+})
+
+const refreshCounts = async () => {
+  totalCount.value = await window.electronAPI.getMusicTotalCount()
+  await refreshFavoritesCount()
+  await refreshRecentPlaysCount()
+}
+
+const refreshFavoritesCount = async () => {
   try {
     const favorites = await window.electronAPI.getFavorites()
     const favItem = navItems.value.find(item => item.path === '/favorites')
@@ -109,8 +135,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to load favorites count:', error)
   }
+}
 
-  // 加载最近播放数量
+const refreshRecentPlaysCount = async () => {
   try {
     const recentPlays = await window.electronAPI.getRecentPlays()
     const recentItem = navItems.value.find(item => item.path === '/recent')
@@ -118,20 +145,7 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to load recent plays count:', error)
   }
-
-  // 加载歌单列表
-  await loadPlaylists()
-
-  // 监听歌单更新事件
-  window.addEventListener('playlist-updated', loadPlaylists)
-  window.addEventListener('song-added-to-playlist', loadPlaylists)
-})
-
-onUnmounted(() => {
-  // 清理事件监听
-  window.removeEventListener('playlist-updated', loadPlaylists)
-  window.removeEventListener('song-added-to-playlist', loadPlaylists)
-})
+}
 
 const loadPlaylists = async () => {
   try {

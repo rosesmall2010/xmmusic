@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Heart } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -40,6 +40,14 @@ const songs = ref<MusicItem[]>([])
 
 onMounted(async () => {
   await loadFavorites()
+
+  //监听收藏更新事件
+  window.addEventListener('favorites-updated', loadFavorites)
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  window.removeEventListener('favorites-updated', loadFavorites)
 })
 
 const loadFavorites = async () => {

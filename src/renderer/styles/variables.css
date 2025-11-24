@@ -146,6 +146,7 @@
   --bg-primary: var(--bg-color);
   --bg-elevated: #ffffff;
   --text-primary: var(--text-color);
+  --color-primary-alpha: rgba(49, 194, 124, 0.1);
   --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
   --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
 }
@@ -204,6 +205,7 @@
   --bg-primary: var(--bg-color);
   --bg-elevated: #2d2d2d;
   --text-primary: var(--text-color);
+  --color-primary-alpha: rgba(49, 194, 124, 0.15);
   --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
   --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
 }
