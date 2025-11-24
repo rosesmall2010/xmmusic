@@ -95,7 +95,10 @@
   - Vue 3.5.24
   - TypeScript 5.9.3
   - Vite 7.2.2
-  - 新增 Pinia 和 Howler.js 展示
+  - Pinia 3.0.4
+  - Vue Router 4.4.5
+  - Howler.js 2.2.4
+  - Lucide Icons 0.554.0
 
 ## [1.0.0] - 2024-XX-XX
 
