@@ -18,7 +18,9 @@
       />
 
       <div v-else class="empty-state">
-        <div class="empty-icon">🔍</div>
+        <div class="empty-icon">
+          <Search :size="64" />
+        </div>
         <p>未找到相关歌曲</p>
       </div>
     </div>
@@ -32,6 +34,7 @@ import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
+import { Search } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 
 const route = useRoute()

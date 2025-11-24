@@ -45,7 +45,7 @@
         >
           <template #empty>
             <div class="empty-placeholder">
-              <span class="icon">🎵</span>
+              <Music :size="64" class="icon" />
               <p>歌单还是空的</p>
               <p class="sub-text">去添加一些歌曲吧</p>
             </div>
@@ -303,9 +303,7 @@ const handleCoverError = (e: Event) => {
 }
 
 .empty-placeholder .icon {
-  font-size: 3rem;
   margin-bottom: var(--spacing-md);
-  display: block;
   color: var(--text-quaternary);
 }
 

@@ -3,7 +3,7 @@
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h3>添加到歌单</h3>
-        <button class="close-btn" @click="close">×</button>
+        <button class="close-btn" @click="close"><X :size="24" /></button>
       </div>
 
       <div class="modal-body">
@@ -14,7 +14,7 @@
             class="playlist-item"
             @click="selectPlaylist(playlist)"
           >
-            <div class="playlist-icon">🎵</div>
+            <div class="playlist-icon"><ListMusic :size="20" /></div>
             <div class="playlist-info">
               <div class="playlist-name">{{ playlist.name }}</div>
               <div class="playlist-count">{{ playlist.songCount }} 首歌曲</div>
@@ -43,6 +43,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
 

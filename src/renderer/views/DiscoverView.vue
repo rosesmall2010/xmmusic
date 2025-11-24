@@ -52,7 +52,9 @@
                 @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
               />
             </template>
-            <div class="play-overlay">▶</div>
+            <div class="play-overlay">
+              <Play :size="32" />
+            </div>
           </div>
           <div class="music-info">
             <div class="music-title">{{ music.title }}</div>
@@ -72,7 +74,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
-import { Clock, Heart, Folder, Shuffle } from 'lucide-vue-next'
+import { Clock, Heart, Folder, Shuffle, Play } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 
 const router = useRouter()

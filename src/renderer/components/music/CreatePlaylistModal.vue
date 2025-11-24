@@ -3,7 +3,9 @@
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h3>{{ isEdit ? '编辑歌单' : '新建歌单' }}</h3>
-        <button class="close-btn" @click="close">×</button>
+        <button class="close-btn" @click="close">
+          <X :size="24" />
+        </button>
       </div>
 
       <div class="modal-body">
@@ -31,6 +33,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import { X } from 'lucide-vue-next'
 
 const props = defineProps<{
   modelValue: boolean

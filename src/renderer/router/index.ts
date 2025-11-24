@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DiscoverView.vue'),
     meta: {
       title: '发现音乐',
-      icon: '🎵',
+      icon: 'Music',
     },
   },
   {
@@ -32,7 +32,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/LocalMusicView.vue'),
     meta: {
       title: '本地音乐',
-      icon: '📁',
+      icon: 'Folder',
     },
   },
   {
@@ -41,7 +41,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/FavoritesView.vue'),
     meta: {
       title: '我喜欢',
-      icon: '❤️',
+      icon: 'Heart',
     },
   },
   {
@@ -50,7 +50,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/PlaylistsView.vue'),
     meta: {
       title: '歌单',
-      icon: '🎶',
+      icon: 'ListMusic',
     },
   },
   {
@@ -67,7 +67,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/RecentPlayView.vue'),
     meta: {
       title: '最近播放',
-      icon: '🕐',
+      icon: 'Clock',
     },
   },
   {
@@ -76,7 +76,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/SettingsView.vue'),
     meta: {
       title: '设置',
-      icon: '⚙️',
+      icon: 'Settings',
     },
   },
   {
@@ -94,7 +94,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/SearchView.vue'),
     meta: {
       title: '搜索结果',
-      icon: '🔍',
+      icon: 'Search',
     },
   },
 ]

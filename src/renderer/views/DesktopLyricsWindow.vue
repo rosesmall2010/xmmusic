@@ -2,7 +2,7 @@
   <div class="desktop-lyrics-window" :class="{ locked }">
     <div v-if="!locked" class="control-bar">
       <button class="control-btn" @click="toggleLock" title="锁定">
-        🔒
+        <Lock :size="14" />
       </button>
       <button class="control-btn close-btn" @click="closeWindow" title="关闭">
         ×
@@ -21,6 +21,7 @@
 import { ref, computed, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { parseLrc, type LyricLine } from '@/utils/lrcParser'
+import { Lock } from 'lucide-vue-next'
 
 const playerStore = usePlayerStore()
 const locked = ref(false)
