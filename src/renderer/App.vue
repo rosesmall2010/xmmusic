@@ -17,9 +17,11 @@
 
     <template v-else>
       <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
+        <keep-alive include="MiniPlayer">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </keep-alive>
       </router-view>
     </template>
 
@@ -53,6 +55,13 @@ onMounted(async () => {
   // 加载设置
   const settings = await window.electronAPI.getSettings()
   theme.value = settings?.theme || 'light'
+
+  // 同步窗口外观,确保红绿灯颜色正确
+  try {
+    await window.electronAPI.setWindowTheme(theme.value)
+  } catch (error) {
+    console.error('同步窗口外观失败:', error)
+  }
 
   // 监听主题变化
   window.addEventListener('theme-changed', ((e: CustomEvent) => {

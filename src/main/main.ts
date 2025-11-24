@@ -133,7 +133,12 @@ function createWindow(): void {
     // macOS: 使用原生红绿灯按钮，隐藏标题栏但保留按钮
     // Windows/Linux: 完全自定义无边框窗口
     ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset', frame: true }
+      ? {
+          titleBarStyle: 'hiddenInset',
+          frame: true,
+          // backgroundColor确保红绿灯在所有主题下都正确显示灰色
+          backgroundColor: '#00000000' // 完全透明,让CSS控制背景
+        }
       : { frame: false }
     )
   })
@@ -293,6 +298,23 @@ app.whenReady().then(async () => {
 
   // 创建窗口
   createWindow()
+
+  // 立即读取并应用主题设置到窗口外观
+  if (mainWindow && db) {
+    try {
+      const settings = db.getAllSettings()
+      const theme = settings.theme || 'light'
+      const { nativeTheme } = require('electron')
+      if (theme === 'system') {
+        nativeTheme.themeSource = 'system'
+      } else {
+        nativeTheme.themeSource = theme
+      }
+      console.log(`✅ 窗口外观已设置为: ${theme}`)
+    } catch (error) {
+      console.error('设置窗口外观失败:', error)
+    }
+  }
 
   // 初始化系统托盘
   if (mainWindow) {

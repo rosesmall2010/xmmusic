@@ -37,13 +37,23 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     mainWindow.close()
   })
 
+  // 设置窗口外观模式(用于macOS红绿灯颜色)
+  ipcMain.handle('set-window-theme', (_, theme: 'light' | 'dark' | 'system') => {
+    const { nativeTheme } = require('electron')
+    if (theme === 'system') {
+      nativeTheme.themeSource = 'system'
+    } else {
+      nativeTheme.themeSource = theme
+    }
+  })
+
   // 迷你模式状态
   let normalBounds: Electron.Rectangle | null = null
 
   ipcMain.handle('set-mini-mode', async (_, enabled: boolean) => {
     if (enabled) {
-      // 进入迷你模式
-      if (!mainWindow.isFullScreen()) {
+      // 进入迷你模式 - 只在normalBounds为null时保存当前窗口尺寸
+      if (!normalBounds && !mainWindow.isFullScreen()) {
         normalBounds = mainWindow.getBounds()
       }
       mainWindow.setMinimumSize(300, 100)
@@ -55,6 +65,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       mainWindow.setMinimumSize(800, 600)
       if (normalBounds) {
         mainWindow.setBounds(normalBounds, true)
+        normalBounds = null  // 重置为null,防止下次保存mini窗口尺寸
       } else {
         mainWindow.setSize(1000, 680, true)
         mainWindow.center()

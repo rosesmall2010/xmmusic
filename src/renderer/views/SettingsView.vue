@@ -15,7 +15,7 @@
             <div class="setting-desc">选择应用的显示风格</div>
           </div>
           <div class="setting-control">
-            <select :value="settingsStore.theme" @change="e => settingsStore.setTheme((e.target as HTMLSelectElement).value as any)">
+            <select :value="settingsStore.theme" @change="handleThemeChange">
               <option value="light">浅色模式</option>
               <option value="dark">深色模式</option>
               <option value="system">跟随系统</option>
@@ -118,7 +118,9 @@
         <h2 class="section-title">关于</h2>
 
         <div class="about-card">
-          <div class="app-logo">🎵</div>
+          <div class="app-logo">
+            <Music :size="48" />
+          </div>
           <div class="app-info">
             <h3 class="app-name">XM Music</h3>
             <p class="app-version">Version 1.0.0</p>
@@ -137,6 +139,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Music } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 
 const settingsStore = useSettingsStore()
@@ -207,6 +210,13 @@ const rescanLibrary = async () => {
 
 const checkUpdate = () => {
   alert('当前已是最新版本')
+}
+
+const handleThemeChange = async (e: Event) => {
+  const theme = (e.target as HTMLSelectElement).value as any
+  settingsStore.setTheme(theme)
+  // 同步窗口外观,确保红绿灯颜色正确
+  await window.electronAPI.setWindowTheme(theme)
 }
 </script>
 

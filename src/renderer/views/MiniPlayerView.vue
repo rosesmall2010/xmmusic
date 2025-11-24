@@ -1,8 +1,5 @@
 <template>
-  <div class="mini-player" :class="{ 'has-cover': !!currentMusic?.coverPath }">
-    <!-- 背景模糊 -->
-    <div class="background-layer" :style="backgroundStyle"></div>
-    <div class="overlay-layer"></div>
+  <div class="mini-player">
 
     <!-- 顶部栏 -->
     <div class="mini-header">
@@ -68,6 +65,11 @@ import { getCoverUrl } from '@/utils/media'
 import { SkipBack, Play, Pause, SkipForward, Maximize2 } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 
+// 定义组件名称以支持keep-alive
+defineOptions({
+  name: 'MiniPlayer'
+})
+
 const router = useRouter()
 const playerStore = usePlayerStore()
 const { play, pause, resume, seek } = usePlayer()
@@ -80,15 +82,6 @@ const duration = computed(() => playerStore.duration)
 const progressPercentage = computed(() => {
   if (!duration.value) return 0
   return (currentTime.value / duration.value) * 100
-})
-
-const backgroundStyle = computed(() => {
-  if (currentMusic.value?.coverPath) {
-    return {
-      backgroundImage: `url(${getCoverUrl(currentMusic.value.coverPath)})`
-    }
-  }
-  return {}
 })
 
 const exitMiniMode = async () => {
@@ -147,48 +140,11 @@ const handleSeek = (e: MouseEvent) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  color: var(--text-color);
-  background: var(--bg-color);
-  user-select: none;
-  transition: all 0.3s ease;
-}
-
-.mini-player.has-cover {
   color: white;
-  background: #2c3e50; /* Fallback */
-}
-
-.background-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-size: cover;
-  background-position: center;
-  filter: blur(20px) brightness(0.6);
-  z-index: -2;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-
-.mini-player.has-cover .background-layer {
-  opacity: 1;
-}
-
-.overlay-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.2);
-  z-index: -1;
-  opacity: 0;
-}
-
-.mini-player.has-cover .overlay-layer {
-  opacity: 1;
+  /* 使用简洁的渐变背景替代模糊效果,性能更好 */
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  user-select: none;
+  transition: background 0.3s ease;
 }
 
 .mini-header {
@@ -217,25 +173,18 @@ const handleSeek = (e: MouseEvent) => {
 .control-btn {
   background: none;
   border: none;
-  color: var(--text-color);
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
   padding: 4px;
   font-size: 14px;
-  transition: color 0.2s;
-}
-
-.mini-player.has-cover .control-btn {
-  color: rgba(255, 255, 255, 0.9);
+  transition: all var(--transition-fast);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  border-radius: 4px; /* 添加圆角 */
 }
 
 .control-btn:hover {
-  opacity: 0.8;
-}
-
-.mini-player.has-cover .control-btn:hover {
   color: white;
-  opacity: 1;
+  background: rgba(255, 255, 255, 0.1); /* 添加hover背景 */
 }
 
 .mini-content {
@@ -282,16 +231,11 @@ const handleSeek = (e: MouseEvent) => {
 .default-cover {
   width: 100%;
   height: 100%;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 48px;
-  color: var(--text-secondary);
-}
-
-.mini-player.has-cover .default-cover {
-  background: rgba(255, 255, 255, 0.1);
   color: white;
 }
 
@@ -311,27 +255,19 @@ const handleSeek = (e: MouseEvent) => {
 
 .music-artist {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.mini-player.has-cover .music-artist {
-  color: rgba(255, 255, 255, 0.7);
-}
-
 .progress-section {
   width: 100%;
   height: 4px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
-}
-
-.mini-player.has-cover .progress-section {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .progress-section:hover {
@@ -365,19 +301,13 @@ const handleSeek = (e: MouseEvent) => {
   font-size: 40px;
   width: 56px;
   height: 56px;
-  background: var(--text-color);
-  color: var(--bg-color);
+  background: white;
+  color: #667eea;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 1;
-  box-shadow: var(--shadow-md);
-}
-
-.mini-player.has-cover .play-btn {
-  background: white;
-  color: black;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 

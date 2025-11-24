@@ -26,7 +26,7 @@
             @input="handleSearchInput"
           />
           <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-            <span>×</span>
+            <X :size="20" />
           </button>
         </div>
 
@@ -95,7 +95,7 @@
           <span>□</span>
         </button>
         <button class="win-btn close" @click="closeWindow">
-          <span>×</span>
+          <X :size="24" />
         </button>
       </div>
     </div>
@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock, X } from 'lucide-vue-next'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -254,6 +254,8 @@ const toggleTheme = async () => {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
   document.getElementById('app')?.setAttribute('class', theme.value)
   await window.electronAPI.saveSettings({ theme: theme.value })
+  // 同步窗口外观,确保红绿灯颜色正确
+  await window.electronAPI.setWindowTheme(theme.value)
   window.dispatchEvent(new CustomEvent('theme-changed', { detail: theme.value }))
 }
 
@@ -532,14 +534,15 @@ onMounted(async () => {
   height: 36px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-base);
+ border-radius: var(--radius-base);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   color: var(--text-color);
   font-size: var(--font-size-lg);
-  transition: all var(--transition-base) var(--transition-timing);
+  /* 优化transition,仅对background做过渡,减少延迟 */
+  transition: background var(--transition-fast) var(--transition-timing);
   -webkit-app-region: no-drag;
 }
 

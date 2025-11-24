@@ -4,6 +4,7 @@ export interface ElectronAPI {
   maximizeWindow: () => void
   closeWindow: () => void
   setMiniMode: (enabled: boolean) => Promise<void>
+  setWindowTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>
   toggleDesktopLyrics: () => Promise<boolean>
   setDesktopLyricsLocked: (locked: boolean) => Promise<void>
   isDesktopLyricsOpen: () => Promise<boolean>
