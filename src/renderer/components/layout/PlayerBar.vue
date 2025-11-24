@@ -117,7 +117,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
-import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, FileText, Volume2, VolumeX } from 'lucide-vue-next'
+import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, FileText, Volume2, VolumeX } from 'lucide-vue-next'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -145,7 +145,8 @@ const PlayModeIcon = computed(() => {
   if (mode === 'random') return Shuffle
   if (mode === 'repeat') return Repeat
   if (mode === 'single') return Repeat1
-  return null
+  if (mode === 'sequential') return ListOrdered
+  return ListOrdered // 默认返回顺序播放图标
 })
 
 const playModeText = computed(() => {
