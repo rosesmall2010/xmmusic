@@ -14,6 +14,19 @@ app.name = 'xmmusic'
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
 app.commandLine.appendSwitch('disable-site-isolation-trials')
 
+// 开发模式下使用独立的 userData 目录，避免与生产环境冲突
+// 这必须在 app.on('ready') 之前调用
+if (!app.isPackaged && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
+  const userDataPath = app.getPath('userData')
+  const devUserDataPath = `${userDataPath}-dev`
+  app.setPath('userData', devUserDataPath)
+  console.log('='.repeat(60))
+  console.log(`🔧 开发模式检测到，已切换 UserData 目录`)
+  console.log(`📂 原路径: ${userDataPath}`)
+  console.log(`📂 新路径: ${devUserDataPath}`)
+  console.log('='.repeat(60))
+}
+
 let mainWindow: BrowserWindow | null = null
 let db: MusicDatabase | null = null
 let fileMonitor: FileMonitor | null = null
