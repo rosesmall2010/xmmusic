@@ -70,42 +70,46 @@ export default class LyricsService {
   /**
    * 检测文件编码
    */
-  detectEncoding(filePath: string): 'utf8' | 'gbk' | 'gb2312' | 'big5' {
+  /**
+   * 检测文件编码
+   */
+  detectEncoding(filePath: string): 'utf8' | 'gbk' {
     try {
-      // 尝试读取前几个字节判断BOM
       const buffer = readFileSync(filePath)
 
+      // 1. 检查 BOM
       // UTF-8 BOM
       if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
         return 'utf8'
       }
-
       // UTF-16 LE BOM
       if (buffer[0] === 0xff && buffer[1] === 0xfe) {
-        return 'utf8' // 简化处理，使用utf8
+        return 'utf8' // iconv-lite 会自动处理
       }
-
       // UTF-16 BE BOM
       if (buffer[0] === 0xfe && buffer[1] === 0xff) {
-        return 'utf8' // 简化处理，使用utf8
+        return 'utf8' // iconv-lite 会自动处理
       }
 
-      // 尝试UTF-8解码
-      try {
-        const testText = buffer.slice(0, Math.min(1000, buffer.length)).toString('utf8')
-        // 检查是否包含常见的中文字符
-        if (/[\u4e00-\u9fa5]/.test(testText)) {
-          return 'utf8'
-        }
-      } catch {
-        // UTF-8解码失败，可能是其他编码
+      // 2. 尝试 UTF-8 解码
+      // 检查是否包含无效的 UTF-8 序列（会被替换为 ）
+      const utf8Text = buffer.toString('utf8')
+      if (utf8Text.includes('')) {
+        return 'gbk'
       }
 
-      // 默认尝试GBK（常见的中文编码）
-      return 'gbk'
+      // 3. 检查是否包含中文字符
+      // 如果是有效的 UTF-8 且包含中文，那就是 UTF-8
+      if (/[\u4e00-\u9fa5]/.test(utf8Text)) {
+        return 'utf8'
+      }
+
+      // 4. 纯 ASCII 或其他情况，默认 UTF-8
+      // 如果是纯 ASCII，UTF-8 和 GBK 是一样的
+      return 'utf8'
     } catch (error) {
       console.error('检测编码失败:', error)
-      return 'utf8' // 默认UTF-8
+      return 'utf8' // 默认
     }
   }
 
@@ -113,15 +117,34 @@ export default class LyricsService {
    * 解析LRC歌词文件
    */
   parseLyrics(filePath: string, encoding?: string): LyricsData {
-    const detectedEncoding = encoding || this.detectEncoding(filePath)
+    // 第一次尝试
+    let detectedEncoding = encoding || this.detectEncoding(filePath)
+    let lyricsData = this.tryParse(filePath, detectedEncoding)
+
+    // 如果解析失败（没有歌词行），且没有指定编码，尝试切换编码重试
+    if ((!lyricsData.lines || lyricsData.lines.length === 0) && !encoding) {
+      const altEncoding = detectedEncoding === 'utf8' ? 'gbk' : 'utf8'
+      console.log(`歌词解析结果为空，尝试切换编码重试: ${detectedEncoding} -> ${altEncoding}`)
+      const altLyricsData = this.tryParse(filePath, altEncoding)
+
+      // 如果重试结果更好（有歌词行），则使用重试结果
+      if (altLyricsData.lines && altLyricsData.lines.length > 0) {
+        return altLyricsData
+      }
+    }
+
+    return lyricsData
+  }
+
+  private tryParse(filePath: string, encoding: string): LyricsData {
     let content: string
 
     try {
       const buffer = readFileSync(filePath)
-      if (detectedEncoding === 'utf8') {
+      if (encoding === 'utf8') {
         content = buffer.toString('utf8')
       } else {
-        content = iconv.decode(buffer, detectedEncoding)
+        content = iconv.decode(buffer, encoding)
       }
     } catch (error) {
       throw new Error(`读取歌词文件失败: ${error}`)
@@ -158,19 +181,24 @@ export default class LyricsService {
       }
 
       // 解析时间标签 [mm:ss.xx] 或 [mm:ss]
-      const timeMatches = trimmedLine.matchAll(/\[(\d{2}):(\d{2})(?:\.(\d{2}))?\]/g)
+      const timeMatches = trimmedLine.matchAll(/\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g)
       const times: number[] = []
 
       for (const match of timeMatches) {
         const minutes = parseInt(match[1], 10)
         const seconds = parseInt(match[2], 10)
-        const centiseconds = match[3] ? parseInt(match[3], 10) : 0
+        // 支持2位或3位毫秒数
+        const msStr = match[3] || '0'
+        const ms = parseInt(msStr, 10)
+        // 如果是2位，则是百分之一秒；如果是3位，则是毫秒
+        const centiseconds = msStr.length === 3 ? ms / 10 : ms
+
         const time = minutes * 60 + seconds + centiseconds / 100
         times.push(time)
       }
 
       // 提取歌词文本（移除所有时间标签）
-      const text = trimmedLine.replace(/\[\d{2}:\d{2}(?:\.\d{2})?\]/g, '').trim()
+      const text = trimmedLine.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '').trim()
 
       if (times.length > 0 && text) {
         // 如果有多个时间标签，为每个时间创建一行
@@ -182,8 +210,11 @@ export default class LyricsService {
         }
       } else if (text && lyricsData.lines.length > 0) {
         // 如果没有时间标签但有文本，可能是上一行的延续
-        const lastLine = lyricsData.lines[lyricsData.lines.length - 1]
-        lastLine.text += ' ' + text
+        // 但要注意不要把标签行误判为歌词
+        if (!/^\[.+\]$/.test(text)) {
+           const lastLine = lyricsData.lines[lyricsData.lines.length - 1]
+           lastLine.text += ' ' + text
+        }
       }
     }
 
