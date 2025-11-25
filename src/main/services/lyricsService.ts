@@ -19,23 +19,49 @@ export default class LyricsService {
   /**
    * 自动查找歌词文件
    * 查找顺序：
-   * 1. 同目录下同名的 .lrc 文件
-   * 2. 同目录下同名的 .txt 文件（作为歌词文件）
+   * 1. 同目录下同名的 .lrc/.txt 文件（精确匹配）
+   * 2. 同目录下同名的文件（忽略大小写和 Unicode 编码差异）
    */
   findLyricsFile(musicFilePath: string): string | null {
-    const dir = dirname(musicFilePath)
-    const baseName = musicFilePath.replace(/\.[^/.]+$/, '') // 移除扩展名
+    try {
+      const dir = dirname(musicFilePath)
+      const ext = extname(musicFilePath)
+      // 获取不带扩展名的文件名
+      const baseName = musicFilePath.slice(0, -ext.length).split(/[/\\]/).pop() || ''
 
-    // 尝试 .lrc 文件
-    const lrcPath = `${baseName}.lrc`
-    if (existsSync(lrcPath)) {
-      return lrcPath
-    }
+      if (!baseName) return null
 
-    // 尝试 .txt 文件
-    const txtPath = `${baseName}.txt`
-    if (existsSync(txtPath)) {
-      return txtPath
+      // 1. 精确匹配（尝试常见扩展名）
+      const extensions = ['.lrc', '.LRC', '.txt', '.TXT']
+      for (const lrcExt of extensions) {
+        // 重新构建路径，确保路径分隔符正确
+        const path = join(dir, baseName + lrcExt)
+        if (existsSync(path)) {
+          return path
+        }
+      }
+
+      // 2. 遍历目录进行模糊匹配（解决大小写和 NFC/NFD 问题）
+      const { readdirSync } = require('fs')
+      const { basename } = require('path')
+
+      const files = readdirSync(dir)
+      const targetName = baseName.toLowerCase().normalize('NFC')
+
+      for (const file of files) {
+        const fileExt = extname(file).toLowerCase()
+        if (fileExt !== '.lrc' && fileExt !== '.txt') continue
+
+        const fileName = basename(file, extname(file))
+        const normalizedFileName = fileName.toLowerCase().normalize('NFC')
+
+        // 比较文件名（忽略大小写和 Unicode 规范化差异）
+        if (normalizedFileName === targetName) {
+          return join(dir, file)
+        }
+      }
+    } catch (error) {
+      console.error('查找歌词文件出错:', error)
     }
 
     return null
