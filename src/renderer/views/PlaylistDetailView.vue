@@ -34,8 +34,14 @@
     </div>
 
     <div class="content">
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>加载中... ({{ songs.length }} / {{ totalSongs }})</p>
+        </div>
+
         <SongList
-          v-if="playlist"
+          v-else-if="playlist"
           :songs="songs"
           :show-remove-from-playlist="true"
           :playlist-id="playlist.id"
@@ -109,23 +115,78 @@ watch(() => route.params.id as string, async (newId: string, oldId: string) => {
   }
 })
 
+const loading = ref(false)
+const totalSongs = ref(0)
+let currentLoadId = 0 // 用于追踪当前的加载任务，防止切换歌单时数据错乱
+
 const loadPlaylist = async () => {
   const id = route.params.id as string
   if (!id) return
 
+  // 增加加载ID，立即使之前的加载任务失效
+  currentLoadId++
+  const thisLoadId = currentLoadId
+
   try {
+    loading.value = true
+    songs.value = [] // 清空列表
+
     // 获取歌单详情
     const playlists = await window.electronAPI.getPlaylists()
+
+    // 如果任务已过时，直接返回
+    if (thisLoadId !== currentLoadId) return
+
     // 路由参数id是字符串，数据库id是数字，需要转换
     const playlistId = Number(id)
     playlist.value = playlists.find((p: any) => p.id === playlistId)
 
     if (playlist.value) {
-      // 获取歌单歌曲
-      songs.value = await window.electronAPI.getPlaylistSongs(playlistId)
+      totalSongs.value = playlist.value.songCount || 0
+
+      // 获取所有歌曲数据
+      // 注意：如果歌曲非常多（如几万首），这里可能也需要后端分页
+      // 但目前主要瓶颈是前端渲染和响应式转换
+      const allSongs = await window.electronAPI.getPlaylistSongs(playlistId)
+
+      if (thisLoadId !== currentLoadId) return
+
+      // 策略：先显示第一批数据（首屏），让用户立刻能看到
+      const firstBatchSize = 50
+      songs.value = allSongs.slice(0, firstBatchSize)
+      loading.value = false // 立即结束 loading 状态，显示列表
+
+      // 如果还有剩余数据，分批追加
+      if (allSongs.length > firstBatchSize) {
+        let currentIdx = firstBatchSize
+        const batchSize = 200 // 后续批次可以大一点
+
+        const appendBatch = () => {
+          // 检查任务是否已被取消
+          if (thisLoadId !== currentLoadId) return
+
+          const endIdx = Math.min(currentIdx + batchSize, allSongs.length)
+          const batch = allSongs.slice(currentIdx, endIdx)
+
+          // 追加数据
+          songs.value = [...songs.value, ...batch]
+          currentIdx = endIdx
+
+          // 如果还有数据，继续下一批
+          if (currentIdx < allSongs.length) {
+            setTimeout(appendBatch, 20) // 让出主线程
+          }
+        }
+
+        // 启动后台加载
+        setTimeout(appendBatch, 20)
+      }
+    } else {
+      loading.value = false
     }
   } catch (error) {
-    console.error('Failed to load playlist:', error)
+    console.error('加载歌单失败:', error)
+    loading.value = false
   }
 }
 
@@ -324,5 +385,34 @@ const handleCoverError = (e: Event) => {
 .sub-text {
   font-size: var(--font-size-sm);
   margin-top: var(--spacing-xs);
+}
+
+/* 加载状态样式 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl);
+  min-height: 300px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-container p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 </style>
