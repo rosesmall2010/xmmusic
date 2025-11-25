@@ -22,10 +22,13 @@
 - 📱 **迷你模式** - 简洁的迷你播放器窗口
 - 🖥️ **跨平台** - 支持 macOS、Windows、Linux
 
-## 🎯 最新版本 v1.0.3
+## 🎯 最新版本 v1.0.4
 
 ### v1.0.3 更新内容
-- 修复GitHub Actions构建失败问题
+- **文件名列显示** - 所有歌曲列表新增文件名列
+- **智能标签编辑器** - 智能解析文件名修复乱码标签，支持对调按钮
+- **元数据全局同步** - 标签编辑后所有视图实时更新
+- **播放状态恢复** - 修复启动时播放恢复问题
 
 ### v1.0.2 重大更新
 - **UI全面重构** - 采用仿QQ音乐设计风格
@@ -70,10 +73,10 @@
 从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
 
 - **macOS**:
-  - Intel: `xmmusic-1.0.3.dmg`
-  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.3-arm64.dmg`
-- **Windows**: `xmmusic-Setup-1.0.3.exe`
-- **Linux**: `xmmusic-1.0.3.AppImage`
+  - Intel: `xmmusic-1.0.4.dmg`
+  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.4-arm64.dmg`
+- **Windows**: `xmmusic-Setup-1.0.4.exe`
+- **Linux**: `xmmusic-1.0.4.AppImage`
 
 ### 从源码构建
 

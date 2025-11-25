@@ -1,8 +1,8 @@
 {
   "name": "xmmusic",
   "productName": "xmmusic",
-  "version": "1.0.3",
-  "description": "基于Electron+Vue+TypeScript的跨平台音乐播放器",
+  "version": "1.0.4",
+  "description": "音乐播放器",
   "main": "dist/electron/main/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
