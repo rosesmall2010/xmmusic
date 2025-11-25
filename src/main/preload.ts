@@ -162,6 +162,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeID3FixProgress: () => {
     ipcRenderer.removeAllListeners('id3-fix-progress')
   },
+  onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => {
+    const handler = (_: any, progress: any) => callback(_, progress)
+    ipcRenderer.on('batch-add-progress', handler)
+  },
+  offBatchAddProgress: (callback: any) => {
+    ipcRenderer.removeListener('batch-add-progress', callback)
+  },
   onShortcutAction: (callback: (action: string) => void) => {
     ipcRenderer.on('shortcut-action', (_, action) => callback(action))
   },
@@ -222,7 +229,7 @@ declare global {
       getPlaylists: () => Promise<any[]>
       updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
       addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
-      batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number }>
+      batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
       batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; removed: number }>
       isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
       getPlaylistsForFile: (filePath: string) => Promise<number[]>
@@ -272,6 +279,8 @@ declare global {
       getScanState: () => Promise<ScanState>
       onID3FixProgress: (callback: (progress: { current: number; total: number }) => void) => void
       removeID3FixProgress: () => void
+      onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => void
+      offBatchAddProgress: (callback: any) => void
       onShortcutAction: (callback: (action: string) => void) => void
       removeShortcutAction: () => void
       loadLyrics: (musicId: number) => Promise<LyricsData | null>

@@ -40,7 +40,7 @@ export interface ElectronAPI {
   getPlaylists: () => Promise<any[]>
   updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
   addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
-  batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number }>
+  batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
   batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; removed: number }>
   isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
   getPlaylistsForFile: (filePath: string) => Promise<number[]>
@@ -109,6 +109,8 @@ export interface ElectronAPI {
   removeScanStateChanged: () => void
   onID3FixProgress: (callback: (progress: { current: number; total: number }) => void) => void
   removeID3FixProgress: () => void
+  onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => void
+  offBatchAddProgress: (callback: any) => void
   onShortcutAction: (callback: (action: string) => void) => void
   removeShortcutAction: () => void
 

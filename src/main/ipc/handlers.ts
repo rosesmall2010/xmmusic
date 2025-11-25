@@ -337,20 +337,53 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     db.addToPlaylist(playlistId, filePath)
   })
 
-  // 批量添加到歌单
-  ipcMain.handle('batch-add-to-playlist', async (_, playlistId: number, filePaths: string[]) => {
-    if (!db) return { success: false, added: 0 }
+  // 批量添加到歌单 - 优化性能
+  ipcMain.handle('batch-add-to-playlist', async (event, playlistId: number, filePaths: string[]) => {
+    if (!db) return { success: false, added: 0, skipped: 0, total: 0 }
+
+    const total = filePaths.length
     let added = 0
-    filePaths.forEach(filePath => {
-      try {
-        db.addToPlaylist(playlistId, filePath)
-        added++
-      } catch (error) {
-        // 跳过已存在的歌曲
-        console.log(`Skipped existing: ${filePath}`)
+    let skipped = 0
+
+    try {
+      // 分批处理，每批50个，避免UI卡顿
+      const batchSize = 50
+      for (let i = 0; i < filePaths.length; i += batchSize) {
+        const batch = filePaths.slice(i, Math.min(i + batchSize, filePaths.length))
+
+        // 处理当前批次
+        for (const filePath of batch) {
+          try {
+            db.addToPlaylist(playlistId, filePath)
+            added++
+          } catch (error) {
+            // 跳过已存在的歌曲
+            skipped++
+          }
+        }
+
+        // 发送进度更新
+        const current = Math.min(i + batchSize, filePaths.length)
+        setImmediate(() => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('batch-add-progress', {
+              current,
+              total,
+              added,
+              skipped
+            })
+          }
+        })
+
+        // 让出主线程，避免阻塞
+        await new Promise(resolve => setImmediate(resolve))
       }
-    })
-    return { success: true, added }
+
+      return { success: true, added, skipped, total }
+    } catch (error) {
+      console.error('批量添加失败:', error)
+      return { success: false, added, skipped, total }
+    }
   })
 
   // 批量从歌单删除

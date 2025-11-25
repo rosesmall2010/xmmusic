@@ -7,7 +7,19 @@
       </div>
 
       <div class="modal-body">
-        <div class="playlist-list" v-if="playlists.length > 0">
+        <!-- 进度显示 -->
+        <div v-if="isProcessing" class="progress-container">
+          <div class="progress-text">批量添加中...</div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          </div>
+          <div class="progress-info">
+            {{ progress.current }} / {{ progress.total }} (成功{{ progress.added }}，跳过{{ progress.skipped }})
+          </div>
+        </div>
+
+        <!-- 歌单列表 -->
+        <div v-else-if="playlists.length > 0" class="playlist-list">
           <div
             v-for="playlist in playlists"
             :key="playlist.id"
@@ -42,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
@@ -76,18 +88,52 @@ watch(() => props.modelValue, (val) => {
 })
 
 const close = () => {
+  // 如果正在处理，不允许关闭
+  if (isProcessing.value) return
   emit('update:modelValue', false)
 }
 
+const isProcessing = ref(false)
+const progress = ref({ current: 0, total: 0, added: 0, skipped: 0 })
+const progressPercent = computed(() => {
+  if (progress.value.total === 0) return 0
+  return Math.round((progress.value.current / progress.value.total) * 100)
+})
+
 const selectPlaylist = async (playlist: any) => {
   if (!props.musicToAd && !props.musicListToAd) return
+  if (isProcessing.value) return // 防止重复点击
 
   try {
+    isProcessing.value = true
+
     if (props.musicListToAd && props.musicListToAd.length > 0) {
-      // 批量添加
+      // 批量添加 - 显示进度
       const filePaths = props.musicListToAd.map(m => m.filePath)
+      progress.value = { current: 0, total: filePaths.length, added: 0, skipped: 0 }
+
+      // 监听进度更新
+      const handleProgress = (_event: any, data: any) => {
+        progress.value = data
+      }
+      window.electronAPI.onBatchAddProgress(handleProgress)
+
       const result = await window.electronAPI.batchAddToPlaylist(playlist.id, filePaths)
-      console.log(`Batch added ${result.added} songs`)
+
+      // 移除进度监听
+      window.electronAPI.offBatchAddProgress(handleProgress)
+
+      console.log(`批量添加完成: ${result.added} 个，跳过 ${result.skipped} 个`)
+
+      // 显示结果提示
+      if (result.added > 0) {
+        const message = result.skipped > 0
+          ? `成功添加 ${result.added} 首歌曲，${result.skipped} 首已存在`
+          : `成功添加 ${result.added} 首歌曲`
+        alert(message)
+      } else if (result.skipped > 0) {
+        alert(`所有歌曲已存在于该歌单中`)
+      }
     } else if (props.musicToAd) {
       // 单个添加
       await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
@@ -98,8 +144,11 @@ const selectPlaylist = async (playlist: any) => {
     emit('added')
     close()
   } catch (error) {
-    console.error('Failed to add music to playlist:', error)
-    alert('添加失败，可能歌曲已存在于该歌单')
+    console.error('添加到歌单失败:', error)
+    alert('添加失败，请重试')
+  } finally {
+    isProcessing.value = false
+    progress.value = { current: 0, total: 0, added: 0, skipped: 0 }
   }
 }
 
@@ -251,4 +300,38 @@ const handleCreatePlaylist = async (name: string) => {
   color: var(--text-color);
   border-color: var(--text-secondary);
 }
+
+/* 进度显示样式 */
+.progress-container {
+  padding: var(--spacing-xl);
+  text-align: center;
+}
+
+.progress-text {
+  font-size: var(--font-size-base);
+  color: var(--text-color);
+  margin-bottom: var(--spacing-md);
+  font-weight: 500;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #31c48d, #0e9f6e);
+  transition: width 0.3s ease;
+}
+
+.progress-info {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
 </style>
+```
