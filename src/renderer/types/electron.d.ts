@@ -115,7 +115,13 @@ export interface ElectronAPI {
   removeShortcutAction: () => void
 
   // 歌词功能
-  loadLyrics: (musicId: number) => Promise<any>
+  loadLyrics: (musicId: number) => Promise<{
+    title?: string
+    artist?: string
+    album?: string
+    offset?: number
+    lines: { time: number; text: string }[]
+  } | null>
   parseLyricsFile: (filePath: string) => Promise<any>
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
 

@@ -189,7 +189,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
-import { parseLrc, type LyricLine } from '@/utils/lrcParser'
+import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import { Monitor, List, FileText, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2 } from 'lucide-vue-next'
 
@@ -345,9 +345,9 @@ const loadLyrics = async () => {
   try {
     // 尝试获取歌词
     // 优先查找同名 lrc 文件
-    const lrcContent = await window.electronAPI.loadLyrics(currentMusic.value.id)
-    if (lrcContent) {
-      lyrics.value = parseLrc(lrcContent)
+    const lyricsData = await window.electronAPI.loadLyrics(currentMusic.value.id)
+    if (lyricsData && lyricsData.lines) {
+      lyrics.value = lyricsData.lines
       // 如果有歌词，自动切换到歌词标签
       if (lyrics.value.length > 0) {
         activeTab.value = 'lyrics'
