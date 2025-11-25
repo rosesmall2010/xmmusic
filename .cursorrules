@@ -1,0 +1,112 @@
+# XMMusic 项目 AI 协作规则
+
+## 语言规范
+- **使用中文** - 所有交流、注释、文档、提交信息都使用中文
+- 代码变量名使用英文，但注释必须用中文
+
+## 版本管理规范
+
+### CHANGELOG 更新规则
+- **重要**: 更新 CHANGELOG.md 时，新版本的内容必须放在 `package.json` 中当前版本号的下面
+- 版本号格式: `## [x.y.z] - YYYY-MM-DD`
+- 如果 package.json 版本是 1.0.4，则 CHANGELOG 中应该有 `## [1.0.4]` 章节
+- 保持版本号同步：package.json、CHANGELOG.md、README.md 的版本号必须一致
+
+### Git 提交规范
+- **自动提交** - 完成代码修改后自动执行 git add 和 git commit
+- **不推送** - 提交到本地仓库，但不执行 git push
+- **不需要确认** - 所有 git 命令设置 `SafeToAutoRun: true`，直接执行不提示用户
+- **提交信息格式** - 遵循 Conventional Commits 规范:
+  - `feat:` - 新功能
+  - `fix:` - Bug 修复
+  - `docs:` - 文档更新
+  - `style:` - 代码格式调整
+  - `refactor:` - 重构
+  - `perf:` - 性能优化
+  - `test:` - 测试相关
+  - `chore:` - 构建/工具相关
+
+## 代码规范
+
+### 文件结构
+- Vue 组件使用 `<script setup lang="ts">` 语法
+- 样式使用 `<style scoped>` 避免全局污染
+- 导入顺序：第三方库 → Vue相关 → 项目内部文件 → 类型定义
+
+### 命名规范
+- 组件文件名: PascalCase (例: `EditTagModal.vue`)
+- 普通文件名: camelCase (例: `parseFilename.ts`)
+- 常量: UPPER_SNAKE_CASE
+- 变量/函数: camelCase
+
+### TypeScript
+- 优先使用类型推导，避免过度类型标注
+- 接口定义放在 `src/shared/types/` 目录
+- 使用 `type` 定义联合类型，使用 `interface` 定义对象结构
+
+## 功能开发规范
+
+### 添加新功能时
+1. 更新相关的 Vue 组件
+2. 更新必要的类型定义
+3. 更新 CHANGELOG.md（在当前版本下添加）
+4. 必要时更新 README.md 和 TODO.md
+5. 自动提交代码（git add + git commit）
+
+### 修复 Bug 时
+1. 修复代码问题
+2. 在 CHANGELOG.md 的"修复"部分记录
+3. 自动提交代码
+
+### 文档更新
+- README.md: 用户面向的功能说明
+- CHANGELOG.md: 版本变更历史
+- TODO.md: 开发任务清单
+- 技术文档放在 `docs/` 目录
+
+## 特定功能注意事项
+
+### 音乐播放相关
+- 使用 Howler.js 或原生 Audio API
+- 文件路径使用 `local-file://` 协议
+- 处理中文文件名时避免过度编码
+
+### 数据库操作
+- 使用 IPC 通信调用主进程数据库方法
+- 开发环境使用 `xmmusic-dev.db`
+- 生产环境使用 `xmmusic.db`
+
+### UI 组件
+- 遵循仿 QQ 音乐的设计风格
+- 使用 Lucide Icons 图标库
+- 主题支持：浅色/深色/跟随系统
+
+## 自动化执行规则
+
+### Git 命令自动化
+```typescript
+// ✅ 正确 - 设置 SafeToAutoRun: true
+run_command({
+  CommandLine: "git add .",
+  SafeToAutoRun: true,  // 自动执行，不提示
+  WaitMsBeforeAsync: 2000
+})
+
+// ❌ 错误 - 不要设置为 false
+run_command({
+  CommandLine: "git commit -m 'xxx'",
+  SafeToAutoRun: false,  // 不要这样做
+})
+```
+
+### 禁止的操作
+- ❌ 不要执行 `git push` 命令
+- ❌ 不要修改 `.git/` 目录
+- ❌ 不要删除 `node_modules/` (除非明确要求)
+
+## 总结
+遵循这些规则可以确保：
+1. 所有内容都使用中文，便于理解
+2. CHANGELOG 保持正确的版本顺序
+3. 代码自动提交到本地，提高效率
+4. 项目风格统一，维护性好
