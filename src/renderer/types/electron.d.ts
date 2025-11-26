@@ -26,6 +26,7 @@ export interface ElectronAPI {
   searchMusic: (query: string) => Promise<any[]>
   advancedSearch: (criteria: any) => Promise<any[]>
   getSearchHistory: () => Promise<any[]>
+  addSearchHistory: (query: string) => Promise<void>
   clearSearchHistory: () => Promise<void>
   getSearchSuggestions: (query: string) => Promise<string[]>
   getMusicById: (id: number) => Promise<any>

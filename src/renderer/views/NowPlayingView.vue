@@ -288,8 +288,10 @@ const removeQueueItem = (index: number) => {
 }
 
 const toggleMiniMode = async () => {
+  // 保存当前路由路径，以便退出Mini模式时恢复
+  localStorage.setItem('lastRoute', router.currentRoute.value.fullPath)
   await window.electronAPI.setMiniMode(true)
-  router.push('/mini')
+  router.replace('/mini')
 }
 
 const toggleDesktopLyrics = async () => {

@@ -86,7 +86,14 @@ const progressPercentage = computed(() => {
 
 const exitMiniMode = async () => {
   await window.electronAPI.setMiniMode(false)
-  router.push('/')
+  // 恢复之前的路由路径
+  const lastRoute = localStorage.getItem('lastRoute')
+  if (lastRoute) {
+    router.replace(lastRoute)
+    localStorage.removeItem('lastRoute') // 清除记录
+  } else {
+    router.replace('/')
+  }
 }
 
 const togglePlay = () => {
