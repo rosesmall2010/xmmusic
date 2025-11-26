@@ -11,6 +11,8 @@
 - 版本号格式: `## [x.y.z] - YYYY-MM-DD`
 - 如果 package.json 版本是 1.0.4，则 CHANGELOG 中应该有 `## [1.0.4]` 章节
 - 保持版本号同步：package.json、CHANGELOG.md、README.md 的版本号必须一致
+- AI不要去改package.json里面的版本号
+- 如果ChangeLog里面已经有了这个版本的记录，则把新的修改记录追加到改版本下
 
 ### Git 提交规范
 - **自动提交** - 完成代码修改后自动执行 git add 和 git commit
