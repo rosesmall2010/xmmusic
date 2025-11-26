@@ -32,6 +32,11 @@ let db: MusicDatabase | null = null
 let fileMonitor: FileMonitor | null = null
 let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
+let isMainWindowReady = false // 跟踪主窗口是否就绪
+
+export function isMainWindowLoaded(): boolean {
+  return isMainWindowReady
+}
 
 function createWindow(): void {
   // 开发模式检测：使用 app.isPackaged 作为最可靠的判断依据
@@ -168,6 +173,7 @@ function createWindow(): void {
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('✅ 页面加载完成')
+    isMainWindowReady = true  // 标记主窗口已就绪
   })
 
   mainWindow.webContents.on('dom-ready', () => {

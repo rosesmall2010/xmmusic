@@ -30,7 +30,11 @@
           </div>
           <div class="item-info">
             <div class="item-title" :title="music.title">{{ music.title }}</div>
-            <div class="item-artist" :title="music.artist">{{ music.artist }}</div>
+            <div class="item-meta">
+              <span class="item-artist" :title="music.artist">{{ music.artist }}</span>
+              <span class="item-separator">·</span>
+              <span class="item-filename" :title="music.fileName">{{ music.fileName }}</span>
+            </div>
           </div>
           <div class="item-duration">{{ formatDuration(music.duration) }}</div>
           <button class="remove-btn" @click.stop="removeItem(index)" title="移除">
@@ -243,18 +247,39 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 .item-title {
   font-size: var(--font-size-sm);
   color: var(--text-color);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.item-artist {
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--font-size-xs);
+  overflow: hidden;
+}
+
+.item-artist {
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
+}
+
+.item-separator {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.item-filename {
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 2;
 }
 
 .item-duration {

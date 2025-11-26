@@ -106,6 +106,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载快捷键失败:', error)
   }
+
+  // 监听全局队列切换事件（来自NowPlayingView等组件）
+  window.addEventListener('toggle-queue', toggleQueue)
 })
 
 // 处理快捷键
@@ -192,6 +195,7 @@ async function handleNext() {
 onBeforeUnmount(() => {
   window.electronAPI.removeShortcutAction()
   window.electronAPI.removeTrayAction()
+  window.removeEventListener('toggle-queue', toggleQueue)
 })
 </script>
 

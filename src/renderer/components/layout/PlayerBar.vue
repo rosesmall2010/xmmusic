@@ -183,12 +183,25 @@ const togglePlay = async () => {
   } else {
     if (currentMusic.value) {
       // 检查是否有实际的音频实例
-      // 如果没有（比如启动时恢复状态），需要重新play
+      // 需要检查：1. 元素是否存在 2. 元素是否在DOM中 3. src是否有效
       const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement
-      const hasAudioInstance = audioElement?.src || false
+      const hasValidAudioInstance = !!(
+        audioElement &&
+        audioElement.parentElement && // 确保在DOM中
+        audioElement.src &&
+        audioElement.src.length > 0
+      )
 
-      if (hasAudioInstance) {
-        // 有音频实例，直接恢复播放
+      console.log('🔍 音频实例检查:', {
+        hasElement: !!audioElement,
+        inDOM: !!(audioElement?.parentElement),
+        hasSrc: !!(audioElement?.src),
+        src: audioElement?.src || 'none'
+      })
+
+      if (hasValidAudioInstance) {
+        // 有有效的音频实例，直接恢复播放
+        console.log('▶️ 恢复播放')
         resume()
       } else {
         // 没有音频实例（启动后首次播放），重新加载音乐
