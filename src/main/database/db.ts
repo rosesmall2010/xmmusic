@@ -751,38 +751,39 @@ export default class MusicDatabase {
   }
 
   getPlaylistSongs(playlistId: number): MusicItem[] {
-    // 从播放列表中获取文件路径，然后尝试从 music 表中查找对应的记录
-    // 如果 music 表中没有，则创建一个临时的 MusicItem
+    // 使用 LEFT JOIN 一次性获取所有歌曲信息，避免 N+1 查询问题
     const stmt = this.db!.prepare(`
-      SELECT pi.file_path, pi.position, pi.added_at
+      SELECT
+        m.*,
+        pi.position,
+        pi.added_at as playlist_added_at
       FROM playlist_item pi
+      LEFT JOIN music m ON pi.file_path = m.file_path
       WHERE pi.playlist_id = ?
       ORDER BY pi.position
     `)
-    const playlistItems = stmt.all(playlistId) as Array<{ file_path: string; position: number; added_at: string }>
+    const rows = stmt.all(playlistId) as any[]
 
-    return playlistItems.map(item => {
-      // 尝试从 music 表中查找
-      const musicStmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
-      const musicRow = musicStmt.get(item.file_path) as any
-
-      if (musicRow) {
-        // 如果找到了，返回完整的 MusicItem
-        return this.mapRowToMusicItem(musicRow)
+    return rows.map(row => {
+      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
+      if (row.id !== null) {
+        return this.mapRowToMusicItem(row)
       } else {
-        // 如果没找到，创建一个临时的 MusicItem（基于文件路径）
+        // 如果 music 表中没有数据，创建临时 MusicItem
+        // 注意：这种情况应该很少发生，因为添加到歌单时应该确保文件在 music 表中
         const path = require('path')
-        const fileName = path.basename(item.file_path)
-        const ext = path.extname(item.file_path).toLowerCase()
+        const filePath = row.file_path
+        const fileName = path.basename(filePath)
+        const ext = path.extname(filePath).toLowerCase()
 
         return {
-          id: -1, // 临时ID，表示不在 music 表中
+          id: -1,
           title: fileName.replace(ext, ''),
           artist: '未知艺术家',
           album: null,
           year: null,
           genre: null,
-          filePath: item.file_path,
+          filePath: filePath,
           fileName: fileName,
           fileSize: 0,
           fileHash: '',
@@ -796,8 +797,8 @@ export default class MusicDatabase {
           playCount: 0,
           lastPlayedAt: null,
           favorite: false,
-          addedAt: item.added_at,
-          updatedAt: item.added_at,
+          addedAt: row.playlist_added_at || new Date().toISOString(),
+          updatedAt: row.playlist_added_at || new Date().toISOString(),
           isCorrupted: false,
           isDuplicate: false
         }
@@ -899,36 +900,38 @@ export default class MusicDatabase {
   }
 
   getFavorites(): MusicItem[] {
-    // 从收藏表中获取文件路径，然后尝试从 music 表中查找对应的记录
+    // 使用 LEFT JOIN 一次性获取所有收藏歌曲信息，避免 N+1 查询问题
     const stmt = this.db!.prepare(`
-      SELECT f.file_path, f.added_at
+      SELECT
+        m.*,
+        f.added_at as favorite_added_at
       FROM favorites f
+      LEFT JOIN music m ON f.file_path = m.file_path
       ORDER BY f.added_at DESC
     `)
-    const favorites = stmt.all() as Array<{ file_path: string; added_at: string }>
+    const rows = stmt.all() as any[]
 
-    return favorites.map(item => {
-      // 尝试从 music 表中查找
-      const musicStmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
-      const musicRow = musicStmt.get(item.file_path) as any
-
-      if (musicRow) {
-        // 如果找到了，返回完整的 MusicItem
-        return this.mapRowToMusicItem(musicRow)
+    return rows.map(row => {
+      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
+      if (row.id !== null) {
+        const item = this.mapRowToMusicItem(row)
+        item.favorite = true // 确保 favorite 标记为 true
+        return item
       } else {
-        // 如果没找到，创建一个临时的 MusicItem（基于文件路径）
+        // 如果 music 表中没有数据，创建临时 MusicItem
         const path = require('path')
-        const fileName = path.basename(item.file_path)
-        const ext = path.extname(item.file_path).toLowerCase()
+        const filePath = row.file_path
+        const fileName = path.basename(filePath)
+        const ext = path.extname(filePath).toLowerCase()
 
         return {
-          id: -1, // 临时ID，表示不在 music 表中
+          id: -1,
           title: fileName.replace(ext, ''),
           artist: '未知艺术家',
           album: null,
           year: null,
           genre: null,
-          filePath: item.file_path,
+          filePath: filePath,
           fileName: fileName,
           fileSize: 0,
           fileHash: '',
@@ -941,9 +944,9 @@ export default class MusicDatabase {
           lyricsPath: null,
           playCount: 0,
           lastPlayedAt: null,
-          favorite: true, // 标记为收藏
-          addedAt: item.added_at,
-          updatedAt: item.added_at,
+          favorite: true,
+          addedAt: row.favorite_added_at || new Date().toISOString(),
+          updatedAt: row.favorite_added_at || new Date().toISOString(),
           isCorrupted: false,
           isDuplicate: false
         }
