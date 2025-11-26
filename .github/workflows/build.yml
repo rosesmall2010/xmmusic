@@ -51,6 +51,7 @@ jobs:
           name: xmmusic-macos
           path: dist/*.dmg
           if-no-files-found: error
+          retention-days: 1
 
   build-windows:
     name: Build Windows
@@ -85,6 +86,7 @@ jobs:
           name: xmmusic-windows-x64
           path: dist/*.exe
           if-no-files-found: error
+          retention-days: 1
 
   build-linux:
     name: Build Linux
@@ -122,6 +124,7 @@ jobs:
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
+          retention-days: 1
 
   release:
     name: Create Release
