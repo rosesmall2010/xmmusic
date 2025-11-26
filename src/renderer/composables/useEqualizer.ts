@@ -51,13 +51,56 @@ let filters: BiquadFilterNode[] = []
 let audioElement: HTMLAudioElement | null = null
 let isInitialized = false
 
-export function useEqualizer() {
-  const enabled = ref(false)
-  const gains = ref<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-  const customPresets = ref<EqualizerPreset[]>([])
+// 全局状态（单例模式）
+const enabled = ref(false)
+const gains = ref<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+const customPresets = ref<EqualizerPreset[]>([])
 
+// 持久化定时器
+let saveTimer: number | null = null
+
+// 加载设置
+const loadSettings = async () => {
+  if (typeof window === 'undefined' || !window.electronAPI) return
+  try {
+    const settings = await window.electronAPI.getSettings()
+    if (settings.equalizer) {
+      enabled.value = settings.equalizer.enabled ?? false
+      if (settings.equalizer.gains && Array.isArray(settings.equalizer.gains)) {
+        gains.value = settings.equalizer.gains
+      }
+      if (settings.equalizer.customPresets && Array.isArray(settings.equalizer.customPresets)) {
+        customPresets.value = settings.equalizer.customPresets
+      }
+    }
+  } catch (error) {
+    console.warn('加载均衡器设置失败:', error)
+  }
+}
+
+// 保存设置
+const saveSettings = () => {
+  if (typeof window === 'undefined' || !window.electronAPI) return
+
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = window.setTimeout(() => {
+    window.electronAPI.saveSettings({
+      equalizer: {
+        enabled: enabled.value,
+        gains: gains.value,
+        customPresets: customPresets.value
+      }
+    })
+  }, 1000) // 1秒防抖
+}
+
+// 初始化加载
+loadSettings()
+
+export function useEqualizer() {
   // 初始化音频上下文
   const initAudioContext = (element: HTMLAudioElement) => {
+    // ... (保持原有逻辑)
     // 如果已经为同一个元素初始化过，跳过
     if (isInitialized && audioElement === element && audioContext && sourceNode) {
       return
@@ -130,6 +173,9 @@ export function useEqualizer() {
       audioElement = element
       isInitialized = true
       console.log('✅ 均衡器音频上下文初始化成功')
+
+      // 初始化完成后应用当前的增益设置
+      applyGains()
     } catch (error) {
       console.error('❌ 均衡器初始化失败:', error)
       isInitialized = false
@@ -158,6 +204,7 @@ export function useEqualizer() {
     if (index >= 0 && index < gains.value.length) {
       gains.value[index] = Math.max(-12, Math.min(12, gain))
       applyGains()
+      saveSettings()
     }
   }
 
@@ -165,18 +212,21 @@ export function useEqualizer() {
   const applyPreset = (preset: EqualizerPreset) => {
     gains.value = [...preset.gains]
     applyGains()
+    saveSettings()
   }
 
   // 重置为平坦
   const reset = () => {
     gains.value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     applyGains()
+    saveSettings()
   }
 
   // 启用/禁用均衡器
   const toggle = (value: boolean) => {
     enabled.value = value
     applyGains()
+    saveSettings()
   }
 
   // 保存自定义预设
@@ -186,6 +236,7 @@ export function useEqualizer() {
       gains: [...gains.value]
     }
     customPresets.value.push(preset)
+    saveSettings()
     return preset
   }
 
@@ -193,10 +244,11 @@ export function useEqualizer() {
   const deletePreset = (index: number) => {
     if (index >= 0 && index < customPresets.value.length) {
       customPresets.value.splice(index, 1)
+      saveSettings()
     }
   }
 
-  // 监听增益变化
+  // 监听增益变化（用于拖动滑块时的实时应用，但不频繁保存，保存由 setGain 触发）
   watch(gains, () => {
     applyGains()
   }, { deep: true })

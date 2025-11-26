@@ -390,6 +390,12 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  // 在所有平台（包括 macOS）上，当所有窗口关闭时退出应用
+  // 如果用户开启了"最小化到托盘"，窗口不会真正关闭（而是隐藏），因此不会触发此事件
+  app.quit()
+})
+
+app.on('will-quit', () => {
   // 停止文件监控
   if (fileMonitor) {
     try {
@@ -402,11 +408,9 @@ app.on('window-all-closed', () => {
   if (db) {
     try {
       db.close()
+      console.log('✅ 数据库连接已关闭')
     } catch (error) {
       console.error('关闭数据库时出错:', error)
     }
   }
-  // 在所有平台（包括 macOS）上，当所有窗口关闭时退出应用
-  // 如果用户开启了"最小化到托盘"，窗口不会真正关闭（而是隐藏），因此不会触发此事件
-  app.quit()
 })

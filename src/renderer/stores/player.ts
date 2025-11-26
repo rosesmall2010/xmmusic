@@ -336,6 +336,7 @@ export const usePlayerStore = defineStore('player', () => {
     togglePlayMode,
     initialize,
     resumePosition,
-    shouldAutoResume
+    shouldAutoResume,
+    saveState: persistState
   }
 })

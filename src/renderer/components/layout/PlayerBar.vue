@@ -110,6 +110,7 @@
             max="100"
             v-model="volumeValue"
             @input="handleVolumeChange"
+            @change="handleVolumeSave"
           />
         </div>
       </div>
@@ -261,6 +262,11 @@ const x = e.clientX - rect.left
 const handleVolumeChange = () => {
   setVolume(volumeValue.value)
   playerStore.volume = volumeValue.value
+}
+
+const handleVolumeSave = () => {
+  // 强制保存状态（包括音量）
+  playerStore.saveState()
 }
 
 const toggleMute = () => {
