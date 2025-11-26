@@ -406,5 +406,7 @@ app.on('window-all-closed', () => {
       console.error('关闭数据库时出错:', error)
     }
   }
-  if (process.platform !== 'darwin') app.quit()
+  // 在所有平台（包括 macOS）上，当所有窗口关闭时退出应用
+  // 如果用户开启了"最小化到托盘"，窗口不会真正关闭（而是隐藏），因此不会触发此事件
+  app.quit()
 })
