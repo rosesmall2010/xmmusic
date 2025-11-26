@@ -443,15 +443,9 @@ export default class MusicDatabase {
   clearAllMusic(): void {
     // 使用事务确保原子性
     const transaction = this.db!.transaction(() => {
-      // 1. 清空播放列表项（因为引用了音乐文件路径）
-      this.db!.prepare('DELETE FROM playlist_item').run()
-      // 2. 清空收藏
-      this.db!.prepare('DELETE FROM favorites').run()
-      // 3. 清空播放历史
-      this.db!.prepare('DELETE FROM play_history').run()
-      // 4. 清空全文搜索索引
+      // 1. 清空全文搜索索引
       this.db!.prepare('DELETE FROM music_fts').run()
-      // 5. 最后清空音乐表
+      // 2. 清空本地音乐表
       this.db!.prepare('DELETE FROM music').run()
 
       // 重置自增ID（可选，但推荐）

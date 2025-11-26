@@ -132,7 +132,7 @@ const handleScan = async () => {
 }
 
 const handleClearAll = async () => {
-  if (!confirm('确定要清除所有本地音乐吗？\n\n这将清空所有歌曲、播放列表、收藏和播放历史。\n此操作不可恢复！')) {
+  if (!confirm('确定要清除所有本地音乐吗？\n\n这将清空本地音乐列表。\n不会影响收藏夹、歌单和播放历史。\n\n此操作不可恢复！')) {
     return
   }
 
