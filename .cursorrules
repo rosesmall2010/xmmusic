@@ -18,6 +18,7 @@
 - **自动提交** - 完成代码修改后自动执行 git add 和 git commit
 - **不推送** - 提交到本地仓库，但不执行 git push
 - **不需要确认** - 所有 git 命令设置 `SafeToAutoRun: true`，直接执行不提示用户
+- **提交信息内容** - msg 信息必须包含从上次提交到现在的具体修改内容，清晰描述做了什么
 - **提交信息格式** - 遵循 Conventional Commits 规范:
   - `feat:` - 新功能
   - `fix:` - Bug 修复
