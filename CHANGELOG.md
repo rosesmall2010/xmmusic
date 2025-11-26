@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.5] - 2025-11-26
+
+### 修复
+- **修复 Mini 模式还原路由问题**
+  - 优化路由切换逻辑，使用 `replace` 替代 `push`
+  - 解决从 Mini 模式还原时无法正确返回上一级界面的问题
+  - 避免 Mini 模式污染浏览器历史记录栈
+- **修复类型定义缺失**
+  - 补充 `electron.d.ts` 中缺失的 `addSearchHistory` 方法定义
+
 ## [1.0.4] - 2025-11-25
 
 ### 新增
