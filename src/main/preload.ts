@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteMusicFile: (musicId: number) => ipcRenderer.invoke('delete-music-file', musicId),
   getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) =>
     ipcRenderer.invoke('get-similar-music', musicId, limit, minSimilarity),
+  clearAllMusic: () => ipcRenderer.invoke('clear-all-music'),
 
   // Excel导出
   exportMusicToExcel: (musicIds: number[], options?: any) =>

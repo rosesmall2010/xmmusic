@@ -733,6 +733,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return true
   })
 
+  ipcMain.handle('clear-all-music', async () => {
+    if (!db) throw new Error('数据库未初始化')
+    db.clearAllMusic()
+    return true
+  })
+
   // Excel导出
   ipcMain.handle('export-music-to-excel', async (_, musicIds: number[], options?: any) => {
     if (!db) throw new Error('数据库未初始化')

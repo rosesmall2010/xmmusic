@@ -6,9 +6,23 @@
         <div class="stats">{{ totalCount }} 首歌曲</div>
       </div>
       <div class="header-actions">
-        <button class="btn-primary" @click="handleScan">
-          扫描音乐
+        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0">
+          清除所有
         </button>
+        <button class="btn-primary" @click="handleScan" :disabled="isScanning">
+          {{ isScanning ? '扫描中...' : '扫描音乐' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 扫描进度条 -->
+    <div v-if="isScanning && scanProgress" class="scan-progress-bar">
+      <div class="progress-info">
+        <span class="current-file" :title="scanProgress.currentFile">正在扫描: {{ scanProgress.currentFile }}</span>
+        <span class="progress-stats">{{ scanProgress.current }} / {{ scanProgress.total }} ({{ scanProgress.percentage.toFixed(1) }}%)</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" :style="{ width: `${scanProgress.percentage}%` }"></div>
       </div>
     </div>
 
@@ -24,12 +38,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
-import type { MusicItem } from '@shared/types/music'
+import type { MusicItem, ScanProgress } from '@shared/types/music'
 
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
@@ -38,12 +52,41 @@ const { play } = usePlayer()
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
 
+// 扫描状态
+const isScanning = ref(false)
+const scanProgress = ref<ScanProgress | null>(null)
+
 onMounted(async () => {
   // Initial load of 20 items
   await musicStore.loadMusic(0, 20)
 
   // Start background loading
   startBackgroundLoading()
+
+  // 监听元数据更新事件
+  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+
+  // 监听扫描进度
+  window.electronAPI.onScanProgress((progress) => {
+    isScanning.value = true
+    scanProgress.value = progress
+  })
+
+  // 监听扫描状态变化
+  window.electronAPI.onScanStateChanged((state) => {
+    isScanning.value = state.isScanning
+    if (!state.isScanning) {
+      scanProgress.value = null
+      // 扫描结束后刷新列表
+      musicStore.loadMusic(0, 20, true)
+    }
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  window.electronAPI.removeScanProgress()
+  window.electronAPI.removeScanStateChanged()
 })
 
 const startBackgroundLoading = async () => {
@@ -71,6 +114,7 @@ const handleScan = async () => {
   const folders = await window.electronAPI.selectMusicFolder()
   if (folders.length === 0) return
 
+  isScanning.value = true
   try {
     for (const folder of folders) {
       await window.electronAPI.scanMusicFolder(folder)
@@ -81,6 +125,23 @@ const handleScan = async () => {
     if (error.message !== '扫描已取消') {
       alert(`扫描失败: ${error.message}`)
     }
+  } finally {
+    isScanning.value = false
+    scanProgress.value = null
+  }
+}
+
+const handleClearAll = async () => {
+  if (!confirm('确定要清除所有本地音乐吗？\n\n这将清空所有歌曲、播放列表、收藏和播放历史。\n此操作不可恢复！')) {
+    return
+  }
+
+  try {
+    await window.electronAPI.clearAllMusic()
+    // 刷新列表
+    await musicStore.loadMusic(0, 20, true)
+  } catch (error: any) {
+    alert(`清除失败: ${error.message}`)
   }
 }
 
@@ -101,21 +162,6 @@ const handleMetadataUpdate = (event: CustomEvent) => {
     musicStore.musicList[index] = { ...musicStore.musicList[index], ...updatedMusic }
   }
 }
-
-onMounted(async () => {
-  // Initial load of 20 items
-  await musicStore.loadMusic(0, 20)
-
-  // Start background loading
-  startBackgroundLoading()
-
-  // 监听元数据更新事件
-  window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
-})
 
 const playMusic = async (music: MusicItem) => {
   // 如果播放列表不同，替换播放列表
@@ -184,6 +230,35 @@ const playMusic = async (music: MusicItem) => {
   transform: translateY(-1px);
 }
 
+.btn-primary:disabled {
+  background: var(--color-primary-light);
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--transition-timing);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-link {
   background: none;
   border: none;
@@ -196,5 +271,40 @@ const playMusic = async (music: MusicItem) => {
 .music-list-container {
   flex: 1;
   overflow: hidden;
+}
+
+/* 扫描进度条样式 */
+.scan-progress-bar {
+  padding: var(--spacing-md) var(--spacing-xl);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.current-file {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70%;
+}
+
+.progress-track {
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width 0.2s ease;
 }
 </style>

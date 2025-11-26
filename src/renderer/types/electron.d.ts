@@ -78,6 +78,7 @@ export interface ElectronAPI {
   getDuplicateGroups: () => Promise<any[]>
   deleteMusicFile: (musicId: number) => Promise<boolean>
   getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) => Promise<any[]>
+  clearAllMusic: () => Promise<boolean>
 
   // Excel导出
   exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
