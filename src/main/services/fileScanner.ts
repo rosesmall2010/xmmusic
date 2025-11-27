@@ -52,7 +52,7 @@ const getParseFile = async () => {
 
 export default class FileScanner {
   private db: MusicDatabase
-  private concurrency: number = 2 // 降低到2个并发，减少主线程压力
+  private concurrency: number = 1 // 设置为1，完全串行处理，避免卡顿
   private activeTasks: number = 0
   private isPaused: boolean = false
   private isCancelled: boolean = false
@@ -101,13 +101,13 @@ export default class FileScanner {
           // 插入前：多重让出控制权，确保UI响应
           await new Promise(resolve => setImmediate(resolve))
           await new Promise(resolve => setTimeout(resolve, 0))
-          
+
           // 批量插入到 music 表（同步操作，快速执行）
           this.db.insertMusicBatch(pendingInserts)
 
           // 再次让出控制权
           await new Promise(resolve => setImmediate(resolve))
-          
+
           // 批量添加到本地音乐列表（传递已计算的 MD5，避免重复计算）
           const localMusicItems = pendingInserts.map(item => ({
             filePath: item.filePath,
@@ -116,7 +116,7 @@ export default class FileScanner {
           this.db.addToLocalMusicBatch(localMusicItems)
 
           pendingInserts = []
-          
+
           // 插入后：多重让出控制权
           await new Promise(resolve => setImmediate(resolve))
           await new Promise(resolve => setTimeout(resolve, 0))
@@ -168,12 +168,12 @@ export default class FileScanner {
       try {
         // 处理前让出控制权
         await new Promise(resolve => setImmediate(resolve))
-        
+
         const musicItem = await this.processFile(file, options)
-        
+
         // 处理后立即让出控制权
         await new Promise(resolve => setImmediate(resolve))
-        
+
         if (musicItem) {
           result.success++
           // 添加到批量插入缓冲区
@@ -610,7 +610,7 @@ export default class FileScanner {
           // 错误已在 processFile 中处理
         } finally {
           this.activeTasks--
-          
+
           // 任务完成后让出控制权
           await new Promise(resolve => setImmediate(resolve))
         }
