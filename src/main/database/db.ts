@@ -1014,7 +1014,7 @@ export default class MusicDatabase {
   toggleFavorite(filePath: string): void {
     // 计算文件路径 MD5
     const filePathMd5 = calculateFilePathMD5(filePath)
-    
+
     // 检查是否已在收藏表中
     const checkStmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
     const result = checkStmt.get(filePath) as { count: number }
@@ -1636,7 +1636,7 @@ export default class MusicDatabase {
   private clearMediaFiles(): void {
     try {
       const userDataPath = app.getPath('userData')
-      
+
       // 清空封面目录
       const coversDir = join(userDataPath, 'covers')
       if (existsSync(coversDir)) {
@@ -1651,7 +1651,7 @@ export default class MusicDatabase {
         }
         console.log(`✅ 已删除 ${files.length} 个封面文件`)
       }
-      
+
       // 清空歌词目录（如果有）
       const lyricsDir = join(userDataPath, 'lyrics')
       if (existsSync(lyricsDir)) {
@@ -1694,14 +1694,14 @@ export default class MusicDatabase {
       INSERT OR IGNORE INTO local_music (file_path, file_path_md5)
       VALUES (?, ?)
     `)
-    
+
     const transaction = this.db!.transaction((paths: string[]) => {
       for (const filePath of paths) {
         const filePathMd5 = calculateFilePathMD5(filePath)
         stmt.run(filePath, filePathMd5)
       }
     })
-    
+
     transaction(filePaths)
   }
 
@@ -1718,6 +1718,13 @@ export default class MusicDatabase {
    */
   clearLocalMusic(): void {
     this.db!.prepare('DELETE FROM local_music').run()
+  }
+
+  /**
+   * 清空我喜欢列表
+   */
+  clearFavorites(): void {
+    this.db!.prepare('DELETE FROM favorites').run()
   }
 
   /**
@@ -1856,14 +1863,14 @@ export default class MusicDatabase {
    */
   addToPlayQueue(filePath: string, position?: number): void {
     const filePathMd5 = calculateFilePathMD5(filePath)
-    
+
     if (position === undefined) {
       // 如果没有指定位置，添加到末尾
       const maxPosStmt = this.db!.prepare('SELECT COALESCE(MAX(position), -1) as max_pos FROM play_queue')
       const result = maxPosStmt.get() as { max_pos: number }
       position = result.max_pos + 1
     }
-    
+
     const stmt = this.db!.prepare(`
       INSERT INTO play_queue (file_path, file_path_md5, position)
       VALUES (?, ?, ?)

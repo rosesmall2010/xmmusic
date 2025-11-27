@@ -92,6 +92,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentPlays: (limit?: number) => ipcRenderer.invoke('get-recent-plays', limit),
   clearPlayHistory: () => ipcRenderer.invoke('clear-play-history'),
 
+  // 清空列表
+  clearLocalMusic: () => ipcRenderer.invoke('clear-local-music'),
+  clearFavorites: () => ipcRenderer.invoke('clear-favorites'),
+  clearRecentPlays: () => ipcRenderer.invoke('clear-recent-plays'),
+  clearPlaylist: (playlistId: number) => ipcRenderer.invoke('clear-playlist', playlistId),
+
   // 音乐目录
   getMusicDirectories: () => ipcRenderer.invoke('get-music-directories'),
   addMusicDirectory: (directory: any) =>
@@ -268,6 +274,10 @@ declare global {
       getFavoritesCount: () => Promise<number>
       getPlayHistory: () => Promise<MusicItem[]>
       clearPlayHistory: () => Promise<void>
+      clearLocalMusic: () => Promise<void>
+      clearFavorites: () => Promise<void>
+      clearRecentPlays: () => Promise<void>
+      clearPlaylist: (playlistId: number) => Promise<void>
       getMusicDirectories: () => Promise<any[]>
       addMusicDirectory: (directory: any) => Promise<string>
       updateMusicDirectory: (id: string, updates: any) => Promise<void>

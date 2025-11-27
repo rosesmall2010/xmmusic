@@ -618,6 +618,27 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     db.clearPlayHistory()
   })
 
+  // 清空列表
+  ipcMain.handle('clear-local-music', async () => {
+    if (!db) return
+    db.clearLocalMusic()
+  })
+
+  ipcMain.handle('clear-favorites', async () => {
+    if (!db) return
+    db.clearFavorites()
+  })
+
+  ipcMain.handle('clear-recent-plays', async () => {
+    if (!db) return
+    db.clearRecentPlays()
+  })
+
+  ipcMain.handle('clear-playlist', async (_, playlistId: number) => {
+    if (!db) return
+    db.clearPlaylist(playlistId)
+  })
+
   // 音乐目录
   ipcMain.handle('get-music-directories', () => {
     if (!db) return []

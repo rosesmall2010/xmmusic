@@ -6,6 +6,9 @@
         <div class="stats">{{ totalCount }} 首歌曲</div>
       </div>
       <div class="header-actions">
+        <button class="btn-secondary" @click="clearList" :disabled="totalCount === 0">
+          清空列表
+        </button>
         <button class="btn-primary" @click="playAll" :disabled="totalCount === 0">
           播放全部
         </button>
@@ -17,10 +20,10 @@
         <div class="loading-spinner"></div>
         <p>加载中...</p>
       </div>
-      <SongList 
+      <SongList
         v-else
-        :songs="songs" 
-        @play="playMusic" 
+        :songs="songs"
+        @play="playMusic"
         @songs-updated="reloadFavorites"
         @load-more="loadMore"
       >
@@ -71,21 +74,21 @@ onUnmounted(() => {
 
 const loadFavorites = async () => {
   if (loading.value || !hasMore) return
-  
+
   loading.value = true
   try {
     // 获取总数
     if (currentOffset === 0) {
       totalCount.value = await window.electronAPI.getFavoritesCount()
     }
-    
+
     // 分页加载
     const newSongs = await window.electronAPI.getFavoritesPaginated(currentOffset, PAGE_SIZE)
-    
+
     if (newSongs.length < PAGE_SIZE) {
       hasMore = false
     }
-    
+
     // 追加到列表
     songs.value = [...songs.value, ...newSongs]
     triggerRef(songs)
@@ -149,6 +152,23 @@ const playAll = async () => {
     await play(songs.value[0])
   }
 }
+
+const clearList = async () => {
+  if (totalCount.value === 0) return
+  
+  if (!confirm(`确定要清空我喜欢列表吗？这将删除 ${totalCount.value} 首歌曲。`)) {
+    return
+  }
+  
+  try {
+    await window.electronAPI.clearFavorites()
+    // 重新加载
+    await reloadFavorites()
+    window.dispatchEvent(new Event('favorites-updated'))
+  } catch (error) {
+    console.error('清空列表失败:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -198,6 +218,34 @@ const playAll = async () => {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-secondary {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--transition-timing);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-md);
 }
 
 .content {
