@@ -1,7 +1,7 @@
 import Database from './sqlite3-sync'
 import { app } from 'electron'
 import { join, dirname } from 'path'
-import { readFileSync, existsSync, copyFile } from 'fs'
+import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync } from 'fs'
 import { promisify } from 'util'
 import type {
   MusicItem,
@@ -9,6 +9,7 @@ import type {
   DuplicateGroup,
   AdvancedSearchCriteria
 } from '@shared/types/music'
+import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 
 const copyFileAsync = promisify(copyFile)
 
@@ -80,6 +81,14 @@ export default class MusicDatabase {
       } catch (indexError: any) {
         console.error(`❌ 数据库索引创建失败: ${indexError?.message || indexError}`)
         throw indexError
+      }
+
+      // 检查数据库版本
+      try {
+        this.checkDatabaseVersion()
+      } catch (versionError: any) {
+        console.error(`❌ 数据库版本检查失败: ${versionError?.message || versionError}`)
+        throw versionError
       }
     } catch (error: any) {
       // 清理失败的数据库连接
@@ -1468,5 +1477,164 @@ export default class MusicDatabase {
       playCount: row.play_count || 0,
       songCount: row.song_count || 0
     }))
+  }
+
+  /**
+   * 检查数据库版本
+   * 如果版本不匹配，清空并重建数据库
+   */
+  private checkDatabaseVersion(): void {
+    try {
+      // 获取当前存储的版本号
+      const storedVersion = this.getSetting(DB_VERSION_KEY)
+      
+      console.log(`📊 数据库版本检查:`)
+      console.log(`   当前代码版本: ${DB_VERSION}`)
+      console.log(`   数据库存储版本: ${storedVersion || '未设置'}`)
+
+      if (storedVersion === null) {
+        // 首次运行或旧版本数据库，保存当前版本
+        console.log(`✅ 首次运行，保存数据库版本: ${DB_VERSION}`)
+        this.setSetting(DB_VERSION_KEY, DB_VERSION)
+        return
+      }
+
+      if (storedVersion !== DB_VERSION) {
+        // 版本不匹配，需要清空并重建
+        console.warn(`⚠️  数据库版本不匹配！`)
+        console.warn(`   预期版本: ${DB_VERSION}`)
+        console.warn(`   实际版本: ${storedVersion}`)
+        console.warn(`🔄 开始清空并重建数据库...`)
+        
+        this.clearAndRebuildDatabase()
+        
+        console.log(`✅ 数据库已清空并重建`)
+      } else {
+        console.log(`✅ 数据库版本匹配，无需重建`)
+      }
+    } catch (error: any) {
+      console.error(`❌ 版本检查失败:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * 清空并重建数据库
+   */
+  private clearAndRebuildDatabase(): void {
+    try {
+      console.log(`🗑️  开始清空数据库...`)
+      
+      // 1. 删除所有表数据（保留表结构）
+      this.clearAllTables()
+      
+      // 2. 删除封面和歌词文件
+      this.clearMediaFiles()
+      
+      // 3. 重新执行迁移（确保表结构最新）
+      console.log(`🔄 重新执行数据库迁移...`)
+      this.migrate()
+      
+      // 4. 重新创建索引
+      console.log(`🔄 重新创建索引...`)
+      this.createIndexes()
+      
+      // 5. 保存新版本号
+      this.setSetting(DB_VERSION_KEY, DB_VERSION)
+      
+      console.log(`✅ 数据库清空并重建完成`)
+    } catch (error: any) {
+      console.error(`❌ 清空重建失败:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * 清空所有表数据
+   */
+  private clearAllTables(): void {
+    try {
+      // 获取所有表名
+      const tables = this.db!.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' 
+        AND name NOT LIKE 'sqlite_%'
+      `).all() as Array<{ name: string }>
+      
+      console.log(`📋 找到 ${tables.length} 个表需要清空`)
+      
+      // 禁用外键约束
+      this.db!.exec('PRAGMA foreign_keys = OFF')
+      
+      // 开始事务
+      this.db!.exec('BEGIN TRANSACTION')
+      
+      try {
+        // 删除所有表数据
+        for (const table of tables) {
+          console.log(`   清空表: ${table.name}`)
+          this.db!.prepare(`DELETE FROM ${table.name}`).run()
+        }
+        
+        // 重置自增ID（不重置，继续累加）
+        // 注意：根据需求，自增ID不重置，所以这里不执行 DELETE FROM sqlite_sequence
+        
+        // 提交事务
+        this.db!.exec('COMMIT')
+        console.log(`✅ 所有表数据已清空`)
+      } catch (error) {
+        // 回滚事务
+        this.db!.exec('ROLLBACK')
+        throw error
+      } finally {
+        // 重新启用外键约束
+        this.db!.exec('PRAGMA foreign_keys = ON')
+      }
+    } catch (error: any) {
+      console.error(`❌ 清空表失败:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * 清空封面和歌词文件
+   */
+  private clearMediaFiles(): void {
+    try {
+      const userDataPath = app.getPath('userData')
+      
+      // 清空封面目录
+      const coversDir = join(userDataPath, 'covers')
+      if (existsSync(coversDir)) {
+        console.log(`🗑️  清空封面目录: ${coversDir}`)
+        const files = readdirSync(coversDir)
+        for (const file of files) {
+          try {
+            unlinkSync(join(coversDir, file))
+          } catch (error) {
+            console.warn(`   删除封面文件失败: ${file}`, error)
+          }
+        }
+        console.log(`✅ 已删除 ${files.length} 个封面文件`)
+      }
+      
+      // 清空歌词目录（如果有）
+      const lyricsDir = join(userDataPath, 'lyrics')
+      if (existsSync(lyricsDir)) {
+        console.log(`🗑️  清空歌词目录: ${lyricsDir}`)
+        const files = readdirSync(lyricsDir)
+        for (const file of files) {
+          try {
+            unlinkSync(join(lyricsDir, file))
+          } catch (error) {
+            console.warn(`   删除歌词文件失败: ${file}`, error)
+          }
+        }
+        console.log(`✅ 已删除 ${files.length} 个歌词文件`)
+      }
+    } catch (error: any) {
+      console.error(`❌ 清空媒体文件失败:`, error)
+      // 不抛出错误，允许继续
+    }
   }
 }
