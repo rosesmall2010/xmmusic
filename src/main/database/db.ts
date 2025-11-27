@@ -1507,7 +1507,7 @@ export default class MusicDatabase {
         const files = readdirSync(lyricsDir)
         for (const file of files) {
           try {
-            unlinkSync(join(coversDir, file))
+            unlinkSync(join(lyricsDir, file))
           } catch (error) {
             console.warn(`   删除歌词文件失败: ${file}`, error)
           }
