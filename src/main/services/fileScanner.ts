@@ -16,34 +16,46 @@ const getParseFile = async () => {
     return parseFileCache
   }
 
+  console.log('[FileScanner] 开始加载 music-metadata 库...')
+  const loadStart = Date.now()
+
   // 使用字符串拼接隐藏模块名
   const moduleName = 'music' + '-' + 'metadata'
   const libPath = moduleName + '/lib/index.js'
 
   try {
     // 方法1: 尝试使用动态导入（ES 模块）
+    console.log('[FileScanner] 尝试方法1: 动态导入')
     const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<any>
     const mm = await dynamicImport(moduleName)
     parseFileCache = mm.parseFile
+    console.log(`[FileScanner] ✓ music-metadata 加载成功 (方法1, 耗时: ${Date.now() - loadStart}ms)`)
     return parseFileCache
   } catch (error) {
+    console.log(`[FileScanner] 方法1失败:`, (error as any)?.message)
     try {
       // 方法2: 使用路径解析 + require（完全动态）
+      console.log('[FileScanner] 尝试方法2: require')
       const resolveFunc = eval('require.resolve') as (path: string) => string
       const mmPath = resolveFunc(libPath)
       const requireFunc = eval('require') as NodeRequire
       const mm = requireFunc(mmPath)
       parseFileCache = mm.parseFile
+      console.log(`[FileScanner] ✓ music-metadata 加载成功 (方法2, 耗时: ${Date.now() - loadStart}ms)`)
       return parseFileCache
     } catch (requireError: any) {
+      console.log(`[FileScanner] 方法2失败:`, requireError?.message)
       // 方法3: 使用 createRequire（最后的尝试）
       try {
+        console.log('[FileScanner] 尝试方法3: createRequire')
         const requireMM = createRequire(__filename)
         const mm = requireMM(moduleName)
         parseFileCache = mm.parseFile
+        console.log(`[FileScanner] ✓ music-metadata 加载成功 (方法3, 耗时: ${Date.now() - loadStart}ms)`)
         return parseFileCache
       } catch (finalError: any) {
         const errorMsg = (error as any)?.message || (requireError as any)?.message || (finalError as any)?.message
+        console.error(`[FileScanner] ✗ 所有方法均失败，无法加载 music-metadata:`, errorMsg)
         throw new Error(`无法加载音乐元数据解析库: ${errorMsg}`)
       }
     }
@@ -456,7 +468,9 @@ export default class FileScanner {
     coverPath: string | null
   }> {
     try {
+      console.log(`[FileScanner] 解析文件: ${filePath}`)
       const parseFile = await getParseFile()
+      console.log('[FileScanner] parseFile 函数已获取，开始解析元数据...')
 
       // 添加超时控制，避免某些文件解析时间过长
       const PARSE_TIMEOUT = 3000 // 降低到3秒超时，更快跳过问题文件
