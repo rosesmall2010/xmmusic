@@ -135,8 +135,12 @@
       <div class="menu-item" @click="handlePlay(contextMenu.music!)">
         播放
       </div>
+      <div class="menu-item" @click="toggleFavorite(contextMenu.music!)">
+        <Heart :size="16" :fill="contextMenu.isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': contextMenu.isFavorite }" class="icon" />
+        {{ contextMenu.isFavorite ? '取消喜欢' : '喜欢' }}
+      </div>
       <div class="menu-item" @click="openAddToPlaylist(contextMenu.music!)">
-        <span class="icon">➕</span>
+        <Music :size="16" class="icon" />
         添加到歌单
       </div>
       <div class="menu-divider"></div>
@@ -144,6 +148,15 @@
         <Edit :size="16" class="icon" />
         编辑标签
       </div>
+      <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
+        <FolderOpen :size="16" class="icon" />
+        在文件管理器中打开
+      </div>
+      <div class="menu-item" @click="showMusicDetails(contextMenu.music!)">
+        <Info :size="16" class="icon" />
+        详细信息
+      </div>
+      <div class="menu-divider"></div>
       <div class="menu-item" @click="enableSelectionMode">
         <Check :size="16" class="icon" />
         批量操作
@@ -155,10 +168,6 @@
       >
         <Trash2 :size="16" class="icon" />
         从歌单移除
-      </div>
-      <div class="menu-item" @click="toggleFavorite(contextMenu.music!)">
-        <Heart :size="16" :fill="contextMenu.isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': contextMenu.isFavorite }" class="icon" />
-        {{ contextMenu.isFavorite ? '取消喜欢' : '喜欢' }}
       </div>
     </div>
 
@@ -186,7 +195,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
@@ -498,6 +507,22 @@ const closeEditTag = () => {
 const handleTagSaved = () => {
   // Emit event to refresh the list
   emit('songs-updated')
+}
+
+// 在文件管理器中打开
+const openFileExplorer = (music: MusicItem) => {
+  window.electronAPI.openInFileExplorer(music.filePath)
+  closeContextMenu()
+}
+
+// 显示详细信息
+const showDetailsDialog = ref(false)
+const detailsMusic = ref<MusicItem | null>(null)
+
+const showMusicDetails = (music: MusicItem) => {
+  detailsMusic.value = music
+  showDetailsDialog.value = true
+  closeContextMenu()
 }
 
 // Listen for metadata updates from other parts of the app

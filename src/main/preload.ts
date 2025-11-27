@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectMusicFile: () => ipcRenderer.invoke('select-music-file'),
   selectMusicFiles: () => ipcRenderer.invoke('select-music-files'),
   selectImageFile: () => ipcRenderer.invoke('select-image-file'),
+  openInFileExplorer: (filePath: string) => ipcRenderer.invoke('open-in-file-explorer', filePath),
         scanMusicFolder: (path: string) => ipcRenderer.invoke('scan-music-folder', path),
         pauseScan: () => ipcRenderer.invoke('pause-scan'),
         resumeScan: () => ipcRenderer.invoke('resume-scan'),
@@ -82,7 +83,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 收藏
   getFavorites: () => ipcRenderer.invoke('get-favorites'),
-  getFavoritesPaginated: (offset: number, limit: number) => 
+  getFavoritesPaginated: (offset: number, limit: number) =>
     ipcRenderer.invoke('get-favorites-paginated', offset, limit),
   getFavoritesCount: () => ipcRenderer.invoke('get-favorites-count'),
 
@@ -233,6 +234,7 @@ declare global {
       selectMusicFile: () => Promise<string | null>
       selectMusicFiles: () => Promise<string[]>
       selectImageFile: () => Promise<string | null>
+      openInFileExplorer: (filePath: string) => Promise<void>
       scanMusicFolder: (path: string) => Promise<ScanResult>
       getMusicList: (offset: number, limit: number) => Promise<MusicItem[]>
       getMusicTotalCount: () => Promise<number>

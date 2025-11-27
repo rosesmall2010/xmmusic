@@ -94,6 +94,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return result.filePaths
   })
 
+  // 在文件管理器中打开
+  ipcMain.handle('open-in-file-explorer', async (_, filePath: string) => {
+    const { shell } = require('electron')
+    shell.showItemInFolder(filePath)
+  })
+
   ipcMain.handle('select-music-file', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
