@@ -285,38 +285,47 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 初始化数据库
-  console.log('🔧 开始初始化数据库...')
-  try {
-    db = MusicDatabase.getInstance()
-    db.initialize()
-    console.log('✅ 数据库初始化成功')
-  } catch (error: any) {
-    console.error('='.repeat(60))
-    console.error('❌ 数据库初始化失败!')
-    console.error('='.repeat(60))
-    console.error('错误信息:', error?.message || error)
-    if (error?.stack) {
-      console.error('错误堆栈:', error.stack)
-    }
-    console.error('')
-    console.error('⚠️ 可能的原因:')
-    console.error('  1. @vscode/sqlite3 模块未正确安装')
-    console.error('  2. 数据库文件权限问题')
-    console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
-    console.error('')
-    console.error('💡 解决方案:')
-    console.error('  1. 重新安装依赖: npm install')
-    console.error('  2. 检查数据库文件权限')
-    console.error('  3. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
-    console.error('')
-    console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
-    console.error('='.repeat(60))
-    db = null
-  }
-
-  // 创建窗口
+  // 先创建窗口，避免数据库初始化阻塞界面
   createWindow()
+
+  // 异步初始化数据库（不阻塞窗口创建）
+  console.log('🔧 开始初始化数据库...')
+  // 使用 setTimeout 确保窗口先创建
+  setTimeout(() => {
+    try {
+      db = MusicDatabase.getInstance()
+      db.initialize()
+      console.log('✅ 数据库初始化成功')
+      
+      // 数据库初始化成功后，初始化文件监控
+      if (db) {
+        fileMonitor = new FileMonitor(db)
+        console.log('✅ 文件监控服务已初始化')
+      }
+    } catch (error: any) {
+      console.error('='.repeat(60))
+      console.error('❌ 数据库初始化失败!')
+      console.error('='.repeat(60))
+      console.error('错误信息:', error?.message || error)
+      if (error?.stack) {
+        console.error('错误堆栈:', error.stack)
+      }
+      console.error('')
+      console.error('⚠️ 可能的原因:')
+      console.error('  1. @vscode/sqlite3 模块未正确安装')
+      console.error('  2. 数据库文件权限问题')
+      console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
+      console.error('')
+      console.error('💡 解决方案:')
+      console.error('  1. 重新安装依赖: npm install')
+      console.error('  2. 检查数据库文件权限')
+      console.error('  3. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
+      console.error('')
+      console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
+      console.error('='.repeat(60))
+      db = null
+    }
+  }, 100) // 延迟 100ms，确保窗口先创建
 
   // 立即读取并应用主题设置到窗口外观
   if (mainWindow && db) {
@@ -358,11 +367,7 @@ app.whenReady().then(async () => {
     console.log('✅ 快捷键管理器已初始化')
   }
 
-  // 初始化文件监控
-  if (db) {
-    fileMonitor = new FileMonitor(db)
-    console.log('✅ 文件监控服务已初始化')
-  }
+  // 文件监控将在数据库初始化成功后异步初始化（见上方 setTimeout）
 
   // 设置 IPC（即使数据库未初始化也要设置基础 handlers）
   if (mainWindow) {

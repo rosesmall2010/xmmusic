@@ -1367,9 +1367,12 @@ export default class MusicDatabase {
 
       // 关闭当前数据库连接
       if (this.db) {
+        console.log(`🔒 正在关闭数据库连接...`)
         try {
           this.db.close()
+          console.log(`✅ 数据库连接已关闭`)
         } catch (closeError) {
+          console.warn(`⚠️  关闭数据库连接时出错（继续执行）:`, closeError)
           // 忽略关闭错误
         }
         this.db = null
@@ -1386,16 +1389,22 @@ export default class MusicDatabase {
         const { unlinkSync } = require('fs')
         unlinkSync(dbPath)
         console.log(`✅ 数据库文件已删除`)
+      } else {
+        console.log(`📂 数据库文件不存在，跳过删除: ${dbPath}`)
       }
 
       // 删除封面和歌词文件
+      console.log(`🗑️  开始清空媒体文件...`)
       this.clearMediaFiles()
+      console.log(`✅ 媒体文件清理完成`)
 
       // 重新创建数据库连接并执行迁移
-      console.log(`🔄 重新创建数据库...`)
+      console.log(`🔄 重新创建数据库连接...`)
       this.db = new Database(dbPath)
+      console.log(`✅ 数据库连接创建成功`)
 
       // 配置数据库
+      console.log(`⚙️  配置数据库参数...`)
       this.db.pragma('journal_mode = WAL')
       this.db.pragma('synchronous = NORMAL')
       this.db.pragma('cache_size = -32000')
@@ -1403,17 +1412,22 @@ export default class MusicDatabase {
       this.db.pragma('mmap_size = 268435456')
       this.db.pragma('page_size = 4096')
       this.db.pragma('foreign_keys = ON')
+      console.log(`✅ 数据库配置完成`)
 
       // 执行迁移
       console.log(`🔄 执行数据库迁移...`)
       this.migrate()
+      console.log(`✅ 数据库迁移完成`)
 
       // 创建索引
       console.log(`🔄 创建数据库索引...`)
       this.createIndexes()
+      console.log(`✅ 数据库索引创建完成`)
 
       // 保存新版本号
+      console.log(`💾 保存数据库版本号: ${DB_VERSION}`)
       this.setSetting(DB_VERSION_KEY, DB_VERSION)
+      console.log(`✅ 版本号已保存`)
 
       console.log(`✅ 数据库清空并重建完成`)
     } catch (error: any) {
@@ -1480,39 +1494,75 @@ export default class MusicDatabase {
 
   /**
    * 清空封面和歌词文件
+   * 优化：限制删除数量，避免阻塞主线程
    */
   private clearMediaFiles(): void {
     try {
       const userDataPath = app.getPath('userData')
+      const MAX_DELETE_COUNT = 1000 // 最多删除 1000 个文件，避免阻塞
 
       // 清空封面目录
       const coversDir = join(userDataPath, 'covers')
       if (existsSync(coversDir)) {
         console.log(`🗑️  清空封面目录: ${coversDir}`)
-        const files = readdirSync(coversDir)
-        for (const file of files) {
-          try {
-            unlinkSync(join(coversDir, file))
-          } catch (error) {
-            console.warn(`   删除封面文件失败: ${file}`, error)
+        try {
+          const files = readdirSync(coversDir)
+          const filesToDelete = files.slice(0, MAX_DELETE_COUNT)
+          let deletedCount = 0
+          
+          for (const file of filesToDelete) {
+            try {
+              unlinkSync(join(coversDir, file))
+              deletedCount++
+              // 每删除 50 个文件，记录一次进度
+              if (deletedCount % 50 === 0) {
+                console.log(`   已删除 ${deletedCount} / ${filesToDelete.length} 个封面文件...`)
+              }
+            } catch (error) {
+              console.warn(`   删除封面文件失败: ${file}`, error)
+            }
           }
+          
+          if (files.length > MAX_DELETE_COUNT) {
+            console.log(`⚠️  封面文件过多（${files.length} 个），仅删除了前 ${MAX_DELETE_COUNT} 个`)
+          } else {
+            console.log(`✅ 已删除 ${deletedCount} 个封面文件`)
+          }
+        } catch (error) {
+          console.warn(`   读取封面目录失败:`, error)
         }
-        console.log(`✅ 已删除 ${files.length} 个封面文件`)
       }
 
       // 清空歌词目录（如果有）
       const lyricsDir = join(userDataPath, 'lyrics')
       if (existsSync(lyricsDir)) {
         console.log(`🗑️  清空歌词目录: ${lyricsDir}`)
-        const files = readdirSync(lyricsDir)
-        for (const file of files) {
-          try {
-            unlinkSync(join(lyricsDir, file))
-          } catch (error) {
-            console.warn(`   删除歌词文件失败: ${file}`, error)
+        try {
+          const files = readdirSync(lyricsDir)
+          const filesToDelete = files.slice(0, MAX_DELETE_COUNT)
+          let deletedCount = 0
+          
+          for (const file of filesToDelete) {
+            try {
+              unlinkSync(join(lyricsDir, file))
+              deletedCount++
+              // 每删除 50 个文件，记录一次进度
+              if (deletedCount % 50 === 0) {
+                console.log(`   已删除 ${deletedCount} / ${filesToDelete.length} 个歌词文件...`)
+              }
+            } catch (error) {
+              console.warn(`   删除歌词文件失败: ${file}`, error)
+            }
           }
+          
+          if (files.length > MAX_DELETE_COUNT) {
+            console.log(`⚠️  歌词文件过多（${files.length} 个），仅删除了前 ${MAX_DELETE_COUNT} 个`)
+          } else {
+            console.log(`✅ 已删除 ${deletedCount} 个歌词文件`)
+          }
+        } catch (error) {
+          console.warn(`   读取歌词目录失败:`, error)
         }
-        console.log(`✅ 已删除 ${files.length} 个歌词文件`)
       }
     } catch (error: any) {
       console.error(`❌ 清空媒体文件失败:`, error)
