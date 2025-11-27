@@ -85,7 +85,13 @@ const { play } = usePlayer()
 
 const playlist = ref<any>(null)
 const songs = ref<MusicItem[]>([])
+const totalSongs = ref(0)
+const loading = ref(false)
 const showEditModal = ref(false)
+const PAGE_SIZE = 50
+
+let currentOffset = 0
+let hasMore = true
 
 onMounted(async () => {
   await loadPlaylist()
@@ -111,81 +117,69 @@ watch(() => route.params.id as string, async (newId: string, oldId: string) => {
     // 重置数据防止旧数据残留
     playlist.value = null
     songs.value = []
+    totalSongs.value = 0
+    currentOffset = 0
+    hasMore = true
     await loadPlaylist()
   }
 })
 
-const loading = ref(false)
-const totalSongs = ref(0)
 let currentLoadId = 0 // 用于追踪当前的加载任务，防止切换歌单时数据错乱
 
 const loadPlaylist = async () => {
   const id = route.params.id as string
   if (!id) return
 
+  const playlistId = Number(id)
+
   // 增加加载ID，立即使之前的加载任务失效
   currentLoadId++
   const thisLoadId = currentLoadId
 
   try {
-    loading.value = true
-    songs.value = [] // 清空列表
+    // 首次加载：获取歌单详情
+    if (currentOffset === 0) {
+      loading.value = true
+      songs.value = [] // 清空列表
 
-    // 获取歌单详情
-    const playlists = await window.electronAPI.getPlaylists()
+      // 获取歌单详情
+      const playlists = await window.electronAPI.getPlaylists()
+
+      // 如果任务已过时，直接返回
+      if (thisLoadId !== currentLoadId) return
+
+      playlist.value = playlists.find((p: any) => p.id === playlistId)
+
+      if (!playlist.value) {
+        loading.value = false
+        return
+      }
+
+      // 获取总数
+      totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
+    }
+
+    // 如果没有更多数据或正在加载，直接返回
+    if (!hasMore || loading.value) return
+
+    loading.value = true
+
+    // 分页加载歌曲
+    const newSongs = await window.electronAPI.getPlaylistSongsPaginated(playlistId, currentOffset, PAGE_SIZE)
 
     // 如果任务已过时，直接返回
     if (thisLoadId !== currentLoadId) return
 
-    // 路由参数id是字符串，数据库id是数字，需要转换
-    const playlistId = Number(id)
-    playlist.value = playlists.find((p: any) => p.id === playlistId)
-
-    if (playlist.value) {
-      totalSongs.value = playlist.value.songCount || 0
-
-      // 获取所有歌曲数据
-      // 注意：如果歌曲非常多（如几万首），这里可能也需要后端分页
-      // 但目前主要瓶颈是前端渲染和响应式转换
-      const allSongs = await window.electronAPI.getPlaylistSongs(playlistId)
-
-      if (thisLoadId !== currentLoadId) return
-
-      // 策略：先显示第一批数据（首屏），让用户立刻能看到
-      const firstBatchSize = 50
-      songs.value = allSongs.slice(0, firstBatchSize)
-      loading.value = false // 立即结束 loading 状态，显示列表
-
-      // 如果还有剩余数据，分批追加
-      if (allSongs.length > firstBatchSize) {
-        let currentIdx = firstBatchSize
-        const batchSize = 200 // 后续批次可以大一点
-
-        const appendBatch = () => {
-          // 检查任务是否已被取消
-          if (thisLoadId !== currentLoadId) return
-
-          const endIdx = Math.min(currentIdx + batchSize, allSongs.length)
-          const batch = allSongs.slice(currentIdx, endIdx)
-
-          // 追加数据
-          songs.value = [...songs.value, ...batch]
-          currentIdx = endIdx
-
-          // 如果还有数据，继续下一批
-          if (currentIdx < allSongs.length) {
-            setTimeout(appendBatch, 20) // 让出主线程
-          }
-        }
-
-        // 启动后台加载
-        setTimeout(appendBatch, 20)
-      }
-    } else {
-      loading.value = false
+    if (newSongs.length < PAGE_SIZE) {
+      hasMore = false
     }
+
+    // 追加到列表
+    songs.value = [...songs.value, ...newSongs]
+    currentOffset += newSongs.length
   } catch (error) {
     console.error('加载歌单失败:', error)
+  } finally {
     loading.value = false
   }
 }
