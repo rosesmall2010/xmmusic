@@ -188,6 +188,11 @@
       @close="closeEditTag"
       @saved="handleTagSaved"
     />
+    <MusicDetailsModal
+      :show="showDetailsDialog"
+      :music="detailsMusic"
+      @close="showDetailsDialog = false"
+    />
   </div>
 </template>
 
@@ -199,6 +204,7 @@ import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, I
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
+import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { useElementSize } from '@vueuse/core'
 
