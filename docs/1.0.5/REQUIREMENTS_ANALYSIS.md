@@ -19,7 +19,9 @@
 
 ## 📊 需求概述
 
-### ⚠️ 重要设计约束
+### ⚠️ 重要说明
+
+**项目性质**: 这是现有功能的**调整和重构**，不是全新开发。所有实施工作都基于现有代码库和架构进行优化和扩展。
 
 **界面设计风格**: 仿 QQ 音乐界面风格
 **功能范围**: 纯本地音乐播放器，**不包含在线音乐功能**
@@ -28,6 +30,7 @@
 - 界面布局、交互方式、视觉风格参考 QQ 音乐，但**仅保留本地音乐相关功能**
 - 不包含任何在线音乐功能（如在线搜索、在线播放、在线歌单等）
 - 所有界面调整都基于本地音乐管理场景
+- 在现有架构基础上进行调整，避免不必要的重构
 
 ---
 
@@ -133,13 +136,18 @@ value: '1.0.5'  -- JSON 字符串或直接字符串
 所有列表（本地音乐、发现音乐、我喜欢、最近播放、我的歌单、播放队列）：
 - 完全独立，互不依赖
 - 以完整路径的 MD5 作为唯一键（key）
-- **MD5 计算方式**: 对文件完整路径（`file_path`）进行 MD5 计算，实时计算，不缓存
+- **MD5 计算方式**: 在本地音乐扫描时，对文件完整路径（`file_path`）进行 MD5 计算并存储到数据库，后续使用时直接从数据库读取，无需重新计算
 - MD5 相同的视为同一首歌曲
 - 某个列表清空或删除，不影响其他列表
 
+**重要说明**: 这是现有功能的调整和重构，不是全新开发
+
 #### 2.2 业务规则
 - **唯一标识**: `file_path` → MD5(`file_path`) → 作为列表项的键值
-- **MD5 计算**: 实时计算，不存储不缓存，每次需要时从 `file_path` 计算
+- **MD5 计算和存储**: 
+  - 在本地音乐扫描时，计算文件路径的 MD5 并存储到数据库
+  - 存储位置：列表表中增加 `file_path_md5` 字段
+  - 后续使用时直接从数据库读取，无需重新计算
 - **列表存储**: 每个列表独立存储，不依赖 `music` 表
 - **删除操作**: 删除列表中的歌曲不影响其他列表
 
@@ -152,6 +160,7 @@ value: '1.0.5'  -- JSON 字符串或直接字符串
 CREATE TABLE local_music (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL UNIQUE,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5（扫描时计算存储）
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -159,13 +168,15 @@ CREATE TABLE local_music (
 CREATE TABLE discover_music (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5
   discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 我喜欢列表（已存在，需要检查是否符合要求）
+-- 我喜欢列表（已存在，需要添加 file_path_md5 字段）
 CREATE TABLE favorites (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL UNIQUE,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -173,45 +184,64 @@ CREATE TABLE favorites (
 CREATE TABLE recent_plays (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5
   played_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 播放列表项（已存在，使用 file_path）
--- 保持不变
+-- 播放列表项（已存在，需要添加 file_path_md5 字段）
+CREATE TABLE playlist_item (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  playlist_id INTEGER NOT NULL,
+  file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5
+  position INTEGER NOT NULL,
+  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
+  UNIQUE(playlist_id, file_path)
+);
 
 -- 播放队列（新表，持久化存储）
 CREATE TABLE play_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,        -- 文件路径的 MD5
   position INTEGER NOT NULL,
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 **注意**:
-- 不需要在表中存储 `file_path_md5` 字段
-- MD5 值实时计算，用于查询和比较
-- 列表通过 `file_path` 关联到 `music` 表获取元数据
+- `file_path_md5` 字段在扫描时计算并存储，后续直接使用
+- 列表通过 `file_path` 或 `file_path_md5` 关联到 `music` 表获取元数据
+- 列表项通过 `file_path_md5` 进行去重和比较
 
 #### 2.4 MD5 计算实现
 
+**计算时机**: 在本地音乐扫描时计算并存储
+
 ```typescript
-// 工具函数：计算文件路径的 MD5
+// 工具函数：计算文件路径的 MD5（仅在扫描时使用）
 function calculateFilePathMD5(filePath: string): string {
   const crypto = require('crypto')
   return crypto.createHash('md5').update(filePath).digest('hex')
 }
 
+// 扫描流程：
+// 1. 扫描文件时，计算 file_path 的 MD5
+// 2. 将 file_path 和 file_path_md5 一起存储到数据库
+// 3. 后续使用时，直接从数据库读取 file_path_md5，无需重新计算
+
 // 使用场景：
-// 1. 列表项比较（判断是否为同一首歌曲）
-// 2. 列表项去重
-// 3. 查询时作为条件
+// 1. 列表项比较（判断是否为同一首歌曲）- 从数据库读取
+// 2. 列表项去重 - 使用数据库中的 file_path_md5
+// 3. 查询时作为条件 - 使用数据库中的 file_path_md5
 ```
 
 #### 2.5 数据初始化策略
+- **这是功能调整，不是全新开发**：在现有架构基础上进行调整和重构
 - **不需要数据迁移**：根据版本控制机制，版本不匹配时自动清空并重建数据库
-- 新数据库初始化时创建所有新的表结构
-- 不需要预先计算 MD5，使用时实时计算
+- 新数据库初始化时创建所有新的表结构（包含 `file_path_md5` 字段）
+- 扫描音乐时计算并存储 `file_path_md5`
 - 用户重新扫描和添加音乐到各个列表
 
 #### 2.6 API 接口变更
@@ -238,7 +268,7 @@ function calculateFilePathMD5(filePath: string): string {
   - `title` (歌曲名称) - 从 `music` 表 JOIN 获取
   - `album` (专辑) - 从 `music` 表 JOIN 获取
   - `file_path` (完整路径) - 从列表表获取
-  - `file_path_md5` (乐曲ID) - 实时计算 MD5(file_path)
+  - `file_path_md5` (乐曲ID) - 从列表表直接读取（扫描时已计算存储）
   - `cover_path` (封面信息) - 从 `music` 表 JOIN 获取
   - `id` (自增ID) - 从列表表获取
   - `added_at` (加入时间) - 从列表表获取
@@ -261,7 +291,7 @@ function calculateFilePathMD5(filePath: string): string {
 interface ListItem {
   id: number                    // 列表自增ID（不清空）
   filePath: string             // 完整路径
-  filePathMd5: string          // 路径MD5（实时计算，不存储）
+  filePathMd5: string          // 路径MD5（从数据库读取，扫描时已计算存储）
   title: string                // 歌曲名称（JOIN music表）
   album: string | null         // 专辑（JOIN music表）
   coverPath: string | null     // 封面路径（JOIN music表）
@@ -406,8 +436,8 @@ interface ListItem {
   - 双击时立即播放该歌曲
 
 - **队列状态判断**:
-  - 通过实时计算 `file_path` 的 MD5 判断歌曲是否在队列中
-  - 判断逻辑：检查当前歌曲的 `file_path` 是否存在于播放队列表中
+  - 通过数据库中的 `file_path_md5` 字段判断歌曲是否在队列中
+  - 判断逻辑：检查当前歌曲的 `file_path_md5` 是否存在于播放队列表中
 
 #### 6.3 UI设计
 
@@ -506,7 +536,7 @@ interface ListItem {
 - 文件类型
 - 文件名
 - 完整路径
-- 完整路径的MD5（实时计算显示）
+- 完整路径的MD5（从数据库读取显示，扫描时已计算存储）
 - 文件大小（友好显示 + 实际字节数，如：1.1MB (1153433字节)）
 - 复制详细信息的按钮（复制到剪贴板）
 
@@ -523,7 +553,7 @@ interface ListItem {
 │ 文件类型：  [MP3]                   │
 │ 文件名：    [filename.mp3]          │
 │ 完整路径：  [完整路径，可复制]      │
-│ MD5：       [MD5值，实时计算]       │
+│ MD5：       [MD5值，从数据库读取]   │
 │ 文件大小：  1.1MB (1153433字节)     │
 │ 是否有歌词：是                      │
 ├─────────────────────────────────────┤
@@ -535,7 +565,7 @@ interface ListItem {
 - 从 `music` 表获取音乐元数据
 - 从 `file_path` 获取文件系统信息（文件大小等）
 - 检查 `lyrics_path` 判断是否有歌词
-- MD5 值实时计算：`calculateFilePathMD5(filePath)`
+- MD5 值从数据库读取（列表表中的 `file_path_md5` 字段，扫描时已计算存储）
 
 ---
 
@@ -610,13 +640,13 @@ interface ListItem {
   - 重建数据库结构（所有新表）
   - 设置新版本号到 `settings` 表
 - **用户数据**：用户需要重新扫描音乐文件并添加到各个列表
-- **不需要预计算 MD5**：使用时实时计算
+- **MD5 计算和存储**：在扫描时计算并存储到数据库，后续直接从数据库读取
 
 ### API 接口影响
 
 #### 需要新增的接口
 - 列表管理接口（增删改查）
-- MD5 计算工具接口（实时计算）
+- 列表表结构需要增加 `file_path_md5` 字段存储（扫描时计算）
 - 标签编辑同步接口
 - 批量操作接口（添加到我喜欢、添加到歌单、删除、添加到播放队列）
 - 列表清空接口
@@ -660,13 +690,13 @@ interface ListItem {
 - 批量操作提升操作效率
 
 #### 潜在风险
-- MD5 实时计算可能影响性能（需要优化计算函数）
 - 多列表 JOIN 查询可能影响性能（需要优化索引）
-- 大量列表项时 MD5 计算开销
+- 扫描时计算 MD5 可能略微影响扫描速度
 
 #### 性能优化建议
 - MD5 计算使用高效的 crypto 库
-- 在必要时可以考虑前端缓存计算结果（仅用于显示，不作为数据库键）
+- 扫描时批量计算和存储 MD5
+- 为 `file_path_md5` 创建索引以优化查询
 - 优化 JOIN 查询，使用合适的索引
 
 ---
@@ -722,11 +752,11 @@ interface ListItem {
    - 版本不匹配时执行清空重建流程
 4. 创建新的列表表结构（不包含 MD5 字段）
 5. 实现数据库清理和重建函数
-6. 实现 MD5 实时计算工具函数
+6. 实现 MD5 计算工具函数（扫描时使用）
 
 #### Step 2: 后端API开发 (2-3天)
 1. 实现列表管理API
-2. 实现MD5实时计算功能（工具函数）
+2. 在文件扫描服务中集成 MD5 计算和存储（扫描时计算并存储到数据库）
 3. 实现标签编辑同步机制
 4. 实现异步扫描功能
 5. 实现批量操作API（四个功能：添加到我喜欢、删除、添加到歌单、添加到播放队列）
@@ -751,7 +781,7 @@ interface ListItem {
 
 #### Step 5: 测试与优化 (1-2天)
 1. 功能测试
-2. 性能测试（MD5 计算性能）
+2. 性能测试（扫描时 MD5 计算性能）
 3. 数据库版本控制和重建测试
    - 版本不匹配时的重建流程测试
    - 版本匹配时的正常启动测试
@@ -769,11 +799,11 @@ interface ListItem {
   - 用户体验优化：提供快速重新扫描功能
 
 #### 性能风险
-- **风险**: MD5 实时计算可能影响性能
+- **风险**: 扫描时计算 MD5 可能略微影响扫描速度
 - **缓解**:
   - 使用高效的 crypto 库
-  - 优化计算时机（按需计算，不预计算）
-  - 前端显示时可以缓存计算结果（仅 UI 显示用）
+  - 批量计算和存储（扫描时一次性计算）
+  - MD5 计算开销较小（字符串 MD5 计算快速）
 
 #### 兼容性风险
 - **风险**: 新架构可能与现有功能不兼容
@@ -786,7 +816,7 @@ interface ListItem {
 
 #### 单元测试
 - 数据库操作函数测试
-- MD5 计算函数测试（性能和正确性）
+- MD5 计算函数测试（扫描时的计算性能）
 - 列表管理API测试
 
 #### 集成测试
@@ -799,7 +829,7 @@ interface ListItem {
 - 播放队列同步测试（Footer 和 NowPlayingView）
 
 #### 性能测试
-- MD5 实时计算性能测试（10万+路径计算）
+- 扫描时 MD5 计算性能测试（批量计算性能）
 - 大列表加载性能测试（10万+歌曲）
 - 并发扫描性能测试
 - 分页加载性能测试
@@ -831,7 +861,7 @@ interface ListItem {
   2. NowPlayingView 右侧面板的播放队列（可切换歌词/队列）
 
 ### 问题 3: MD5 计算策略
-- **答案**: 对文件完整路径进行 MD5 计算，实时计算，不缓存，不存储
+- **答案**: 在本地音乐扫描时，对文件完整路径进行 MD5 计算并存储到数据库（列表表中的 `file_path_md5` 字段），后续使用时直接从数据库读取，无需重新计算
 
 ### 问题 4: 列表清空后是否重置自增ID
 - **答案**: 不重置，继续累加（不自增 sqlite_sequence）

@@ -1,9 +1,9 @@
 # XMMusic v1.0.5 系统架构设计文档
 
-**文档版本**: v1.0.5  
-**创建日期**: 2025-01-XX  
-**架构师**: Winston  
-**项目版本**: 1.0.5  
+**文档版本**: v1.0.5
+**创建日期**: 2025-01-XX
+**架构师**: Winston
+**项目版本**: 1.0.5
 
 ---
 
@@ -29,10 +29,14 @@
 
 XMMusic 是基于 Electron 的跨平台本地音乐播放器，采用主进程 + 渲染进程的架构模式，无传统后端服务器。界面风格遵循仿 QQ 音乐设计，功能范围仅限于本地音乐管理。
 
+### ⚠️ 重要说明
+
+**项目性质**: 这是现有功能的**调整和重构**，不是全新开发。所有实施工作都基于现有代码库和架构进行优化和扩展。
+
 ### 核心架构原则
 
 1. **列表完全独立性** - 所有列表（本地音乐、发现音乐、我喜欢、最近播放、歌单、播放队列）完全独立存储和操作
-2. **基于文件路径的标识** - 使用文件完整路径的 MD5 作为唯一标识，实时计算
+2. **基于文件路径的标识** - 使用文件完整路径的 MD5 作为唯一标识，在扫描时计算并存储到数据库
 3. **数据库版本控制** - 版本不匹配时清空重建，不执行数据迁移
 4. **纯本地功能** - 不包含任何在线音乐功能
 
@@ -262,6 +266,7 @@ CREATE TABLE music (
 CREATE TABLE local_music (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL UNIQUE,      -- 完整文件路径
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -273,18 +278,20 @@ CREATE TABLE local_music (
 CREATE TABLE discover_music (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 **4. favorites 表（我喜欢列表）**
 - 独立的收藏列表
-- 已存在，符合要求
+- 已存在，需要添加 `file_path_md5` 字段
 
 ```sql
 CREATE TABLE favorites (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL UNIQUE,
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -297,12 +304,13 @@ CREATE TABLE favorites (
 CREATE TABLE recent_plays (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   played_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 **6. playlist_item 表（播放列表项）**
-- 已存在，使用 `file_path` 关联
+- 已存在，需要添加 `file_path_md5` 字段
 - 保持独立于 `music` 表
 
 ```sql
@@ -310,6 +318,7 @@ CREATE TABLE playlist_item (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   playlist_id INTEGER NOT NULL,
   file_path TEXT NOT NULL,             -- 完整文件路径
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   position INTEGER NOT NULL,
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (playlist_id) REFERENCES playlist(id) ON DELETE CASCADE,
@@ -325,6 +334,7 @@ CREATE TABLE playlist_item (
 CREATE TABLE play_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   file_path TEXT NOT NULL,             -- 完整文件路径
+  file_path_md5 TEXT NOT NULL,         -- 文件路径的 MD5（扫描时计算存储）
   position INTEGER NOT NULL,           -- 队列位置
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -352,36 +362,45 @@ CREATE INDEX idx_music_artist_title ON music(artist, title);
 
 -- 列表表索引
 CREATE INDEX idx_local_music_file_path ON local_music(file_path);
+CREATE INDEX idx_local_music_file_path_md5 ON local_music(file_path_md5);
 CREATE INDEX idx_favorites_file_path ON favorites(file_path);
+CREATE INDEX idx_favorites_file_path_md5 ON favorites(file_path_md5);
 CREATE INDEX idx_recent_plays_file_path ON recent_plays(file_path);
+CREATE INDEX idx_recent_plays_file_path_md5 ON recent_plays(file_path_md5);
 CREATE INDEX idx_play_queue_file_path ON play_queue(file_path);
+CREATE INDEX idx_play_queue_file_path_md5 ON play_queue(file_path_md5);
 CREATE INDEX idx_play_queue_position ON play_queue(position);
 
 -- playlist_item 表索引
 CREATE INDEX idx_playlist_item_playlist ON playlist_item(playlist_id);
 CREATE INDEX idx_playlist_item_file_path ON playlist_item(file_path);
-```
+CREATE INDEX idx_playlist_item_file_path_md5 ON playlist_item(file_path_md5);
 
 ### MD5 计算策略
 
 #### 文件路径 MD5（用于列表标识）
 
+**计算时机**: 在本地音乐扫描时计算并存储到数据库
+
 ```typescript
-// 工具函数
+// 工具函数（仅在扫描时使用）
 function calculateFilePathMD5(filePath: string): string {
   const crypto = require('crypto')
   return crypto.createHash('md5').update(filePath).digest('hex')
 }
 ```
 
+**存储位置**: 所有列表表都包含 `file_path_md5` 字段
+
 **使用场景**:
-- 列表项唯一标识
-- 列表项去重
-- 判断歌曲是否在列表中
+- 列表项唯一标识（从数据库读取）
+- 列表项去重（使用数据库中的 `file_path_md5`）
+- 判断歌曲是否在列表中（从数据库查询）
 
 **特性**:
-- 实时计算，不缓存
-- 不存储在数据库中
+- **扫描时计算**: 在本地音乐扫描时计算并存储
+- **存储在数据库**: 所有列表表的 `file_path_md5` 字段
+- **后续直接使用**: 使用时直接从数据库读取，无需重新计算
 - 基于文件完整路径
 
 #### 文件内容 MD5（用于去重）
@@ -569,7 +588,7 @@ interface ListComponentProps {
 interface ListItem {
   id: number                    // 列表自增ID
   filePath: string             // 完整路径
-  filePathMd5: string          // 路径MD5（实时计算）
+  filePathMd5: string          // 路径MD5（从数据库读取，扫描时已计算存储）
   title: string                // 从 music 表 JOIN
   album: string | null         // 从 music 表 JOIN
   coverPath: string | null     // 从 music 表 JOIN
@@ -692,20 +711,23 @@ FileScanner Service
 **实现**:
 - 每个列表使用独立表
 - 通过 `file_path` JOIN `music` 表获取元数据
-- MD5 实时计算用于列表项标识
+- MD5 在扫描时计算并存储到数据库
 
-### 2. MD5 实时计算
+### 2. MD5 计算和存储策略
 
-**决策**: 文件路径 MD5 实时计算，不存储不缓存
+**决策**: 文件路径 MD5 在扫描时计算并存储到数据库
 
 **原因**:
-- 减少数据库存储
-- 避免缓存一致性问题
-- 计算开销小（字符串 MD5）
+- 避免重复计算，提升性能
+- 简化查询逻辑，直接使用数据库字段
+- 计算开销小（字符串 MD5），适合在扫描时一次性计算
+- 统一管理，所有列表都使用存储的 `file_path_md5`
 
 **实现**:
-- 工具函数：`calculateFilePathMD5(filePath: string)`
-- 仅在需要时计算（列表项比较、去重）
+- 扫描服务：在文件扫描时计算 `file_path_md5`
+- 数据库存储：所有列表表包含 `file_path_md5` 字段
+- 工具函数：`calculateFilePathMD5(filePath: string)` 仅在扫描时使用
+- 后续使用：直接从数据库读取，无需重新计算
 
 ### 3. 数据库版本控制
 
@@ -791,12 +813,14 @@ FileScanner Service
 ### MD5 计算优化
 
 1. **计算时机优化**
-   - 仅在需要时计算
+   - 在文件扫描时一次性计算并存储
    - 批量计算使用事务
+   - 后续直接从数据库读取，无需重新计算
 
 2. **计算性能**
    - 使用 Node.js crypto 模块（高效）
    - 字符串 MD5 计算快速
+   - 为 `file_path_md5` 字段创建索引优化查询
 
 ---
 
@@ -872,7 +896,7 @@ xmmusic/
 2. 实现版本检查逻辑
 3. 创建新的列表表结构
 4. 实现数据库清理和重建函数
-5. 实现 MD5 计算工具函数
+5. 在文件扫描服务中集成 MD5 计算和存储（扫描时计算并存储到数据库）
 
 ### Phase 2: 后端 API 开发
 
@@ -908,6 +932,5 @@ xmmusic/
 
 ---
 
-**文档状态**: ✅ 已完成  
+**文档状态**: ✅ 已完成
 **下一步**: 创建数据库 Schema 设计文档和 API 接口设计文档
-
