@@ -103,6 +103,54 @@ const startBackgroundLoading = async () => {
   }
 }
 
+// 监听后端事件
+onMounted(() => {
+  // 监听单曲更新
+  window.electronAPI.on('music-updated', async (_event: any, filePath: string) => {
+    // 重新加载当前视图的数据
+    // 简单起见，我们刷新整个列表，或者尝试只更新特定项
+    // 由于我们使用了分页和虚拟滚动，精确定位比较麻烦，这里先尝试重新加载第一页并后台加载
+    // 但为了不打断用户浏览，最好是只更新内存中的数据
+
+    // 查找并更新 store 中的数据
+    const index = musicStore.musicList.findIndex(m => m.filePath === filePath)
+    if (index !== -1) {
+      // 获取最新数据（可以通过重新加载或后端传递）
+      // 这里简单触发重新加载，或者如果能获取到 ID，就只更新那个 ID
+      // 暂时重新加载列表
+      await musicStore.loadMusic(0, 20, true)
+      startBackgroundLoading()
+    }
+  })
+
+  // 监听列表刷新
+  window.electronAPI.on('music-list-refresh', async () => {
+    await musicStore.loadMusic(0, 20, true)
+    startBackgroundLoading()
+  })
+
+  // 监听扫描进度
+  window.electronAPI.onScanProgress((progress) => {
+    scanProgress.value = progress
+  })
+
+  window.electronAPI.onScanStateChanged((state: any) => {
+    // state 可能是对象或字符串，根据实际情况处理
+    const status = typeof state === 'string' ? state : state?.status
+    isScanning.value = status === 'scanning'
+    if (!isScanning.value) {
+      scanProgress.value = null
+    }
+  })
+})
+
+onUnmounted(() => {
+  window.electronAPI.removeAllListeners('music-updated')
+  window.electronAPI.removeAllListeners('music-list-refresh')
+  window.electronAPI.removeAllListeners('scan-progress')
+  window.electronAPI.removeAllListeners('scan-state-changed')
+})
+
 const loadMore = async () => {
   // This is now handled by background loading, but we keep it for manual trigger if needed
   if (!musicStore.loading && musicStore.hasMore) {

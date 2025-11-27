@@ -66,12 +66,11 @@ CREATE TABLE IF NOT EXISTS playlist_item (
   UNIQUE(playlist_id, file_path)
 );
 
--- 播放历史表
+-- 播放历史表（使用 file_path 独立存储，不依赖 music 表）
 CREATE TABLE IF NOT EXISTS play_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  music_id INTEGER NOT NULL,
-  played_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (music_id) REFERENCES music(id) ON DELETE CASCADE
+  file_path TEXT NOT NULL,
+  played_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 设置表
@@ -116,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_music_genre ON music(genre);
 CREATE INDEX IF NOT EXISTS idx_music_favorite ON music(favorite);
 CREATE INDEX IF NOT EXISTS idx_playlist_item_playlist ON playlist_item(playlist_id);
 CREATE INDEX IF NOT EXISTS idx_playlist_item_file_path ON playlist_item(file_path);
-CREATE INDEX IF NOT EXISTS idx_play_history_music ON play_history(music_id);
+CREATE INDEX IF NOT EXISTS idx_play_history_file_path ON play_history(file_path);
 CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC);
 
 -- 触发器：更新 music_fts

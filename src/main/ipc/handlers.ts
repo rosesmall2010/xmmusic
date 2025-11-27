@@ -296,9 +296,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getMusicById(id)
   })
 
-  ipcMain.handle('record-play', async (_, id: number) => {
+  ipcMain.handle('record-play', async (_, filePath: string) => {
     if (!db) return
-    db.recordPlay(id)
+    db.recordPlay(filePath)
   })
 
   ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number, minSimilarity?: number) => {
@@ -652,13 +652,45 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('fix-id3-tags', async (_, filePath: string, sourceEncoding: string, fields?: any) => {
-    return await id3Fixer.fixID3Tags(filePath, sourceEncoding as any, fields)
+    const result = await id3Fixer.fixID3Tags(filePath, sourceEncoding as any, fields)
+
+    if (result.success && result.fixedTags && db) {
+      // 更新数据库
+      db.updateMusicByPath(filePath, {
+        title: result.fixedTags.title,
+        artist: result.fixedTags.artist,
+        album: result.fixedTags.album
+      })
+
+      // 通知前端刷新
+      mainWindow.webContents.send('music-updated', filePath)
+    }
+
+    return result
   })
 
   ipcMain.handle('fix-id3-tags-batch', async (_, filePaths: string[], sourceEncoding: string, fields?: any) => {
-    return await id3Fixer.fixID3TagsBatch(filePaths, sourceEncoding as any, fields, (current, total) => {
+    const result = await id3Fixer.fixID3TagsBatch(filePaths, sourceEncoding as any, fields, (current, total) => {
       mainWindow.webContents.send('id3-fix-progress', { current, total })
     })
+
+    if (db && result.results) {
+      // 批量更新数据库
+      for (const item of result.results) {
+        if (item.success && item.fixedTags) {
+          db.updateMusicByPath(item.filePath, {
+            title: item.fixedTags.title,
+            artist: item.fixedTags.artist,
+            album: item.fixedTags.album
+          })
+        }
+      }
+
+      // 批量操作后通知前端刷新整个列表
+      mainWindow.webContents.send('music-list-refresh')
+    }
+
+    return result
   })
 
   // 重复音乐检测

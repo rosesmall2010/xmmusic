@@ -91,6 +91,30 @@ export default class MusicDatabase {
         }
         this.db = null
       }
+
+      // 检查是否是关键的 Schema 错误（如缺少列）
+      if (error?.message?.includes('no such column') || error?.code === 'SQLITE_ERROR') {
+        console.error('❌ 检测到严重的数据库 Schema 不兼容，正在尝试重置数据库...')
+
+        try {
+          const isDev = process.env.NODE_ENV !== 'production'
+          const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
+          const path = dbPath || join(app.getPath('userData'), dbFileName)
+
+          if (require('fs').existsSync(path)) {
+            require('fs').unlinkSync(path)
+            console.log('✅ 已删除旧数据库文件')
+
+            // 重新尝试初始化
+            console.log('🔄 正在重新初始化数据库...')
+            this.initialize(dbPath)
+            return
+          }
+        } catch (resetError) {
+          console.error('❌ 数据库重置失败:', resetError)
+        }
+      }
+
       throw error
     }
   }
@@ -426,6 +450,62 @@ export default class MusicDatabase {
 
     const stmt = this.db!.prepare(`
       UPDATE music SET ${fields.join(', ')} WHERE id = ?
+    `)
+    stmt.run(...values)
+  }
+
+  updateMusicByPath(filePath: string, updates: Partial<MusicItem>): void {
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.title !== undefined) {
+      fields.push('title = ?')
+      values.push(updates.title)
+    }
+    if (updates.artist !== undefined) {
+      fields.push('artist = ?')
+      values.push(updates.artist)
+    }
+    if (updates.album !== undefined) {
+      fields.push('album = ?')
+      values.push(updates.album)
+    }
+    if (updates.year !== undefined) {
+      fields.push('year = ?')
+      values.push(updates.year)
+    }
+    if (updates.genre !== undefined) {
+      fields.push('genre = ?')
+      values.push(updates.genre)
+    }
+    if (updates.coverPath !== undefined) {
+      fields.push('cover_path = ?')
+      values.push(updates.coverPath)
+    }
+    if (updates.lyricsPath !== undefined) {
+      fields.push('lyrics_path = ?')
+      values.push(updates.lyricsPath)
+    }
+    if (updates.favorite !== undefined) {
+      fields.push('favorite = ?')
+      values.push(updates.favorite ? 1 : 0)
+    }
+    if (updates.playCount !== undefined) {
+      fields.push('play_count = ?')
+      values.push(updates.playCount)
+    }
+    if (updates.lastPlayedAt !== undefined) {
+      fields.push('last_played_at = ?')
+      values.push(updates.lastPlayedAt)
+    }
+
+    if (fields.length === 0) return
+
+    fields.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(filePath)
+
+    const stmt = this.db!.prepare(`
+      UPDATE music SET ${fields.join(', ')} WHERE file_path = ?
     `)
     stmt.run(...values)
   }
@@ -968,27 +1048,27 @@ export default class MusicDatabase {
     })
   }
 
-  recordPlay(musicId: number): void {
-    // 插入播放历史
-    const historyStmt = this.db!.prepare('INSERT INTO play_history (music_id) VALUES (?)')
-    historyStmt.run(musicId)
+  recordPlay(filePath: string): void {
+    // 插入播放历史（使用 file_path）
+    const historyStmt = this.db!.prepare('INSERT INTO play_history (file_path) VALUES (?)')
+    historyStmt.run(filePath)
 
-    // 更新播放统计
+    // 更新播放统计（如果该音乐在 music 表中存在）
     const updateStmt = this.db!.prepare(`
       UPDATE music SET
         play_count = play_count + 1,
         last_played_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
+      WHERE file_path = ?
     `)
-    updateStmt.run(musicId)
+    updateStmt.run(filePath)
   }
 
   getPlayHistory(limit: number = 50): MusicItem[] {
     const stmt = this.db!.prepare(`
       SELECT m.*
       FROM music m
-      JOIN play_history ph ON m.id = ph.music_id
+      JOIN play_history ph ON m.file_path = ph.file_path
       WHERE m.is_duplicate = 0
       ORDER BY ph.played_at DESC
       LIMIT ?
@@ -1349,7 +1429,7 @@ export default class MusicDatabase {
         DATE(ph.played_at) as date,
         SUM(COALESCE(m.duration, 0)) as duration
       FROM play_history ph
-      JOIN music m ON ph.music_id = m.id
+      JOIN music m ON ph.file_path = m.file_path
       WHERE ph.played_at >= datetime('now', '-' || ? || ' days')
         AND m.duration > 0
       GROUP BY DATE(ph.played_at)

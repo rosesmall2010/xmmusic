@@ -139,7 +139,7 @@ export function usePlayer() {
       playerStore.isPlaying = false
 
       // 记录播放
-      await window.electronAPI.recordPlay(music.id)
+      await window.electronAPI.recordPlay(music.filePath)
 
       console.log('🎵 播放音乐:', music.title)
       console.log('📁 原始路径:', music.filePath)

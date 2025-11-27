@@ -34,6 +34,7 @@ interface EncodingDetection {
 }
 
 interface FixResult {
+  filePath: string
   success: boolean
   message: string
   backupPath?: string
@@ -203,6 +204,7 @@ export default class ID3Fixer {
       const tags = nodeID3.read(filePath)
       if (!tags) {
         return {
+          filePath,
           success: false,
           message: '无法读取ID3标签'
         }
@@ -230,6 +232,7 @@ export default class ID3Fixer {
       nodeID3.write(fixedTags, filePath)
 
       return {
+        filePath,
         success: true,
         message: '修复成功',
         backupPath,
@@ -241,6 +244,7 @@ export default class ID3Fixer {
       }
     } catch (error: any) {
       return {
+        filePath,
         success: false,
         message: `修复失败: ${error.message}`
       }

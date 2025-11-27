@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMusicById: (id: number) => ipcRenderer.invoke('get-music-by-id', id),
   toggleFavorite: (filePath: string) => ipcRenderer.invoke('toggle-favorite', filePath),
   isFileFavorite: (filePath: string) => ipcRenderer.invoke('is-file-favorite', filePath),
-  recordPlay: (id: number) => ipcRenderer.invoke('record-play', id),
+  recordPlay: (filePath: string) => ipcRenderer.invoke('record-play', filePath),
 
   // 播放列表
   createPlaylist: (name: string, description?: string) =>
@@ -198,7 +198,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 元数据编辑功能
   updateMusicMetadata: (musicId: number, updates: any) => ipcRenderer.invoke('update-music-metadata', musicId, updates),
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => ipcRenderer.invoke('batch-update-music-metadata', musicIds, updates),
-  extractMusicCover: (musicId: number, outputPath: string) => ipcRenderer.invoke('extract-music-cover', musicId, outputPath)
+  extractMusicCover: (musicId: number, outputPath: string) => ipcRenderer.invoke('extract-music-cover', musicId, outputPath),
+
+  // 通用事件监听
+  on: (channel: string, listener: (...args: any[]) => void) => {
+    const validChannels = ['music-updated', 'music-list-refresh']
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
+    }
+  },
+  removeAllListeners: (channel: string) => {
+    const validChannels = ['music-updated', 'music-list-refresh']
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel)
+    }
+  }
 })
 
 // 类型声明
@@ -223,7 +237,7 @@ declare global {
       getMusicById: (id: number) => Promise<MusicItem | null>
       toggleFavorite: (filePath: string) => Promise<void>
       isFileFavorite: (filePath: string) => Promise<boolean>
-      recordPlay: (id: number) => Promise<void>
+      recordPlay: (filePath: string) => Promise<void>
       createPlaylist: (name: string, description?: string) => Promise<number>
       updatePlaylist: (id: number, updates: any) => Promise<void>
       deletePlaylist: (id: number) => Promise<void>

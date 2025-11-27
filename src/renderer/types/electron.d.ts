@@ -32,7 +32,7 @@ export interface ElectronAPI {
   getMusicById: (id: number) => Promise<any>
   toggleFavorite: (filePath: string) => Promise<void>
   isFileFavorite: (filePath: string) => Promise<boolean>
-  recordPlay: (id: number) => Promise<void>
+  recordPlay: (filePath: string) => Promise<void>
 
   // 播放列表
   createPlaylist: (name: string, description?: string) => Promise<number>
@@ -143,6 +143,10 @@ export interface ElectronAPI {
   updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<any>
   extractMusicCover: (musicId: number, outputPath: string) => Promise<boolean>
+
+  // 事件监听
+  on: (channel: string, listener: (...args: any[]) => void) => void
+  removeAllListeners: (channel: string) => void
 }
 
 declare global {
