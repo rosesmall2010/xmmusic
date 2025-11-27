@@ -111,29 +111,8 @@ export default class MusicDatabase {
         this.db = null
       }
 
-      // 检查是否是关键的 Schema 错误（如缺少列）
-      if (error?.message?.includes('no such column') || error?.code === 'SQLITE_ERROR') {
-        console.error('❌ 检测到严重的数据库 Schema 不兼容，正在尝试重置数据库...')
-
-        try {
-          const isDev = process.env.NODE_ENV !== 'production'
-          const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
-          const path = dbPath || join(app.getPath('userData'), dbFileName)
-
-          if (require('fs').existsSync(path)) {
-            require('fs').unlinkSync(path)
-            console.log('✅ 已删除旧数据库文件')
-
-            // 重新尝试初始化
-            console.log('🔄 正在重新初始化数据库...')
-            this.initialize(dbPath)
-            return
-          }
-        } catch (resetError) {
-          console.error('❌ 数据库重置失败:', resetError)
-        }
-      }
-
+      // 不再自动重置数据库，避免无限递归
+      // 数据库版本检查已经处理了版本不匹配的情况
       throw error
     }
   }
@@ -1380,31 +1359,74 @@ export default class MusicDatabase {
 
   /**
    * 清空并重建数据库
+   * 删除数据库文件并重新创建，确保表结构完全匹配
    */
   private clearAndRebuildDatabase(): void {
     try {
-      console.log(`🗑️  开始清空数据库...`)
+      console.log(`🗑️  开始清空并重建数据库...`)
 
-      // 1. 删除所有表数据（保留表结构）
-      this.clearAllTables()
+      // 关闭当前数据库连接
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch (closeError) {
+          // 忽略关闭错误
+        }
+        this.db = null
+      }
 
-      // 2. 删除封面和歌词文件
+      // 获取数据库文件路径
+      const isDev = process.env.NODE_ENV !== 'production'
+      const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
+      const dbPath = join(app.getPath('userData'), dbFileName)
+
+      // 删除数据库文件
+      if (existsSync(dbPath)) {
+        console.log(`📂 删除数据库文件: ${dbPath}`)
+        const { unlinkSync } = require('fs')
+        unlinkSync(dbPath)
+        console.log(`✅ 数据库文件已删除`)
+      }
+
+      // 删除封面和歌词文件
       this.clearMediaFiles()
 
-      // 3. 重新执行迁移（确保表结构最新）
-      console.log(`🔄 重新执行数据库迁移...`)
+      // 重新创建数据库连接并执行迁移
+      console.log(`🔄 重新创建数据库...`)
+      this.db = new Database(dbPath)
+
+      // 配置数据库
+      this.db.pragma('journal_mode = WAL')
+      this.db.pragma('synchronous = NORMAL')
+      this.db.pragma('cache_size = -32000')
+      this.db.pragma('temp_store = MEMORY')
+      this.db.pragma('mmap_size = 268435456')
+      this.db.pragma('page_size = 4096')
+      this.db.pragma('foreign_keys = ON')
+
+      // 执行迁移
+      console.log(`🔄 执行数据库迁移...`)
       this.migrate()
 
-      // 4. 重新创建索引
-      console.log(`🔄 重新创建索引...`)
+      // 创建索引
+      console.log(`🔄 创建数据库索引...`)
       this.createIndexes()
 
-      // 5. 保存新版本号
+      // 保存新版本号
       this.setSetting(DB_VERSION_KEY, DB_VERSION)
 
       console.log(`✅ 数据库清空并重建完成`)
     } catch (error: any) {
       console.error(`❌ 清空重建失败:`, error)
+      // 清理失败的数据库连接
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch (closeError) {
+          // 忽略关闭错误
+        }
+        this.db = null
+      }
       throw error
     }
   }
