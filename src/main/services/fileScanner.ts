@@ -261,48 +261,73 @@ export default class FileScanner {
   }
 
   private async processFile(filePath: string, _options: ScanOptions): Promise<MusicItem | null> {
-    try {
-      // 优化：计算文件路径的 MD5（而不是文件内容）
-      const filePathMd5 = calculateFilePathMD5(filePath)
-
-      // 检查是否已存在（通过 file_path）
-      const existingByPath = this.db.getMusicByPath(filePath)
-      if (existingByPath) {
-        // 检查现有记录是否缺少封面
-        if (!existingByPath.coverPath) {
-          try {
-            // 尝试提取封面
-            const metadata = await this.parseMetadata(filePath, filePathMd5)
-            if (metadata.coverPath) {
-              // 更新数据库
-              this.db.updateMusic(existingByPath.id, { coverPath: metadata.coverPath })
-            }
-          } catch (updateError) {
-            console.warn(`更新封面失败: ${filePath}`, updateError)
-          }
-        }
-        return null // 跳过重复文件（不计入新增）
-      }
-
-      // 合并损坏检测和元数据解析（避免重复解析）
-      // 先尝试解析元数据，如果失败则视为损坏
-      let metadata: any
+    // 整个文件处理超时保护（10秒总超时）
+    const FILE_PROCESS_TIMEOUT = 10000
+    
+    const processFileTask = async (): Promise<MusicItem | null> => {
       try {
-        metadata = await this.parseMetadata(filePath, filePathMd5)
-        
-        // 检查是否损坏（没有时长）
-        if (!metadata.duration || metadata.duration <= 0) {
-          return null // 视为损坏，跳过
-        }
-      } catch (parseError: any) {
-        // 解析失败或超时，视为损坏
-        console.warn(`文件解析失败，视为损坏: ${filePath}`, parseError.message)
-        return null
-      }
+        // 优化：计算文件路径的 MD5（而不是文件内容）
+        const filePathMd5 = calculateFilePathMD5(filePath)
 
-      // 获取文件信息（可能阻塞，让出控制权）
-      await new Promise(resolve => setImmediate(resolve))
-      const fileStat = await stat(filePath)
+        // 检查是否已存在（通过 file_path）
+        const existingByPath = this.db.getMusicByPath(filePath)
+        if (existingByPath) {
+          // 检查现有记录是否缺少封面（添加超时保护）
+          if (!existingByPath.coverPath) {
+            try {
+              // 5秒超时
+              const updatePromise = (async () => {
+                const metadata = await this.parseMetadata(filePath, filePathMd5)
+                if (metadata.coverPath) {
+                  this.db.updateMusic(existingByPath.id, { coverPath: metadata.coverPath })
+                }
+              })()
+              
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('更新封面超时')), 5000)
+              })
+              
+              await Promise.race([updatePromise, timeoutPromise])
+            } catch (updateError) {
+              console.warn(`更新封面失败: ${filePath}`, updateError)
+            }
+          }
+          return null // 跳过重复文件（不计入新增）
+        }
+
+        // 合并损坏检测和元数据解析（避免重复解析）
+        // 先尝试解析元数据，如果失败则视为损坏
+        let metadata: any
+        try {
+          metadata = await this.parseMetadata(filePath, filePathMd5)
+          
+          // 检查是否损坏（没有时长）
+          if (!metadata.duration || metadata.duration <= 0) {
+            return null // 视为损坏，跳过
+          }
+        } catch (parseError: any) {
+          // 解析失败或超时，视为损坏
+          console.warn(`文件解析失败，视为损坏: ${filePath}`, parseError.message)
+          return null
+        }
+
+      // 获取文件信息（添加超时保护）
+      let fileStat: any
+      try {
+        await new Promise(resolve => setImmediate(resolve))
+        
+        const STAT_TIMEOUT = 2000 // 2秒超时
+        const statPromise = stat(filePath)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('获取文件信息超时')), STAT_TIMEOUT)
+        })
+        
+        fileStat = await Promise.race([statPromise, timeoutPromise])
+      } catch (statError: any) {
+        console.warn(`获取文件信息失败: ${filePath}`, statError.message)
+        // 使用默认值
+        fileStat = { size: 0 }
+      }
 
       // 创建音乐项
       const musicItem: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'> = {
@@ -331,8 +356,24 @@ export default class FileScanner {
 
       // 不在这里插入数据库，返回 musicItem 供批量插入
       return musicItem as MusicItem
+      } catch (error) {
+        throw error
+      }
+    }
+    
+    // 执行处理任务，添加总超时保护
+    try {
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.warn(`文件处理超时(10秒)，跳过: ${filePath}`)
+          resolve(null)
+        }, FILE_PROCESS_TIMEOUT)
+      })
+      
+      return await Promise.race([processFileTask(), timeoutPromise])
     } catch (error) {
-      throw error
+      console.warn(`文件处理异常，跳过: ${filePath}`, error)
+      return null
     }
   }
 
@@ -370,16 +411,16 @@ export default class FileScanner {
   async detectCorruptedFile(filePath: string): Promise<boolean> {
     try {
       const parseFile = await getParseFile()
-      
+
       // 添加超时控制，避免损坏文件导致无限等待
       const DETECT_TIMEOUT = 3000 // 3秒超时（检测损坏不需要完整解析）
       const metadataPromise = parseFile(filePath)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('损坏检测超时')), DETECT_TIMEOUT)
       })
-      
+
       const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any
-      
+
       if (!metadata.format.duration || metadata.format.duration <= 0) {
         return true
       }
@@ -414,13 +455,33 @@ export default class FileScanner {
 
       const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any
 
-      // 提取封面（异步，不阻塞）
+      // 提取封面（异步，不阻塞，带超时保护）
       let coverPath: string | null = null
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         try {
-          // 让出控制权
-          await new Promise(resolve => setImmediate(resolve))
-          coverPath = await this.extractCover(metadata.common.picture[0], fileHash)
+          // 检查封面大小，如果太大则跳过（避免卡住）
+          const picture = metadata.common.picture[0]
+          const pictureSize = picture.data ? picture.data.length : 0
+          const MAX_COVER_SIZE = 5 * 1024 * 1024 // 5MB限制
+          
+          if (pictureSize > MAX_COVER_SIZE) {
+            console.warn(`封面过大(${Math.round(pictureSize / 1024)}KB)，跳过: ${filePath}`)
+          } else {
+            // 让出控制权
+            await new Promise(resolve => setImmediate(resolve))
+            
+            // 添加超时保护
+            const COVER_TIMEOUT = 2000 // 2秒超时
+            const coverPromise = this.extractCover(picture, fileHash)
+            const timeoutPromise = new Promise<null>((resolve) => {
+              setTimeout(() => {
+                console.warn(`封面提取超时，跳过: ${filePath}`)
+                resolve(null)
+              }, COVER_TIMEOUT)
+            })
+            
+            coverPath = await Promise.race([coverPromise, timeoutPromise])
+          }
         } catch (coverError) {
           console.warn(`封面提取失败: ${filePath}`, coverError)
         }
@@ -463,10 +524,15 @@ export default class FileScanner {
    */
   private async extractCover(picture: any, fileHash: string): Promise<string | null> {
     try {
+      // 检查封面数据是否存在
+      if (!picture || !picture.data) {
+        return null
+      }
+
       // 获取封面目录
       const coversDir = join(app.getPath('userData'), 'covers')
 
-      // 确保目录存在
+      // 确保目录存在（同步操作，快速）
       try {
         await mkdir(coversDir, { recursive: true })
       } catch (err) {
@@ -485,7 +551,18 @@ export default class FileScanner {
       const coverFilename = `${fileHash}${ext}`
       const coverPath = join(coversDir, coverFilename)
 
-      // 写入封面数据
+      // 检查封面是否已存在（避免重复写入）
+      try {
+        const existing = await stat(coverPath)
+        if (existing) {
+          return coverPath // 已存在，直接返回
+        }
+      } catch {
+        // 文件不存在，继续写入
+      }
+
+      // 写入封面数据（可能阻塞，使用setImmediate让出控制权）
+      await new Promise(resolve => setImmediate(resolve))
       await writeFile(coverPath, picture.data)
 
       return coverPath
