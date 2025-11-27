@@ -214,33 +214,27 @@ export default class FileScanner {
 
   private async processFile(filePath: string, _options: ScanOptions): Promise<boolean> {
     try {
-      // 计算 MD5
-      const hash = await this.calculateMD5(filePath)
-
-      // 检查是否已存在（通过 hash）
-      const existingByHash = this.db.getMusicByHash(hash)
-      if (existingByHash.length > 0) {
-        // 检查现有记录是否缺少封面
-        const existing = existingByHash[0]
-        if (!existing.coverPath) {
-          try {
-            // 尝试提取封面
-            const metadata = await this.parseMetadata(filePath, hash)
-            if (metadata.coverPath) {
-              // 更新数据库
-              this.db.updateMusic(existing.id, { coverPath: metadata.coverPath })
-            }
-          } catch (updateError) {
-            console.warn(`更新封面失败: ${filePath}`, updateError)
-          }
-        }
-        return false // 跳过重复文件（不计入新增）
+      // 1. 检查 local_music 表是否已存在（列表独立性判断）
+      if (this.db.isInLocalMusic(filePath)) {
+        return false // 已在本地音乐列表中，跳过
       }
+
+      // 2. 检查 music 表是否已有该文件的元数据
+      const existingMusic = this.db.getMusicByPath(filePath)
+
+      if (existingMusic) {
+        // music 表已有元数据，直接添加到 local_music，不重新解析
+        this.db.addToLocalMusic(filePath)
+        return true
+      }
+
+      // 3. music 表中没有，需要解析文件
+      // 计算文件内容 MD5（用于去重）
+      const hash = await this.calculateMD5(filePath)
 
       // 检测损坏
       const isCorrupted = await this.detectCorruptedFile(filePath)
       if (isCorrupted) {
-        // 添加到损坏文件表
         return false
       }
 
@@ -275,7 +269,7 @@ export default class FileScanner {
         isDuplicate: false
       }
 
-      // 插入数据库
+      // 插入到 music 表（会自动同步到 local_music）
       this.db.insertMusic(musicItem)
       return true
     } catch (error) {

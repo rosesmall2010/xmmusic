@@ -99,16 +99,16 @@
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
           <div class="col-actions">
-            <button 
-              class="action-btn" 
+            <button
+              class="action-btn"
               :class="{ active: isFavorite(music.filePath) }"
               @click.stop="toggleFavorite(music)"
               :title="isFavorite(music.filePath) ? '取消喜欢' : '喜欢'"
             >
               <Heart :size="16" :fill="isFavorite(music.filePath) ? 'currentColor' : 'none'" />
             </button>
-            <button 
-              class="action-btn" 
+            <button
+              class="action-btn"
               :class="{ active: isInQueue(music.filePath) }"
               @click.stop="toggleQueue(music)"
               :title="isInQueue(music.filePath) ? '从播放队列移除' : '添加到播放队列'"
@@ -329,7 +329,7 @@ const handleBatchAddToFavorites = async () => {
   try {
     const filePaths = Array.from(selectedSongs.value)
     let addedCount = 0
-    
+
     for (const filePath of filePaths) {
       // 检查是否已经在我喜欢中
       if (!favoriteFiles.value.has(filePath)) {
@@ -338,7 +338,7 @@ const handleBatchAddToFavorites = async () => {
         addedCount++
       }
     }
-    
+
     console.log(`Added ${addedCount} songs to favorites`)
     cancelSelection()
     window.dispatchEvent(new Event('favorites-updated'))
@@ -359,14 +359,14 @@ const handleBatchAddToQueue = () => {
   try {
     const filePaths = Array.from(selectedSongs.value)
     const songsToAdd = props.songs.filter(s => filePaths.includes(s.filePath))
-    
+
     for (const song of songsToAdd) {
       if (!isInQueue(song.filePath)) {
         playerStore.addToQueue(song)
         queueFiles.value.add(song.filePath)
       }
     }
-    
+
     console.log(`Added ${songsToAdd.length} songs to queue`)
     cancelSelection()
   } catch (error) {
@@ -535,7 +535,7 @@ const showMusicDetails = (music: MusicItem) => {
 onMounted(() => {
   loadFavoriteStatus()
   updateQueueStatus()
-  
+
   window.addEventListener('music-metadata-updated', () => {
     emit('songs-updated')
   })

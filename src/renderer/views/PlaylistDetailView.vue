@@ -197,7 +197,7 @@ const playMusic = async (music: MusicItem) => {
 
 const playAll = async () => {
   if (totalSongs.value === 0) return
-  
+
   // 如果还有未加载的歌曲，先全部加载
   if (hasMore) {
     loading.value = true
@@ -242,11 +242,11 @@ const removeSong = async (music: MusicItem) => {
 
 const clearPlaylist = async () => {
   if (!playlist.value || totalSongs.value === 0) return
-  
+
   if (!confirm(`确定要清空歌单"${playlist.value.name}"吗？这将删除 ${totalSongs.value} 首歌曲。`)) {
     return
   }
-  
+
   try {
     await window.electronAPI.clearPlaylist(playlist.value.id)
     // 重新加载

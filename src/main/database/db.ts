@@ -396,8 +396,7 @@ export default class MusicDatabase {
 
     // 同步添加到 local_music 表
     try {
-      const filePathMd5 = calculateFilePathMD5(music.filePath)
-      this.addToLocalMusic(music.filePath, filePathMd5)
+      this.addToLocalMusic(music.filePath)
     } catch (error) {
       console.warn('添加到本地音乐列表失败:', error)
     }
@@ -1720,6 +1719,17 @@ export default class MusicDatabase {
   }
 
   // ========== 本地音乐列表 ==========
+
+  /**
+   * 检查文件是否已在本地音乐列表中
+   */
+  isInLocalMusic(filePath: string): boolean {
+    const stmt = this.db!.prepare(`
+      SELECT COUNT(*) as count FROM local_music WHERE file_path = ?
+    `)
+    const result = stmt.get(filePath) as { count: number }
+    return result.count > 0
+  }
 
   /**
    * 添加音乐到本地音乐列表

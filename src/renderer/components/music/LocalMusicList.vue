@@ -198,7 +198,7 @@ const handleClearAll = async () => {
 
 const handlePlayAll = async () => {
   if (totalCount.value === 0) return
-  
+
   try {
     // 获取所有歌曲
     const allSongs = await window.electronAPI.getMusicList(0, totalCount.value)

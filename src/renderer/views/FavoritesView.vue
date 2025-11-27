@@ -134,7 +134,7 @@ const playMusic = async (music: MusicItem) => {
 
 const playAll = async () => {
   if (totalCount.value === 0) return
-  
+
   // 如果还有未加载的歌曲，先全部加载
   if (hasMore) {
     loading.value = true
@@ -155,11 +155,11 @@ const playAll = async () => {
 
 const clearList = async () => {
   if (totalCount.value === 0) return
-  
+
   if (!confirm(`确定要清空我喜欢列表吗？这将删除 ${totalCount.value} 首歌曲。`)) {
     return
   }
-  
+
   try {
     await window.electronAPI.clearFavorites()
     // 重新加载
