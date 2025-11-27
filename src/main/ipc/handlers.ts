@@ -421,6 +421,17 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getPlaylistSongs(playlistId)
   })
 
+  // 歌单歌曲（分页）
+  ipcMain.handle('get-playlist-songs-paginated', (_, playlistId: number, offset: number, limit: number) => {
+    if (!db) return []
+    return db.getPlaylistSongsPaginated(playlistId, offset, limit)
+  })
+
+  ipcMain.handle('get-playlist-songs-count', (_, playlistId: number) => {
+    if (!db) return 0
+    return db.getPlaylistSongsCount(playlistId)
+  })
+
   ipcMain.handle('export-playlist-json', async (_, playlistId: number) => {
     if (!db) throw new Error('数据库未初始化')
     const playlist = db.getPlaylistById(playlistId)
@@ -572,6 +583,17 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('get-favorites', () => {
     if (!db) return []
     return db.getFavorites()
+  })
+
+  // 收藏功能（分页）
+  ipcMain.handle('get-favorites-paginated', (_, offset: number, limit: number) => {
+    if (!db) return []
+    return db.getFavoritesPaginated(offset, limit)
+  })
+
+  ipcMain.handle('get-favorites-count', () => {
+    if (!db) return 0
+    return db.getFavoritesCount()
   })
 
   // 播放历史

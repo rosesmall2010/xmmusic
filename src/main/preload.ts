@@ -72,12 +72,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('remove-from-playlist-by-path', playlistId, filePath),
   getPlaylistSongs: (playlistId: number) =>
     ipcRenderer.invoke('get-playlist-songs', playlistId),
+  getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) =>
+    ipcRenderer.invoke('get-playlist-songs-paginated', playlistId, offset, limit),
+  getPlaylistSongsCount: (playlistId: number) =>
+    ipcRenderer.invoke('get-playlist-songs-count', playlistId),
   exportPlaylistJSON: (playlistId: number) =>
     ipcRenderer.invoke('export-playlist-json', playlistId),
   importPlaylistJSON: () => ipcRenderer.invoke('import-playlist-json'),
 
   // 收藏
   getFavorites: () => ipcRenderer.invoke('get-favorites'),
+  getFavoritesPaginated: (offset: number, limit: number) => 
+    ipcRenderer.invoke('get-favorites-paginated', offset, limit),
+  getFavoritesCount: () => ipcRenderer.invoke('get-favorites-count'),
 
   // 播放历史
   getPlayHistory: () => ipcRenderer.invoke('get-play-history'),
@@ -250,9 +257,13 @@ declare global {
       getPlaylistsForFile: (filePath: string) => Promise<number[]>
       removeFromPlaylistByPath: (playlistId: number, filePath: string) => Promise<void>
       getPlaylistSongs: (playlistId: number) => Promise<MusicItem[]>
+      getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) => Promise<MusicItem[]>
+      getPlaylistSongsCount: (playlistId: number) => Promise<number>
       exportPlaylistJSON: (playlistId: number) => Promise<string | null>
       importPlaylistJSON: () => Promise<PlaylistImportResult | null>
       getFavorites: () => Promise<MusicItem[]>
+      getFavoritesPaginated: (offset: number, limit: number) => Promise<MusicItem[]>
+      getFavoritesCount: () => Promise<number>
       getPlayHistory: () => Promise<MusicItem[]>
       clearPlayHistory: () => Promise<void>
       getMusicDirectories: () => Promise<any[]>
