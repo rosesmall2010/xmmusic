@@ -234,13 +234,13 @@ export default class FileScanner {
         return false
       }
 
-      // 解析元数据
-      const metadata = await this.parseMetadata(filePath, '')
+      // 解析元数据（不提取封面，只解析元数据）
+      const metadata = await this.parseMetadata(filePath)
 
       // 获取文件信息
       const fileStat = await stat(filePath)
 
-      // 创建音乐项（不再需要 fileHash）
+      // 创建音乐项（暂时不设置 coverPath）
       const musicItem: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'> = {
         title: metadata.title || basename(filePath, extname(filePath)),
         artist: metadata.artist || '未知艺术家',
@@ -256,7 +256,7 @@ export default class FileScanner {
         bitrate: metadata.bitrate || 0,
         sampleRate: metadata.sampleRate || 0,
         channels: metadata.channels || 0,
-        coverPath: metadata.coverPath || null,
+        coverPath: null, // 稍后提取封面后更新
         lyricsPath: null,
         playCount: 0,
         lastPlayedAt: null,
@@ -265,8 +265,22 @@ export default class FileScanner {
         isDuplicate: false
       }
 
-      // 插入到 music 表（会自动同步到 local_music）
-      this.db.insertMusic(musicItem)
+      // 插入到 music 表（会自动同步到 local_music），获取 music id
+      const musicId = this.db.insertMusic(musicItem)
+
+      // 如果有封面数据，提取封面（使用 music id）
+      if (metadata.coverPicture) {
+        try {
+          const coverPath = await this.extractCover(metadata.coverPicture, musicId)
+          if (coverPath) {
+            // 更新 music 表的 coverPath
+            this.db.updateMusic(musicId, { coverPath })
+          }
+        } catch (coverError) {
+          console.warn(`封面提取失败: ${filePath}`, coverError)
+        }
+      }
+
       return true
     } catch (error) {
       throw error
@@ -288,7 +302,7 @@ export default class FileScanner {
     }
   }
 
-  private async parseMetadata(filePath: string, _unused: string): Promise<{
+  private async parseMetadata(filePath: string): Promise<{
     title: string
     artist: string
     album: string | null
@@ -298,21 +312,16 @@ export default class FileScanner {
     bitrate: number
     sampleRate: number
     channels: number
-    coverPath: string | null
+    coverPicture: any | null // 返回封面数据，而不是封面路径
   }> {
     try {
       const parseFile = await getParseFile()
       const metadata = await parseFile(filePath)
 
-      // 提取封面
-      let coverPath: string | null = null
-      if (metadata.common.picture && metadata.common.picture.length > 0) {
-        try {
-          coverPath = await this.extractCover(metadata.common.picture[0], filePath)
-        } catch (coverError) {
-          console.warn(`封面提取失败: ${filePath}`, coverError)
-        }
-      }
+      // 返回封面数据（不在这里提取封面）
+      const coverPicture = metadata.common.picture && metadata.common.picture.length > 0
+        ? metadata.common.picture[0]
+        : null
 
       return {
         title: metadata.common.title || '',
@@ -324,7 +333,7 @@ export default class FileScanner {
         bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate / 1000) : 0,
         sampleRate: metadata.format.sampleRate || 0,
         channels: metadata.format.numberOfChannels || 0,
-        coverPath
+        coverPicture
       }
     } catch (error) {
       // 返回默认值
@@ -338,7 +347,7 @@ export default class FileScanner {
         bitrate: 0,
         sampleRate: 0,
         channels: 0,
-        coverPath: null
+        coverPicture: null
       }
     }
   }
@@ -346,10 +355,10 @@ export default class FileScanner {
   /**
    * 提取并保存封面图片
    * @param picture 封面数据
-   * @param fileHash 音乐文件的 MD5
+   * @param musicId 音乐ID
    * @returns 封面文件路径
    */
-  private async extractCover(picture: any, filePath: string): Promise<string | null> {
+  private async extractCover(picture: any, musicId: number): Promise<string | null> {
     try {
       // 获取封面目录
       const coversDir = join(app.getPath('userData'), 'covers')
@@ -369,10 +378,8 @@ export default class FileScanner {
         else if (format.includes('jpeg') || format.includes('jpg')) ext = '.jpg'
       }
 
-      // 使用文件路径的 MD5 作为封面文件名（不再使用文件内容的 MD5）
-      const { createHash } = await import('crypto')
-      const filePathHash = createHash('md5').update(filePath).digest('hex')
-      const coverFilename = `${filePathHash}${ext}`
+      // 使用 music id 作为封面文件名，例如：f100.jpg
+      const coverFilename = `f${musicId}${ext}`
       const coverPath = join(coversDir, coverFilename)
 
       // 写入封面数据
