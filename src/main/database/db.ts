@@ -148,20 +148,20 @@ export default class MusicDatabase {
         'migrations',
         '007_v105_music_id_refactor.sql'
       )
-      
+
       console.log(`📂 迁移文件路径: ${refactorPath}`)
       console.log(`📂 __dirname: ${__dirname}`)
-      
+
       if (!existsSync(refactorPath)) {
         // 尝试其他可能的路径
         const alternativePaths = [
           join(process.cwd(), 'dist', 'electron', 'main', 'database', 'migrations', '007_v105_music_id_refactor.sql'),
           join(process.cwd(), 'src', 'main', 'database', 'migrations', '007_v105_music_id_refactor.sql'),
         ]
-        
+
         console.error(`❌ 迁移文件不存在: ${refactorPath}`)
         console.error(`   尝试查找其他路径...`)
-        
+
         for (const altPath of alternativePaths) {
           console.log(`   检查: ${altPath}`)
           if (existsSync(altPath)) {
@@ -172,10 +172,10 @@ export default class MusicDatabase {
             return
           }
         }
-        
+
         throw new Error(`迁移文件不存在。尝试的路径:\n${[refactorPath, ...alternativePaths].join('\n')}`)
       }
-      
+
       const sql = readFileSync(refactorPath, 'utf8')
       this.db!.exec(sql)
       console.log('✅ v1.0.5 数据库架构重构完成（music_id关联）')
@@ -671,11 +671,12 @@ export default class MusicDatabase {
   }
 
   getPlaylists(): Playlist[] {
+    // 使用 COALESCE 处理 display_order 可能为 NULL 的情况
     const stmt = this.db!.prepare(
-      'SELECT * FROM playlist ORDER BY display_order ASC, created_at DESC'
+      'SELECT * FROM playlist ORDER BY COALESCE(display_order, 0) ASC, created_at DESC'
     )
     const rows = stmt.all() as any[]
-    return rows.map(this.mapRowToPlaylist)
+    return rows.map(row => this.mapRowToPlaylist(row))
   }
 
   updatePlaylistOrder(playlistIds: number[]): void {

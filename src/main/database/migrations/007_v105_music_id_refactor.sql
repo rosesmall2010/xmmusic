@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS playlist (
   cover_path TEXT,
   song_count INTEGER DEFAULT 0,
   total_duration INTEGER DEFAULT 0,
+  display_order INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

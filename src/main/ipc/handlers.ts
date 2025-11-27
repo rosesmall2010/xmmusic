@@ -332,8 +332,20 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('get-playlists', () => {
-    if (!db) return []
-    return db.getPlaylists()
+    if (!db) {
+      console.error('❌ 数据库未初始化，无法获取歌单列表')
+      return []
+    }
+    try {
+      return db.getPlaylists()
+    } catch (error: any) {
+      console.error('❌ 获取歌单列表失败:', error)
+      console.error('   错误信息:', error?.message || error)
+      if (error?.stack) {
+        console.error('   错误堆栈:', error.stack)
+      }
+      return []
+    }
   })
 
   ipcMain.handle('update-playlist-order', (_, playlistIds: number[]) => {
