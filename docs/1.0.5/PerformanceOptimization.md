@@ -129,7 +129,7 @@
 - 在空闲时间进行计算，避免阻塞
 - 使用 Worker 线程进行MD5计算
 
-**实施建议**: 
+**实施建议**:
 - 优先实施选项A，因为符合v1.0.5需求（文件路径MD5已存储）
 - 文件内容MD5仅用于去重检测，可以延迟计算或后台计算
 
@@ -290,7 +290,7 @@ const pageSize = 50
 
 const loadFavorites = async (force: boolean = false) => {
   if (loading.value) return
-  
+
   loading.value = true
   try {
     if (force || currentOffset.value === 0) {
@@ -300,7 +300,7 @@ const loadFavorites = async (force: boolean = false) => {
       songs.value = []
       currentOffset.value = 0
     }
-    
+
     // 加载当前页
     const items = await window.electronAPI.getFavorites(currentOffset.value, pageSize)
     songs.value.push(...items)
@@ -430,7 +430,7 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
    ```typescript
    // 在扫描时，先计算文件路径MD5（快速）
    const filePathMd5 = calculateFilePathMD5(filePath)
-   
+
    // 文件内容MD5延迟计算（仅用于去重）
    // 可以在后台任务中计算，或按需计算
    ```
@@ -443,7 +443,7 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
        stmt.run(...)
      }
    })
-   
+
    // 累积到一定数量后批量插入（如每100条）
    if (batch.length >= 100) {
      insertBatch(batch)
@@ -469,7 +469,7 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
    ```typescript
    // 后端：支持 offset 和 limit
    getFavorites(offset: number, limit: number): MusicItem[]
-   
+
    // 前端：分批加载
    const loadPage = async (page: number) => {
      const offset = page * pageSize
@@ -482,7 +482,7 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
    ```typescript
    // 先加载第一页，立即显示
    await loadPage(0) // 50条，快速显示
-   
+
    // 后台继续加载
    startBackgroundLoading() // 预加载后续页面
    ```
@@ -527,11 +527,11 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
 1. **小规模测试**（100首歌曲）
    - 验证扫描功能正常
    - 验证进度更新流畅
-   
+
 2. **中规模测试**（1000首歌曲）
    - 验证界面不卡顿
    - 验证内存占用合理
-   
+
 3. **大规模测试**（10000+首歌曲）
    - 验证长时间扫描的稳定性
    - 验证批量插入性能
@@ -541,11 +541,11 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
 1. **小列表测试**（<100首）
    - 验证加载速度
    - 验证功能正常
-   
+
 2. **中列表测试**（100-1000首）
    - 验证分页加载
    - 验证滚动流畅度
-   
+
 3. **大列表测试**（1000+首）
    - 验证虚拟滚动（如实现）
    - 验证内存占用
@@ -564,7 +564,6 @@ for (let i = 0; i < allSongs.length; i += batchSize) {
 
 ## 🔗 相关文档
 
-- [需求分析文档](./REQUIREMENTS_ANALYSIS.md)
-- [系统架构文档](./SYSTEM_ARCHITECTURE.md)
+- [需求分析文档](./RequirementsAnalysis.md)
+- [系统架构文档](./SystemArchitecture.md)
 - [数据库设计文档](../DATABASE_DESIGN.md)
-

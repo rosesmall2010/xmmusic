@@ -901,7 +901,7 @@ Phase 5: 测试和优化
 
 1. **数据库迁移风险**
    - **风险**: 版本控制机制可能导致数据丢失
-   - **缓解**: 
+   - **缓解**:
      - 充分测试版本检查逻辑
      - 添加数据备份机制（可选）
      - 明确告知用户版本不匹配时会清空数据
@@ -953,12 +953,11 @@ Phase 5: 测试和优化
 
 ## 📚 相关文档
 
-- [需求分析文档](./REQUIREMENTS_ANALYSIS.md)
-- [系统架构文档](./SYSTEM_ARCHITECTURE.md)
-- [性能优化文档](./PERFORMANCE_OPTIMIZATION.md)
+- [需求分析文档](./RequirementsAnalysis.md)
+- [系统架构文档](./SystemArchitecture.md)
+- [性能优化文档](./PerformanceOptimization.md)
 
 ---
 
 **文档状态**: ✅ 已完成
 **最后更新**: 2025-01-XX
-

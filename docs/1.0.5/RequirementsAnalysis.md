@@ -57,7 +57,7 @@
    - 优化数据库索引和查询性能
    - 优化前端响应式转换和加载机制
 
-详细性能优化方案请参考：[性能优化需求文档](./PERFORMANCE_OPTIMIZATION.md)
+详细性能优化方案请参考：[性能优化需求文档](./PerformanceOptimization.md)
 
 ### 涉及的功能模块
 - 本地音乐列表
@@ -893,8 +893,8 @@ interface ListItem {
 
 ## 📚 相关文档
 
-- [性能优化需求文档](./PERFORMANCE_OPTIMIZATION.md) - **重点：扫描和列表加载性能优化**
-- [系统架构设计文档](./SYSTEM_ARCHITECTURE.md)
+- [性能优化需求文档](./PerformanceOptimization.md) - **重点：扫描和列表加载性能优化**
+- [系统架构设计文档](./SystemArchitecture.md)
 - [数据库设计文档](../DATABASE_DESIGN.md)
 - [前端架构文档](../FRONTEND_ARCHITECTURE.md)
 - [API设计文档](../API_DESIGN.md)

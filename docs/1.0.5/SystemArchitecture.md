@@ -859,8 +859,8 @@ xmmusic/
 │       └── types/               # 类型定义
 ├── docs/
 │   └── 1.0.5/                   # v1.0.5 文档
-│       ├── REQUIREMENTS_ANALYSIS.md
-│       └── SYSTEM_ARCHITECTURE.md (本文档)
+│       ├── RequirementsAnalysis.md
+│       └── SystemArchitecture.md (本文档)
 └── package.json
 ```
 
@@ -926,7 +926,7 @@ xmmusic/
 
 ## 📚 相关文档
 
-- [需求分析文档](./REQUIREMENTS_ANALYSIS.md)
+- [需求分析文档](./RequirementsAnalysis.md)
 - [数据库 Schema 设计文档](./DATABASE_SCHEMA.md) (待创建)
 - [API 接口设计文档](./API_DESIGN.md) (待创建)
 
