@@ -459,8 +459,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         album: song.album,
         duration: song.duration,
         filePath: song.filePath,
-        fileName: song.fileName,
-        fileHash: song.fileHash
+        fileName: song.fileName
       }))
     }
 
@@ -508,7 +507,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
     const playlistId = db.createPlaylist(playlistName, sourcePlaylist.description)
     let added = 0
-    const missing: Array<{ title: string; artist?: string; filePath?: string; fileHash?: string }> = []
+    const missing: Array<{ title: string; artist?: string; filePath?: string }> = []
 
     for (const song of data.songs || []) {
       let music: MusicItem | null = null
@@ -559,8 +558,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         missing.push({
           title: song.title,
           artist: song.artist,
-          filePath: song.filePath,
-          fileHash: song.fileHash
+          filePath: song.filePath
         })
       }
     }

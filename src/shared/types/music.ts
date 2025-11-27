@@ -12,7 +12,6 @@ export interface MusicItem {
   filePath: string
   fileName: string
   fileSize: number
-  fileHash: string
   fileExtension: string
   duration: number
   bitrate: number
@@ -88,7 +87,6 @@ export interface ID3Backup {
 }
 
 export interface DuplicateGroup {
-  fileHash: string
   count: number
   files: MusicItem[]
 }
@@ -149,7 +147,6 @@ export interface PlaylistExportSong {
   duration: number
   filePath: string
   fileName: string
-  fileHash: string
 }
 
 export interface PlaylistExportData {
@@ -172,6 +169,5 @@ export interface PlaylistImportResult {
     title: string
     artist?: string
     filePath?: string
-    fileHash?: string
   }>
 }

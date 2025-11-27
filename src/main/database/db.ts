@@ -951,7 +951,7 @@ export default class MusicDatabase {
   isFileFavorite(filePath: string): boolean {
     const music = this.getMusicByPath(filePath)
     if (!music) return false
-    
+
     const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE music_id = ?')
     const result = stmt.get(music.id) as { count: number }
     return result.count > 0
@@ -1255,7 +1255,6 @@ export default class MusicDatabase {
         filePath: '',
         fileName: '',
         fileSize: 0,
-        fileHash: '', // 保留字段以兼容类型定义，但不再从数据库读取
         fileExtension: '',
         duration: 0,
         bitrate: 0,
@@ -1286,7 +1285,6 @@ export default class MusicDatabase {
       filePath: row.file_path,
       fileName: row.file_name,
       fileSize: row.file_size,
-      fileHash: '', // 不再使用 file_hash，保留字段以兼容类型定义
       fileExtension: row.file_extension,
       duration: row.duration || 0,
       bitrate: row.bitrate || 0,
@@ -1601,7 +1599,7 @@ export default class MusicDatabase {
    */
   isInLocalMusic(filePath: string): boolean {
     const stmt = this.db!.prepare(`
-      SELECT COUNT(*) as count 
+      SELECT COUNT(*) as count
       FROM local_music lm
       JOIN music m ON lm.music_id = m.id
       WHERE m.file_path = ?

@@ -248,4 +248,3 @@ END;
 CREATE TRIGGER IF NOT EXISTS music_fts_delete AFTER DELETE ON music BEGIN
   DELETE FROM music_fts WHERE rowid = old.id;
 END;
-

@@ -52,10 +52,6 @@
               <span class="info-label">完整路径:</span>
               <span class="info-value path">{{ music.filePath }}</span>
             </div>
-            <div class="info-item full-width">
-              <span class="info-label">文件路径MD5:</span>
-              <span class="info-value mono">{{ music.fileHash }}</span>
-            </div>
             <div class="info-item">
               <span class="info-label">文件大小:</span>
               <span class="info-value">{{ formatFileSize(music.fileSize) }} ({{ music.fileSize.toLocaleString() }} 字节)</span>
@@ -123,7 +119,6 @@ const copyDetails = () => {
 文件类型: ${props.music.fileExtension.toUpperCase().replace('.', '')}
 文件名: ${props.music.fileName}
 完整路径: ${props.music.filePath}
-文件路径MD5: ${props.music.fileHash}
 文件大小: ${formatFileSize(props.music.fileSize)} (${props.music.fileSize.toLocaleString()} 字节)`
 
   navigator.clipboard.writeText(details).then(() => {

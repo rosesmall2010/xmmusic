@@ -250,7 +250,6 @@ export default class FileScanner {
         filePath,
         fileName: basename(filePath),
         fileSize: fileStat.size,
-        fileHash: '', // 不再使用 fileHash
         fileExtension: extname(filePath).toLowerCase(),
         duration: metadata.duration || 0,
         bitrate: metadata.bitrate || 0,

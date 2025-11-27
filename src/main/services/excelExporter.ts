@@ -25,7 +25,7 @@ export default class ExcelExporter {
     options: ExportOptions = {}
   ): Promise<{ type: 'csv' | 'xlsx'; data: any }> {
     const {
-      columns = ['title', 'artist', 'album', 'year', 'genre', 'duration', 'filePath', 'fileHash'],
+      columns = ['title', 'artist', 'album', 'year', 'genre', 'duration', 'filePath'],
       includeHeaders = true,
       format = 'xlsx'
     } = options
@@ -43,7 +43,6 @@ export default class ExcelExporter {
         genre: { header: '流派', key: 'genre', width: 15 },
         duration: { header: '时长(秒)', key: 'duration', width: 12 },
         filePath: { header: '文件路径', key: 'filePath', width: 50 },
-        fileHash: { header: 'MD5', key: 'fileHash', width: 35 },
         fileName: { header: '文件名', key: 'fileName', width: 30 },
         fileSize: { header: '文件大小(字节)', key: 'fileSize', width: 15 },
         bitrate: { header: '比特率(kbps)', key: 'bitrate', width: 15 },
