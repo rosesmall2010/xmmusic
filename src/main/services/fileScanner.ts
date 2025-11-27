@@ -91,7 +91,7 @@ export default class FileScanner {
     const PROGRESS_UPDATE_INTERVAL = 500 // 每500ms最多更新一次进度，减少UI更新频率
 
     // 批量插入缓冲区
-    const BATCH_SIZE = 50 // 降低批量大小，更频繁地释放内存和让出控制权
+    const BATCH_SIZE = 30 // 进一步降低批量大小，更频繁地让出控制权
     let pendingInserts: any[] = []
 
     // 批量插入函数（异步，避免阻塞）
@@ -100,7 +100,7 @@ export default class FileScanner {
         try {
           // 使用 setImmediate 让出控制权，避免阻塞主线程
           await new Promise(resolve => setImmediate(resolve))
-          
+
           // 批量插入到 music 表
           this.db.insertMusicBatch(pendingInserts)
 
@@ -112,7 +112,7 @@ export default class FileScanner {
           this.db.addToLocalMusicBatch(localMusicItems)
 
           pendingInserts = []
-          
+
           // 再次让出控制权
           await new Promise(resolve => setImmediate(resolve))
         } catch (error) {
@@ -184,8 +184,8 @@ export default class FileScanner {
         current++
         updateProgress(file)
 
-        // 每处理10个文件，主动让出控制权
-        if (current % 10 === 0) {
+        // 每处理5个文件，主动让出控制权（更频繁）
+        if (current % 5 === 0) {
           await new Promise(resolve => setImmediate(resolve))
         }
       }
@@ -284,17 +284,24 @@ export default class FileScanner {
         return null // 跳过重复文件（不计入新增）
       }
 
-      // 检测损坏
-      const isCorrupted = await this.detectCorruptedFile(filePath)
-      if (isCorrupted) {
-        // 添加到损坏文件表
+      // 合并损坏检测和元数据解析（避免重复解析）
+      // 先尝试解析元数据，如果失败则视为损坏
+      let metadata: any
+      try {
+        metadata = await this.parseMetadata(filePath, filePathMd5)
+        
+        // 检查是否损坏（没有时长）
+        if (!metadata.duration || metadata.duration <= 0) {
+          return null // 视为损坏，跳过
+        }
+      } catch (parseError: any) {
+        // 解析失败或超时，视为损坏
+        console.warn(`文件解析失败，视为损坏: ${filePath}`, parseError.message)
         return null
       }
 
-      // 解析元数据
-      const metadata = await this.parseMetadata(filePath, filePathMd5)
-
-      // 获取文件信息
+      // 获取文件信息（可能阻塞，让出控制权）
+      await new Promise(resolve => setImmediate(resolve))
       const fileStat = await stat(filePath)
 
       // 创建音乐项
@@ -363,13 +370,23 @@ export default class FileScanner {
   async detectCorruptedFile(filePath: string): Promise<boolean> {
     try {
       const parseFile = await getParseFile()
-      const metadata = await parseFile(filePath)
+      
+      // 添加超时控制，避免损坏文件导致无限等待
+      const DETECT_TIMEOUT = 3000 // 3秒超时（检测损坏不需要完整解析）
+      const metadataPromise = parseFile(filePath)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('损坏检测超时')), DETECT_TIMEOUT)
+      })
+      
+      const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any
+      
       if (!metadata.format.duration || metadata.format.duration <= 0) {
         return true
       }
       return false
     } catch (error) {
-      return true // 解析失败视为损坏
+      // 解析失败或超时都视为损坏
+      return true
     }
   }
 
@@ -389,7 +406,7 @@ export default class FileScanner {
       const parseFile = await getParseFile()
 
       // 添加超时控制，避免某些文件解析时间过长
-      const PARSE_TIMEOUT = 5000 // 5秒超时
+      const PARSE_TIMEOUT = 3000 // 降低到3秒超时，更快跳过问题文件
       const metadataPromise = parseFile(filePath)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('元数据解析超时')), PARSE_TIMEOUT)
