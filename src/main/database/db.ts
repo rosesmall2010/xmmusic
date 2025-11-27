@@ -1723,20 +1723,19 @@ export default class MusicDatabase {
   /**
    * 批量添加音乐到本地音乐列表
    */
-  addToLocalMusicBatch(filePaths: string[]): void {
+  addToLocalMusicBatch(items: Array<{ filePath: string; filePathMd5: string }>): void {
     const stmt = this.db!.prepare(`
       INSERT OR IGNORE INTO local_music (file_path, file_path_md5)
       VALUES (?, ?)
     `)
 
-    const transaction = this.db!.transaction((paths: string[]) => {
-      for (const filePath of paths) {
-        const filePathMd5 = calculateFilePathMD5(filePath)
-        stmt.run(filePath, filePathMd5)
+    const transaction = this.db!.transaction((musicItems: typeof items) => {
+      for (const item of musicItems) {
+        stmt.run(item.filePath, item.filePathMd5)
       }
     })
 
-    transaction(filePaths)
+    transaction(items)
   }
 
   /**

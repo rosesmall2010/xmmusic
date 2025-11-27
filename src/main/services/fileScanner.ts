@@ -104,9 +104,12 @@ export default class FileScanner {
           // 批量插入到 music 表
           this.db.insertMusicBatch(pendingInserts)
 
-          // 批量添加到本地音乐列表
-          const filePaths = pendingInserts.map(item => item.filePath)
-          this.db.addToLocalMusicBatch(filePaths)
+          // 批量添加到本地音乐列表（传递已计算的 MD5，避免重复计算）
+          const localMusicItems = pendingInserts.map(item => ({
+            filePath: item.filePath,
+            filePathMd5: item.fileHash  // 使用已计算的路径 MD5
+          }))
+          this.db.addToLocalMusicBatch(localMusicItems)
 
           pendingInserts = []
           
@@ -180,7 +183,7 @@ export default class FileScanner {
       } finally {
         current++
         updateProgress(file)
-        
+
         // 每处理10个文件，主动让出控制权
         if (current % 10 === 0) {
           await new Promise(resolve => setImmediate(resolve))
@@ -384,14 +387,14 @@ export default class FileScanner {
   }> {
     try {
       const parseFile = await getParseFile()
-      
+
       // 添加超时控制，避免某些文件解析时间过长
       const PARSE_TIMEOUT = 5000 // 5秒超时
       const metadataPromise = parseFile(filePath)
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('元数据解析超时')), PARSE_TIMEOUT)
       })
-      
+
       const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any
 
       // 提取封面（异步，不阻塞）
