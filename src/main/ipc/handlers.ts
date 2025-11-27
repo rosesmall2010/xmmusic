@@ -195,26 +195,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
           })
         }
       })
-      // 扫描完成后，同步到 local_music 表
-      // 查询该目录下的所有音乐文件
-      try {
-        console.log(`📋 扫描完成，开始同步到本地音乐列表...`)
-        // 使用高级搜索查询该目录下的所有音乐
-        const musicInDir = db.advancedSearch({ directory: path, limit: 10000 })
-        console.log(`📊 在目录 ${path} 下找到 ${musicInDir.length} 个音乐文件`)
-
-        if (musicInDir.length > 0) {
-          // 批量添加到 local_music 表
-          const localMusicItems = musicInDir.map((music: any) => ({
-            filePath: music.filePath,
-            filePathMd5: calculateFilePathMD5(music.filePath)
-          }))
-          db.addToLocalMusicBatch(localMusicItems)
-          console.log(`✅ 已同步 ${localMusicItems.length} 首歌曲到本地音乐列表`)
-        }
-      } catch (syncError) {
-        console.error('同步到本地音乐列表失败:', syncError)
-      }
 
       scanManager.setScanning(false)
       currentScanner = null

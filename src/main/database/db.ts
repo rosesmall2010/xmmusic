@@ -394,6 +394,14 @@ export default class MusicDatabase {
       music.isDuplicate ? 1 : 0
     )
 
+    // 同步添加到 local_music 表
+    try {
+      const filePathMd5 = calculateFilePathMD5(music.filePath)
+      this.addToLocalMusic(music.filePath, filePathMd5)
+    } catch (error) {
+      console.warn('添加到本地音乐列表失败:', error)
+    }
+
     return Number(result.lastInsertRowid)
   }
 
