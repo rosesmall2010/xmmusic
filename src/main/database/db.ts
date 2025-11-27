@@ -180,6 +180,27 @@ export default class MusicDatabase {
       }
     }
 
+    // 执行 v1.0.5 列表独立性架构迁移
+    try {
+      const listIndependencePath = join(
+        __dirname,
+        'migrations',
+        '006_v105_list_independence.sql'
+      )
+      if (existsSync(listIndependencePath)) {
+        const sql = readFileSync(listIndependencePath, 'utf8')
+        this.db!.exec(sql)
+        console.log('✅ v1.0.5 列表独立性架构迁移完成')
+      }
+    } catch (error: any) {
+      // 表或列可能已存在
+      if (error?.code !== 'SQLITE_ERROR' || 
+          (!error?.message?.includes('already exists') && 
+           !error?.message?.includes('duplicate column'))) {
+        console.error('List independence migration error:', error)
+      }
+    }
+
     // 执行播放列表迁移（从 music_id 改为 file_path）
     try {
       // 检查 playlist_item 表是否存在
@@ -1487,7 +1508,7 @@ export default class MusicDatabase {
     try {
       // 获取当前存储的版本号
       const storedVersion = this.getSetting(DB_VERSION_KEY)
-      
+
       console.log(`📊 数据库版本检查:`)
       console.log(`   当前代码版本: ${DB_VERSION}`)
       console.log(`   数据库存储版本: ${storedVersion || '未设置'}`)
@@ -1505,9 +1526,9 @@ export default class MusicDatabase {
         console.warn(`   预期版本: ${DB_VERSION}`)
         console.warn(`   实际版本: ${storedVersion}`)
         console.warn(`🔄 开始清空并重建数据库...`)
-        
+
         this.clearAndRebuildDatabase()
-        
+
         console.log(`✅ 数据库已清空并重建`)
       } else {
         console.log(`✅ 数据库版本匹配，无需重建`)
@@ -1524,24 +1545,24 @@ export default class MusicDatabase {
   private clearAndRebuildDatabase(): void {
     try {
       console.log(`🗑️  开始清空数据库...`)
-      
+
       // 1. 删除所有表数据（保留表结构）
       this.clearAllTables()
-      
+
       // 2. 删除封面和歌词文件
       this.clearMediaFiles()
-      
+
       // 3. 重新执行迁移（确保表结构最新）
       console.log(`🔄 重新执行数据库迁移...`)
       this.migrate()
-      
+
       // 4. 重新创建索引
       console.log(`🔄 重新创建索引...`)
       this.createIndexes()
-      
+
       // 5. 保存新版本号
       this.setSetting(DB_VERSION_KEY, DB_VERSION)
-      
+
       console.log(`✅ 数据库清空并重建完成`)
     } catch (error: any) {
       console.error(`❌ 清空重建失败:`, error)
@@ -1556,29 +1577,29 @@ export default class MusicDatabase {
     try {
       // 获取所有表名
       const tables = this.db!.prepare(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' 
+        SELECT name FROM sqlite_master
+        WHERE type='table'
         AND name NOT LIKE 'sqlite_%'
       `).all() as Array<{ name: string }>
-      
+
       console.log(`📋 找到 ${tables.length} 个表需要清空`)
-      
+
       // 禁用外键约束
       this.db!.exec('PRAGMA foreign_keys = OFF')
-      
+
       // 开始事务
       this.db!.exec('BEGIN TRANSACTION')
-      
+
       try {
         // 删除所有表数据
         for (const table of tables) {
           console.log(`   清空表: ${table.name}`)
           this.db!.prepare(`DELETE FROM ${table.name}`).run()
         }
-        
+
         // 重置自增ID（不重置，继续累加）
         // 注意：根据需求，自增ID不重置，所以这里不执行 DELETE FROM sqlite_sequence
-        
+
         // 提交事务
         this.db!.exec('COMMIT')
         console.log(`✅ 所有表数据已清空`)
@@ -1602,7 +1623,7 @@ export default class MusicDatabase {
   private clearMediaFiles(): void {
     try {
       const userDataPath = app.getPath('userData')
-      
+
       // 清空封面目录
       const coversDir = join(userDataPath, 'covers')
       if (existsSync(coversDir)) {
@@ -1617,7 +1638,7 @@ export default class MusicDatabase {
         }
         console.log(`✅ 已删除 ${files.length} 个封面文件`)
       }
-      
+
       // 清空歌词目录（如果有）
       const lyricsDir = join(userDataPath, 'lyrics')
       if (existsSync(lyricsDir)) {
