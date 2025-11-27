@@ -52,7 +52,7 @@ const getParseFile = async () => {
 
 export default class FileScanner {
   private db: MusicDatabase
-  private concurrency: number = 10
+  private concurrency: number = 5 // 降低并发数，避免过多I/O操作
   private activeTasks: number = 0
   private isPaused: boolean = false
   private isCancelled: boolean = false
@@ -88,19 +88,23 @@ export default class FileScanner {
     const total = files.length
     let current = 0
     let lastProgressUpdate = 0
-    const PROGRESS_UPDATE_INTERVAL = 200 // 每200ms最多更新一次进度（优化：从100ms增加到200ms）
+    const PROGRESS_UPDATE_INTERVAL = 500 // 每500ms最多更新一次进度，减少UI更新频率
 
     // 批量插入缓冲区
-    const BATCH_SIZE = 50 // 每50条记录批量插入一次
+    const BATCH_SIZE = 100 // 增加批量大小，减少数据库操作次数
     let pendingInserts: any[] = []
 
     // 批量插入函数
     const flushPendingInserts = () => {
       if (pendingInserts.length > 0) {
         try {
+          // 批量插入到 music 表
+          this.db.insertMusicBatch(pendingInserts)
+          
           // 批量添加到本地音乐列表
           const filePaths = pendingInserts.map(item => item.filePath)
           this.db.addToLocalMusicBatch(filePaths)
+          
           pendingInserts = []
         } catch (error) {
           console.error('批量插入失败:', error)
@@ -153,7 +157,7 @@ export default class FileScanner {
           result.success++
           // 添加到批量插入缓冲区
           pendingInserts.push(musicItem)
-          
+
           // 如果达到批量大小，执行插入
           if (pendingInserts.length >= BATCH_SIZE) {
             flushPendingInserts()
@@ -176,7 +180,7 @@ export default class FileScanner {
     try {
       // 并发执行
       await this.executeWithConcurrency(tasks)
-      
+
       // 处理剩余的待插入记录
       flushPendingInserts()
     } catch (error: any) {
@@ -304,8 +308,7 @@ export default class FileScanner {
         isDuplicate: false
       }
 
-      // 插入数据库
-      this.db.insertMusic(musicItem)
+      // 不在这里插入数据库，返回 musicItem 供批量插入
       return musicItem as MusicItem
     } catch (error) {
       throw error
