@@ -1045,14 +1045,12 @@ export default class MusicDatabase {
         f.file_path as fav_file_path
       FROM favorites f
       LEFT JOIN music m ON f.file_path = m.file_path
+      WHERE f.file_path IS NOT NULL AND f.file_path != ''
       ORDER BY f.added_at DESC
     `)
     const rows = stmt.all() as any[]
 
-    return rows.filter(row => {
-      // 过滤掉 file_path 为 null 的记录
-      return row.fav_file_path !== null
-    }).map(row => {
+    return rows.map(row => {
       // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
       if (row.id !== null) {
         const item = this.mapRowToMusicItem(row)
@@ -1060,8 +1058,15 @@ export default class MusicDatabase {
         return item
       } else {
         // 如果 music 表中没有数据，创建临时 MusicItem
-        const path = require('path')
         const filePath = row.fav_file_path
+
+        // 再次检查 filePath 有效性（双重保护）
+        if (!filePath || typeof filePath !== 'string') {
+          console.warn('收藏表中发现无效的 file_path:', filePath)
+          return null
+        }
+
+        const path = require('path')
         const fileName = path.basename(filePath)
         const ext = path.extname(filePath).toLowerCase()
 
@@ -1092,7 +1097,7 @@ export default class MusicDatabase {
           isDuplicate: false
         }
       }
-    })
+    }).filter(item => item !== null) as MusicItem[] // 过滤掉无效项
   }
 
   recordPlay(filePath: string): void {
