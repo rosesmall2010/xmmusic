@@ -139,76 +139,22 @@ export default class MusicDatabase {
   }
 
   private migrate(): void {
-    // 执行初始迁移
-    const migrationPath = join(__dirname, 'migrations', '001_initial.sql')
-    if (existsSync(migrationPath)) {
-      const sql = readFileSync(migrationPath, 'utf8')
-      this.db!.exec(sql)
-    }
-
-    // 执行搜索历史迁移
-    const searchHistoryPath = join(__dirname, 'migrations', '002_add_search_history.sql')
-    if (existsSync(searchHistoryPath)) {
-      try {
-        const sql = readFileSync(searchHistoryPath, 'utf8')
-        this.db!.exec(sql)
-      } catch (error) {
-        // 表可能已存在，忽略错误
-        console.log('Search history migration:', error)
-      }
-    }
-
-    // 执行收藏表迁移
+    // v1.0.5 架构重构：直接执行新的迁移文件（数据库已重置）
+    // 新架构：music表是核心，所有列表通过music_id关联
     try {
-      const favoritesPath = join(__dirname, 'migrations', '004_create_favorites_table.sql')
-      if (existsSync(favoritesPath)) {
-        const sql = readFileSync(favoritesPath, 'utf8')
-        this.db!.exec(sql)
-      }
-    } catch (error: any) {
-      // 表可能已存在
-      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('already exists')) {
-        console.error('Favorites table migration error:', error)
-      }
-    }
-
-    // 执行歌单增强迁移
-    try {
-      const playlistEnhancementsPath = join(
+      const refactorPath = join(
         __dirname,
         'migrations',
-        '005_playlist_enhancements.sql'
+        '007_v105_music_id_refactor.sql'
       )
-      if (existsSync(playlistEnhancementsPath)) {
-        const sql = readFileSync(playlistEnhancementsPath, 'utf8')
+      if (existsSync(refactorPath)) {
+        const sql = readFileSync(refactorPath, 'utf8')
         this.db!.exec(sql)
+        console.log('✅ v1.0.5 数据库架构重构完成（music_id关联）')
       }
     } catch (error: any) {
-      // 列可能已存在
-      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('duplicate column')) {
-        console.error('Playlist enhancements migration error:', error)
-      }
-    }
-
-    // 执行 v1.0.5 列表独立性架构迁移
-    try {
-      const listIndependencePath = join(
-        __dirname,
-        'migrations',
-        '006_v105_list_independence.sql'
-      )
-      if (existsSync(listIndependencePath)) {
-        const sql = readFileSync(listIndependencePath, 'utf8')
-        this.db!.exec(sql)
-        console.log('✅ v1.0.5 列表独立性架构迁移完成')
-      }
-    } catch (error: any) {
-      // 表或列可能已存在
-      if (error?.code !== 'SQLITE_ERROR' ||
-          (!error?.message?.includes('already exists') &&
-           !error?.message?.includes('duplicate column'))) {
-        console.error('List independence migration error:', error)
-      }
+      console.error('Database refactor migration error:', error)
+      throw error
     }
 
     // 执行播放列表迁移（从 music_id 改为 file_path）
@@ -364,11 +310,11 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       INSERT INTO music (
         title, artist, album, year, genre,
-        file_path, file_name, file_size, file_hash, file_extension,
+        file_path, file_name, file_size, file_extension,
         duration, bitrate, sample_rate, channels,
-        cover_path, lyrics_path, play_count, favorite,
+        cover_path, lyrics_path, play_count,
         is_corrupted, is_duplicate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const result = stmt.run(
@@ -380,7 +326,6 @@ export default class MusicDatabase {
       music.filePath,
       music.fileName,
       music.fileSize,
-      music.fileHash,
       music.fileExtension,
       music.duration,
       music.bitrate,
@@ -389,35 +334,38 @@ export default class MusicDatabase {
       music.coverPath,
       music.lyricsPath,
       music.playCount || 0,
-      music.favorite ? 1 : 0,
       music.isCorrupted ? 1 : 0,
       music.isDuplicate ? 1 : 0
     )
 
-    // 同步添加到 local_music 表
+    const musicId = Number(result.lastInsertRowid)
+
+    // 同步添加到 local_music 表（使用 music_id）
     try {
-      this.addToLocalMusic(music.filePath)
+      this.addToLocalMusicByMusicId(musicId)
     } catch (error) {
       console.warn('添加到本地音乐列表失败:', error)
     }
 
-    return Number(result.lastInsertRowid)
+    return musicId
   }
 
-  insertMusicBatch(musicList: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'>[]): void {
+  insertMusicBatch(musicList: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'>[]): number[] {
     const insert = this.db!.prepare(`
       INSERT INTO music (
         title, artist, album, year, genre,
-        file_path, file_name, file_size, file_hash, file_extension,
+        file_path, file_name, file_size, file_extension,
         duration, bitrate, sample_rate, channels,
-        cover_path, lyrics_path, play_count, favorite,
+        cover_path, lyrics_path, play_count,
         is_corrupted, is_duplicate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
+
+    const musicIds: number[] = []
 
     const insertMany = this.db!.transaction((items: typeof musicList) => {
       for (const item of items) {
-        insert.run(
+        const result = insert.run(
           item.title,
           item.artist,
           item.album,
@@ -426,7 +374,6 @@ export default class MusicDatabase {
           item.filePath,
           item.fileName,
           item.fileSize,
-          item.fileHash,
           item.fileExtension,
           item.duration,
           item.bitrate,
@@ -435,14 +382,15 @@ export default class MusicDatabase {
           item.coverPath,
           item.lyricsPath,
           item.playCount || 0,
-          item.favorite ? 1 : 0,
           item.isCorrupted ? 1 : 0,
           item.isDuplicate ? 1 : 0
         )
+        musicIds.push(Number(result.lastInsertRowid))
       }
     })
 
     insertMany(musicList)
+    return musicIds
   }
 
   updateMusic(id: number, updates: Partial<MusicItem>): void {
@@ -727,11 +675,7 @@ export default class MusicDatabase {
     return rows.map(row => this.mapRowToMusicItem(row))
   }
 
-  getMusicByHash(hash: string): MusicItem[] {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE file_hash = ?')
-    const rows = stmt.all(hash) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
-  }
+  // 已移除 getMusicByHash 方法，不再使用 file_hash 字段
 
   getMusicByGenre(genre: string): MusicItem[] {
     const stmt = this.db!.prepare('SELECT * FROM music WHERE genre = ? AND is_duplicate = 0 ORDER BY title')
@@ -875,6 +819,13 @@ export default class MusicDatabase {
   }
 
   addToPlaylist(playlistId: number, filePath: string, position?: number): void {
+    // 通过 file_path 查找 music_id
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法添加到歌单：文件不存在于 music 表: ${filePath}`)
+      return
+    }
+
     if (position === undefined) {
       const stmt = this.db!.prepare('SELECT MAX(position) as max_pos FROM playlist_item WHERE playlist_id = ?')
       const result = stmt.get(playlistId) as { max_pos: number | null }
@@ -882,109 +833,78 @@ export default class MusicDatabase {
     }
 
     const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO playlist_item (playlist_id, file_path, position)
+      INSERT OR IGNORE INTO playlist_item (playlist_id, music_id, position)
       VALUES (?, ?, ?)
     `)
-    stmt.run(playlistId, filePath, position)
+    stmt.run(playlistId, music.id, position)
 
     // 更新播放列表统计
     this.updatePlaylistStats(playlistId)
   }
 
   getPlaylistSongs(playlistId: number): MusicItem[] {
-    // 使用 LEFT JOIN 一次性获取所有歌曲信息，避免 N+1 查询问题
+    // 通过 music_id JOIN 获取所有歌曲信息
     const stmt = this.db!.prepare(`
       SELECT
         m.*,
         pi.position,
         pi.added_at as playlist_added_at
       FROM playlist_item pi
-      LEFT JOIN music m ON pi.file_path = m.file_path
+      JOIN music m ON pi.music_id = m.id
       WHERE pi.playlist_id = ?
       ORDER BY pi.position
     `)
     const rows = stmt.all(playlistId) as any[]
-
-    return rows.map(row => {
-      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
-      if (row.id !== null) {
-        return this.mapRowToMusicItem(row)
-      } else {
-        // 如果 music 表中没有数据，创建临时 MusicItem
-        // 注意：这种情况应该很少发生，因为添加到歌单时应该确保文件在 music 表中
-        const path = require('path')
-        const filePath = row.file_path
-        const fileName = path.basename(filePath)
-        const ext = path.extname(filePath).toLowerCase()
-
-        return {
-          id: -1,
-          title: fileName.replace(ext, ''),
-          artist: '未知艺术家',
-          album: null,
-          year: null,
-          genre: null,
-          filePath: filePath,
-          fileName: fileName,
-          fileSize: 0,
-          fileHash: '',
-          fileExtension: ext,
-          duration: 0,
-          bitrate: 0,
-          sampleRate: 0,
-          channels: 0,
-          coverPath: null,
-          lyricsPath: null,
-          playCount: 0,
-          lastPlayedAt: null,
-          favorite: false,
-          addedAt: row.playlist_added_at || new Date().toISOString(),
-          updatedAt: row.playlist_added_at || new Date().toISOString(),
-          isCorrupted: false,
-          isDuplicate: false
-        }
-      }
-    })
+    return rows.map(row => this.mapRowToMusicItem(row))
   }
 
   // 检查文件路径是否在播放列表中
   isFileInPlaylist(filePath: string, playlistId?: number): boolean {
+    const music = this.getMusicByPath(filePath)
+    if (!music) return false
+
     if (playlistId !== undefined) {
       // 检查是否在指定播放列表中
-      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
-      const result = stmt.get(playlistId, filePath) as { count: number }
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+      const result = stmt.get(playlistId, music.id) as { count: number }
       return result.count > 0
     } else {
       // 检查是否在任何播放列表中
-      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE file_path = ?')
-      const result = stmt.get(filePath) as { count: number }
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE music_id = ?')
+      const result = stmt.get(music.id) as { count: number }
       return result.count > 0
     }
   }
 
   // 获取文件路径所在的所有播放列表ID
   getPlaylistsForFile(filePath: string): number[] {
-    const stmt = this.db!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE file_path = ?')
-    const rows = stmt.all(filePath) as Array<{ playlist_id: number }>
+    const music = this.getMusicByPath(filePath)
+    if (!music) return []
+
+    const stmt = this.db!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE music_id = ?')
+    const rows = stmt.all(music.id) as Array<{ playlist_id: number }>
     return rows.map(row => row.playlist_id)
   }
 
   // 从播放列表中移除文件（通过文件路径）
   removeFromPlaylistByPath(playlistId: number, filePath: string): void {
-    const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
-    stmt.run(playlistId, filePath)
+    const music = this.getMusicByPath(filePath)
+    if (!music) return
+
+    const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+    stmt.run(playlistId, music.id)
     this.updatePlaylistStats(playlistId)
   }
 
   private updatePlaylistStats(playlistId: number): void {
-    // 更新播放列表统计（基于文件路径匹配 music 表）
+    // 更新播放列表统计（基于 music_id JOIN）
     const stmt = this.db!.prepare(`
       UPDATE playlist SET
         song_count = (SELECT COUNT(*) FROM playlist_item WHERE playlist_id = ?),
         total_duration = (
           SELECT COALESCE(SUM(m.duration), 0)
           FROM playlist_item pi
-          LEFT JOIN music m ON pi.file_path = m.file_path
+          JOIN music m ON pi.music_id = m.id
           WHERE pi.playlist_id = ?
         ),
         updated_at = CURRENT_TIMESTAMP
@@ -995,21 +915,8 @@ export default class MusicDatabase {
 
   // ========== 去重操作 ==========
 
-  getDuplicateGroups(): DuplicateGroup[] {
-    const stmt = this.db!.prepare(`
-      SELECT file_hash, COUNT(*) as count
-      FROM music
-      GROUP BY file_hash
-      HAVING COUNT(*) > 1
-    `)
-    const rows = stmt.all() as Array<{ file_hash: string; count: number }>
-
-    return rows.map(row => ({
-      fileHash: row.file_hash,
-      count: row.count,
-      files: this.getMusicByHash(row.file_hash)
-    }))
-  }
+  // 已移除 getDuplicateGroups 方法，不再使用 file_hash 字段进行去重
+  // 去重现在基于 file_path（完整路径）的唯一性
 
   markAsDuplicate(musicId: number, isDuplicate: boolean): void {
     const stmt = this.db!.prepare('UPDATE music SET is_duplicate = ? WHERE id = ?')
@@ -1019,115 +926,84 @@ export default class MusicDatabase {
   // ========== 收藏和历史 ==========
 
   toggleFavorite(filePath: string): void {
-    // 计算文件路径 MD5
-    const filePathMd5 = calculateFilePathMD5(filePath)
+    // 通过 file_path 查找 music_id
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法切换收藏状态：文件不存在于 music 表: ${filePath}`)
+      return
+    }
 
     // 检查是否已在收藏表中
-    const checkStmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
-    const result = checkStmt.get(filePath) as { count: number }
+    const checkStmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE music_id = ?')
+    const result = checkStmt.get(music.id) as { count: number }
 
     if (result.count > 0) {
       // 如果已收藏，移除
-      const deleteStmt = this.db!.prepare('DELETE FROM favorites WHERE file_path = ?')
-      deleteStmt.run(filePath)
+      const deleteStmt = this.db!.prepare('DELETE FROM favorites WHERE music_id = ?')
+      deleteStmt.run(music.id)
     } else {
       // 如果未收藏，添加
-      const insertStmt = this.db!.prepare('INSERT INTO favorites (file_path, file_path_md5) VALUES (?, ?)')
-      insertStmt.run(filePath, filePathMd5)
+      const insertStmt = this.db!.prepare('INSERT INTO favorites (music_id) VALUES (?)')
+      insertStmt.run(music.id)
     }
   }
 
   isFileFavorite(filePath: string): boolean {
-    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
-    const result = stmt.get(filePath) as { count: number }
+    const music = this.getMusicByPath(filePath)
+    if (!music) return false
+    
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE music_id = ?')
+    const result = stmt.get(music.id) as { count: number }
     return result.count > 0
   }
 
   getFavorites(): MusicItem[] {
-    // 使用 LEFT JOIN 一次性获取所有收藏歌曲信息，避免 N+1 查询问题
+    // 通过 music_id JOIN 获取所有收藏歌曲信息
     const stmt = this.db!.prepare(`
       SELECT
         m.*,
-        f.added_at as favorite_added_at,
-        f.file_path as fav_file_path
+        f.added_at as favorite_added_at
       FROM favorites f
-      LEFT JOIN music m ON f.file_path = m.file_path
-      WHERE f.file_path IS NOT NULL AND f.file_path != ''
+      JOIN music m ON f.music_id = m.id
       ORDER BY f.added_at DESC
     `)
     const rows = stmt.all() as any[]
 
     return rows.map(row => {
-      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
-      if (row.id !== null) {
-        const item = this.mapRowToMusicItem(row)
-        item.favorite = true // 确保 favorite 标记为 true
-        return item
-      } else {
-        // 如果 music 表中没有数据，创建临时 MusicItem
-        const filePath = row.fav_file_path
-
-        // 再次检查 filePath 有效性（双重保护）
-        if (!filePath || typeof filePath !== 'string') {
-          console.warn('收藏表中发现无效的 file_path:', filePath)
-          return null
-        }
-
-        const path = require('path')
-        const fileName = path.basename(filePath)
-        const ext = path.extname(filePath).toLowerCase()
-
-        return {
-          id: -1,
-          title: fileName.replace(ext, ''),
-          artist: '未知艺术家',
-          album: null,
-          year: null,
-          genre: null,
-          filePath: filePath,
-          fileName: fileName,
-          fileSize: 0,
-          fileHash: '',
-          fileExtension: ext,
-          duration: 0,
-          bitrate: 0,
-          sampleRate: 0,
-          channels: 0,
-          coverPath: null,
-          lyricsPath: null,
-          playCount: 0,
-          lastPlayedAt: null,
-          favorite: true,
-          addedAt: row.favorite_added_at || new Date().toISOString(),
-          updatedAt: row.favorite_added_at || new Date().toISOString(),
-          isCorrupted: false,
-          isDuplicate: false
-        }
-      }
-    }).filter(item => item !== null) as MusicItem[] // 过滤掉无效项
+      const item = this.mapRowToMusicItem(row)
+      item.favorite = true // 确保 favorite 标记为 true
+      return item
+    })
   }
 
   recordPlay(filePath: string): void {
-    // 插入播放历史（使用 file_path）
-    const historyStmt = this.db!.prepare('INSERT INTO play_history (file_path) VALUES (?)')
-    historyStmt.run(filePath)
+    // 通过 file_path 查找 music_id
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法记录播放：文件不存在于 music 表: ${filePath}`)
+      return
+    }
 
-    // 更新播放统计（如果该音乐在 music 表中存在）
+    // 插入播放历史（使用 music_id）
+    const historyStmt = this.db!.prepare('INSERT INTO play_history (music_id) VALUES (?)')
+    historyStmt.run(music.id)
+
+    // 更新播放统计
     const updateStmt = this.db!.prepare(`
       UPDATE music SET
         play_count = play_count + 1,
         last_played_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-      WHERE file_path = ?
+      WHERE id = ?
     `)
-    updateStmt.run(filePath)
+    updateStmt.run(music.id)
   }
 
   getPlayHistory(limit: number = 50): MusicItem[] {
     const stmt = this.db!.prepare(`
       SELECT m.*
       FROM music m
-      JOIN play_history ph ON m.file_path = ph.file_path
+      JOIN play_history ph ON m.id = ph.music_id
       WHERE m.is_duplicate = 0
       ORDER BY ph.played_at DESC
       LIMIT ?
@@ -1379,7 +1255,7 @@ export default class MusicDatabase {
         filePath: '',
         fileName: '',
         fileSize: 0,
-        fileHash: '',
+        fileHash: '', // 保留字段以兼容类型定义，但不再从数据库读取
         fileExtension: '',
         duration: 0,
         bitrate: 0,
@@ -1410,7 +1286,7 @@ export default class MusicDatabase {
       filePath: row.file_path,
       fileName: row.file_name,
       fileSize: row.file_size,
-      fileHash: row.file_hash,
+      fileHash: '', // 不再使用 file_hash，保留字段以兼容类型定义
       fileExtension: row.file_extension,
       duration: row.duration || 0,
       bitrate: row.bitrate || 0,
@@ -1721,44 +1597,56 @@ export default class MusicDatabase {
   // ========== 本地音乐列表 ==========
 
   /**
-   * 检查文件是否已在本地音乐列表中
+   * 检查文件是否已在本地音乐列表中（通过 file_path 查找对应的 music_id）
    */
   isInLocalMusic(filePath: string): boolean {
     const stmt = this.db!.prepare(`
-      SELECT COUNT(*) as count FROM local_music WHERE file_path = ?
+      SELECT COUNT(*) as count 
+      FROM local_music lm
+      JOIN music m ON lm.music_id = m.id
+      WHERE m.file_path = ?
     `)
     const result = stmt.get(filePath) as { count: number }
     return result.count > 0
   }
 
   /**
-   * 添加音乐到本地音乐列表
+   * 添加音乐到本地音乐列表（通过 music_id）
    */
-  addToLocalMusic(filePath: string): void {
-    const filePathMd5 = calculateFilePathMD5(filePath)
+  addToLocalMusicByMusicId(musicId: number): void {
     const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO local_music (file_path, file_path_md5)
-      VALUES (?, ?)
+      INSERT OR IGNORE INTO local_music (music_id)
+      VALUES (?)
     `)
-    stmt.run(filePath, filePathMd5)
+    stmt.run(musicId)
   }
 
   /**
-   * 批量添加音乐到本地音乐列表
+   * 添加音乐到本地音乐列表（通过 file_path，内部查找 music_id）
    */
-  addToLocalMusicBatch(items: Array<{ filePath: string; filePathMd5: string }>): void {
+  addToLocalMusic(filePath: string): void {
+    const music = this.getMusicByPath(filePath)
+    if (music) {
+      this.addToLocalMusicByMusicId(music.id)
+    }
+  }
+
+  /**
+   * 批量添加音乐到本地音乐列表（通过 music_id 数组）
+   */
+  addToLocalMusicBatch(musicIds: number[]): void {
     const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO local_music (file_path, file_path_md5)
-      VALUES (?, ?)
+      INSERT OR IGNORE INTO local_music (music_id)
+      VALUES (?)
     `)
 
-    const transaction = this.db!.transaction((musicItems: typeof items) => {
-      for (const item of musicItems) {
-        stmt.run(item.filePath, item.filePathMd5)
+    const transaction = this.db!.transaction((ids: number[]) => {
+      for (const musicId of ids) {
+        stmt.run(musicId)
       }
     })
 
-    transaction(items)
+    transaction(musicIds)
   }
 
   /**
@@ -1801,12 +1689,10 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         lm.id as list_id,
-        lm.file_path,
-        lm.file_path_md5,
         lm.added_at,
         m.*
       FROM local_music lm
-      LEFT JOIN music m ON lm.file_path = m.file_path
+      JOIN music m ON lm.music_id = m.id
       ORDER BY lm.id ASC
       LIMIT ? OFFSET ?
     `)
@@ -1820,12 +1706,17 @@ export default class MusicDatabase {
    * 添加到发现音乐列表
    */
   addToDiscoverMusic(filePath: string): void {
-    const filePathMd5 = calculateFilePathMD5(filePath)
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法添加到发现音乐：文件不存在于 music 表: ${filePath}`)
+      return
+    }
+
     const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO discover_music (file_path, file_path_md5)
-      VALUES (?, ?)
+      INSERT OR IGNORE INTO discover_music (music_id)
+      VALUES (?)
     `)
-    stmt.run(filePath, filePathMd5)
+    stmt.run(music.id)
   }
 
   /**
@@ -1851,12 +1742,10 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         dm.id as list_id,
-        dm.file_path,
-        dm.file_path_md5,
         dm.discovered_at as added_at,
         m.*
       FROM discover_music dm
-      LEFT JOIN music m ON dm.file_path = m.file_path
+      JOIN music m ON dm.music_id = m.id
       ORDER BY dm.discovered_at DESC
       LIMIT ? OFFSET ?
     `)
@@ -1870,12 +1759,17 @@ export default class MusicDatabase {
    * 添加到最近播放列表
    */
   addToRecentPlays(filePath: string): void {
-    const filePathMd5 = calculateFilePathMD5(filePath)
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法添加到最近播放：文件不存在于 music 表: ${filePath}`)
+      return
+    }
+
     const stmt = this.db!.prepare(`
-      INSERT INTO recent_plays (file_path, file_path_md5)
-      VALUES (?, ?)
+      INSERT INTO recent_plays (music_id)
+      VALUES (?)
     `)
-    stmt.run(filePath, filePathMd5)
+    stmt.run(music.id)
   }
 
   /**
@@ -1901,12 +1795,10 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         rp.id as list_id,
-        rp.file_path,
-        rp.file_path_md5,
         rp.played_at as added_at,
         m.*
       FROM recent_plays rp
-      LEFT JOIN music m ON rp.file_path = m.file_path
+      JOIN music m ON rp.music_id = m.id
       ORDER BY rp.played_at DESC
       LIMIT ? OFFSET ?
     `)
@@ -1920,7 +1812,11 @@ export default class MusicDatabase {
    * 添加到播放队列
    */
   addToPlayQueue(filePath: string, position?: number): void {
-    const filePathMd5 = calculateFilePathMD5(filePath)
+    const music = this.getMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法添加到播放队列：文件不存在于 music 表: ${filePath}`)
+      return
+    }
 
     if (position === undefined) {
       // 如果没有指定位置，添加到末尾
@@ -1930,26 +1826,32 @@ export default class MusicDatabase {
     }
 
     const stmt = this.db!.prepare(`
-      INSERT INTO play_queue (file_path, file_path_md5, position)
-      VALUES (?, ?, ?)
+      INSERT INTO play_queue (music_id, position)
+      VALUES (?, ?)
     `)
-    stmt.run(filePath, filePathMd5, position)
+    stmt.run(music.id, position)
   }
 
   /**
    * 从播放队列移除
    */
   removeFromPlayQueue(filePath: string): void {
-    const stmt = this.db!.prepare('DELETE FROM play_queue WHERE file_path = ?')
-    stmt.run(filePath)
+    const music = this.getMusicByPath(filePath)
+    if (!music) return
+
+    const stmt = this.db!.prepare('DELETE FROM play_queue WHERE music_id = ?')
+    stmt.run(music.id)
   }
 
   /**
    * 检查是否在播放队列中
    */
   isInPlayQueue(filePath: string): boolean {
-    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM play_queue WHERE file_path = ?')
-    const result = stmt.get(filePath) as { count: number }
+    const music = this.getMusicByPath(filePath)
+    if (!music) return false
+
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM play_queue WHERE music_id = ?')
+    const result = stmt.get(music.id) as { count: number }
     return result.count > 0
   }
 
@@ -2007,18 +1909,19 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         f.id as list_id,
-        f.file_path,
-        f.file_path_md5,
         f.added_at,
         m.*
       FROM favorites f
-      LEFT JOIN music m ON f.file_path = m.file_path
-      WHERE f.file_path IS NOT NULL
+      JOIN music m ON f.music_id = m.id
       ORDER BY f.added_at DESC
       LIMIT ? OFFSET ?
     `)
     const rows = stmt.all(limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    return rows.map(row => {
+      const item = this.mapRowToMusicItem(row)
+      item.favorite = true
+      return item
+    })
   }
 
   // ========== 歌单列表（更新为分页）==========
@@ -2039,13 +1942,11 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         pi.id as list_id,
-        pi.file_path,
-        pi.file_path_md5,
         pi.position,
         pi.added_at,
         m.*
       FROM playlist_item pi
-      LEFT JOIN music m ON pi.file_path = m.file_path
+      JOIN music m ON pi.music_id = m.id
       WHERE pi.playlist_id = ?
       ORDER BY pi.position ASC
       LIMIT ? OFFSET ?

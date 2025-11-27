@@ -513,14 +513,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     for (const song of data.songs || []) {
       let music: MusicItem | null = null
 
-      // 1. 优先通过 fileHash 匹配（最准确）
-      if (song.fileHash) {
-        const matches = db.getMusicByHash(song.fileHash)
-        music = matches.length > 0 ? matches[0] : null
-      }
-
-      // 2. 通过 filePath 匹配
-      if (!music && song.filePath) {
+      // 通过 filePath 匹配（不再使用 fileHash）
+      if (song.filePath) {
         music = db.getMusicByPath(song.filePath)
       }
 
@@ -745,10 +739,10 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return result
   })
 
-  // 重复音乐检测
+  // 重复音乐检测（已移除，不再使用 file_hash 去重）
   ipcMain.handle('get-duplicate-groups', () => {
     if (!db) return []
-    return db.getDuplicateGroups()
+    return [] // 已移除 getDuplicateGroups，不再使用 file_hash 字段
   })
 
   // ========== 歌词功能 ==========

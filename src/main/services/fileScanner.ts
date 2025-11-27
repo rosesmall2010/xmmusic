@@ -214,24 +214,20 @@ export default class FileScanner {
 
   private async processFile(filePath: string, _options: ScanOptions): Promise<boolean> {
     try {
-      // 1. 检查 local_music 表是否已存在（列表独立性判断）
-      if (this.db.isInLocalMusic(filePath)) {
-        return false // 已在本地音乐列表中，跳过
-      }
-
-      // 2. 检查 music 表是否已有该文件的元数据
+      // 1. 检查 music 表是否已有该文件的元数据（通过完整路径匹配）
       const existingMusic = this.db.getMusicByPath(filePath)
 
       if (existingMusic) {
-        // music 表已有元数据，直接添加到 local_music，不重新解析
-        this.db.addToLocalMusic(filePath)
+        // music 表已有元数据，检查是否已在 local_music 列表中
+        if (this.db.isInLocalMusic(filePath)) {
+          return false // 已在本地音乐列表中，跳过
+        }
+        // 添加到 local_music（通过 music_id）
+        this.db.addToLocalMusicByMusicId(existingMusic.id)
         return true
       }
 
-      // 3. music 表中没有，需要解析文件
-      // 计算文件内容 MD5（用于去重）
-      const hash = await this.calculateMD5(filePath)
-
+      // 2. music 表中没有，需要解析文件
       // 检测损坏
       const isCorrupted = await this.detectCorruptedFile(filePath)
       if (isCorrupted) {
@@ -239,12 +235,12 @@ export default class FileScanner {
       }
 
       // 解析元数据
-      const metadata = await this.parseMetadata(filePath, hash)
+      const metadata = await this.parseMetadata(filePath, '')
 
       // 获取文件信息
       const fileStat = await stat(filePath)
 
-      // 创建音乐项
+      // 创建音乐项（不再需要 fileHash）
       const musicItem: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'> = {
         title: metadata.title || basename(filePath, extname(filePath)),
         artist: metadata.artist || '未知艺术家',
@@ -254,7 +250,7 @@ export default class FileScanner {
         filePath,
         fileName: basename(filePath),
         fileSize: fileStat.size,
-        fileHash: hash,
+        fileHash: '', // 不再使用 fileHash
         fileExtension: extname(filePath).toLowerCase(),
         duration: metadata.duration || 0,
         bitrate: metadata.bitrate || 0,
@@ -277,36 +273,7 @@ export default class FileScanner {
     }
   }
 
-  async calculateMD5(filePath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      // 检查是否取消
-      if (this.isCancelled) {
-        reject(new Error('扫描已取消'))
-        return
-      }
-
-      const hash = createHash('md5')
-      const stream = createReadStream(filePath, { highWaterMark: 64 * 1024 }) // 64KB chunks
-
-      stream.on('data', (chunk) => {
-        // 检查是否取消
-        if (this.isCancelled) {
-          stream.destroy()
-          reject(new Error('扫描已取消'))
-          return
-        }
-        hash.update(chunk)
-      })
-      stream.on('end', () => {
-        if (!this.isCancelled) {
-          resolve(hash.digest('hex'))
-        } else {
-          reject(new Error('扫描已取消'))
-        }
-      })
-      stream.on('error', reject)
-    })
-  }
+  // 不再需要计算文件内容 MD5，已移除此方法
 
   async detectCorruptedFile(filePath: string): Promise<boolean> {
     try {
@@ -321,7 +288,7 @@ export default class FileScanner {
     }
   }
 
-  private async parseMetadata(filePath: string, fileHash: string): Promise<{
+  private async parseMetadata(filePath: string, _unused: string): Promise<{
     title: string
     artist: string
     album: string | null
@@ -341,7 +308,7 @@ export default class FileScanner {
       let coverPath: string | null = null
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         try {
-          coverPath = await this.extractCover(metadata.common.picture[0], fileHash)
+          coverPath = await this.extractCover(metadata.common.picture[0], filePath)
         } catch (coverError) {
           console.warn(`封面提取失败: ${filePath}`, coverError)
         }
@@ -382,7 +349,7 @@ export default class FileScanner {
    * @param fileHash 音乐文件的 MD5
    * @returns 封面文件路径
    */
-  private async extractCover(picture: any, fileHash: string): Promise<string | null> {
+  private async extractCover(picture: any, filePath: string): Promise<string | null> {
     try {
       // 获取封面目录
       const coversDir = join(app.getPath('userData'), 'covers')
@@ -402,8 +369,10 @@ export default class FileScanner {
         else if (format.includes('jpeg') || format.includes('jpg')) ext = '.jpg'
       }
 
-      // 使用音乐文件的 MD5 作为封面文件名
-      const coverFilename = `${fileHash}${ext}`
+      // 使用文件路径的 MD5 作为封面文件名（不再使用文件内容的 MD5）
+      const { createHash } = await import('crypto')
+      const filePathHash = createHash('md5').update(filePath).digest('hex')
+      const coverFilename = `${filePathHash}${ext}`
       const coverPath = join(coversDir, coverFilename)
 
       // 写入封面数据
