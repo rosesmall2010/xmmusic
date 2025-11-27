@@ -52,7 +52,7 @@ const getParseFile = async () => {
 
 export default class FileScanner {
   private db: MusicDatabase
-  private concurrency: number = 5 // 降低并发数，避免过多I/O操作
+  private concurrency: number = 3 // 进一步降低并发数，避免阻塞主线程
   private activeTasks: number = 0
   private isPaused: boolean = false
   private isCancelled: boolean = false
@@ -91,21 +91,27 @@ export default class FileScanner {
     const PROGRESS_UPDATE_INTERVAL = 500 // 每500ms最多更新一次进度，减少UI更新频率
 
     // 批量插入缓冲区
-    const BATCH_SIZE = 100 // 增加批量大小，减少数据库操作次数
+    const BATCH_SIZE = 50 // 降低批量大小，更频繁地释放内存和让出控制权
     let pendingInserts: any[] = []
 
-    // 批量插入函数
-    const flushPendingInserts = () => {
+    // 批量插入函数（异步，避免阻塞）
+    const flushPendingInserts = async () => {
       if (pendingInserts.length > 0) {
         try {
+          // 使用 setImmediate 让出控制权，避免阻塞主线程
+          await new Promise(resolve => setImmediate(resolve))
+          
           // 批量插入到 music 表
           this.db.insertMusicBatch(pendingInserts)
-          
+
           // 批量添加到本地音乐列表
           const filePaths = pendingInserts.map(item => item.filePath)
           this.db.addToLocalMusicBatch(filePaths)
-          
+
           pendingInserts = []
+          
+          // 再次让出控制权
+          await new Promise(resolve => setImmediate(resolve))
         } catch (error) {
           console.error('批量插入失败:', error)
         }
@@ -160,7 +166,7 @@ export default class FileScanner {
 
           // 如果达到批量大小，执行插入
           if (pendingInserts.length >= BATCH_SIZE) {
-            flushPendingInserts()
+            await flushPendingInserts()
           }
         } else {
           result.skipped++
@@ -174,6 +180,11 @@ export default class FileScanner {
       } finally {
         current++
         updateProgress(file)
+        
+        // 每处理10个文件，主动让出控制权
+        if (current % 10 === 0) {
+          await new Promise(resolve => setImmediate(resolve))
+        }
       }
     })
 
@@ -182,11 +193,11 @@ export default class FileScanner {
       await this.executeWithConcurrency(tasks)
 
       // 处理剩余的待插入记录
-      flushPendingInserts()
+      await flushPendingInserts()
     } catch (error: any) {
       if (error.message === '扫描已取消') {
         // 即使取消，也尝试保存已处理的数据
-        flushPendingInserts()
+        await flushPendingInserts()
         throw error
       }
     }
@@ -373,12 +384,22 @@ export default class FileScanner {
   }> {
     try {
       const parseFile = await getParseFile()
-      const metadata = await parseFile(filePath)
+      
+      // 添加超时控制，避免某些文件解析时间过长
+      const PARSE_TIMEOUT = 5000 // 5秒超时
+      const metadataPromise = parseFile(filePath)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('元数据解析超时')), PARSE_TIMEOUT)
+      })
+      
+      const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any
 
-      // 提取封面
+      // 提取封面（异步，不阻塞）
       let coverPath: string | null = null
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         try {
+          // 让出控制权
+          await new Promise(resolve => setImmediate(resolve))
           coverPath = await this.extractCover(metadata.common.picture[0], fileHash)
         } catch (coverError) {
           console.warn(`封面提取失败: ${filePath}`, coverError)
