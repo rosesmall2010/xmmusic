@@ -33,6 +33,7 @@
       <div class="col-album">专辑</div>
       <div class="col-filename">文件名</div>
       <div class="col-duration">时长</div>
+      <div class="col-actions">操作</div>
     </div>
 
     <div class="list-content" ref="containerRef" @scroll="handleScroll">
@@ -89,6 +90,24 @@
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
+          <div class="col-actions">
+            <button 
+              class="action-btn" 
+              :class="{ active: isFavorite(music.filePath) }"
+              @click.stop="toggleFavorite(music)"
+              :title="isFavorite(music.filePath) ? '取消喜欢' : '喜欢'"
+            >
+              <Heart :size="16" :fill="isFavorite(music.filePath) ? 'currentColor' : 'none'" />
+            </button>
+            <button 
+              class="action-btn" 
+              :class="{ active: isInQueue(music.filePath) }"
+              @click.stop="toggleQueue(music)"
+              :title="isInQueue(music.filePath) ? '从播放队列移除' : '添加到播放队列'"
+            >
+              <ListMusic :size="16" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -159,7 +178,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
@@ -342,13 +361,60 @@ const handleRemoveFromPlaylist = (music: MusicItem) => {
   closeContextMenu()
 }
 
+// 收藏状态管理
+const favoriteFiles = ref<Set<string>>(new Set())
+
+const isFavorite = (filePath: string) => {
+  return favoriteFiles.value.has(filePath)
+}
+
+const loadFavoriteStatus = async () => {
+  try {
+    const favorites = await window.electronAPI.getFavorites()
+    favoriteFiles.value = new Set(favorites.map((m: MusicItem) => m.filePath))
+  } catch (e) {
+    console.error('Failed to load favorites', e)
+  }
+}
+
 const toggleFavorite = async (music: MusicItem) => {
   try {
     await window.electronAPI.toggleFavorite(music.filePath)
+    // 更新本地状态
+    if (favoriteFiles.value.has(music.filePath)) {
+      favoriteFiles.value.delete(music.filePath)
+    } else {
+      favoriteFiles.value.add(music.filePath)
+    }
+    // 触发全局事件
+    window.dispatchEvent(new Event('favorites-updated'))
   } catch (e) {
     console.error('Failed to toggle favorite', e)
   }
   closeContextMenu()
+}
+
+// 播放队列状态管理
+const queueFiles = ref<Set<string>>(new Set())
+
+const isInQueue = (filePath: string) => {
+  return queueFiles.value.has(filePath)
+}
+
+const updateQueueStatus = () => {
+  queueFiles.value = new Set(playerStore.queue.map(m => m.filePath))
+}
+
+const toggleQueue = async (music: MusicItem) => {
+  if (isInQueue(music.filePath)) {
+    // 从队列移除
+    playerStore.removeFromQueue(music)
+    queueFiles.value.delete(music.filePath)
+  } else {
+    // 添加到队列
+    playerStore.addToQueue(music)
+    queueFiles.value.add(music.filePath)
+  }
 }
 
 const handleAddedToPlaylist = () => {
@@ -381,16 +447,25 @@ const handleTagSaved = () => {
 
 // Listen for metadata updates from other parts of the app
 onMounted(() => {
+  loadFavoriteStatus()
+  updateQueueStatus()
+  
   window.addEventListener('music-metadata-updated', () => {
     emit('songs-updated')
   })
+  window.addEventListener('favorites-updated', loadFavoriteStatus)
 })
 
 onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', () => {
     emit('songs-updated')
   })
+  window.removeEventListener('favorites-updated', loadFavoriteStatus)
 })
+
+// 监听播放队列变化
+import { watch } from 'vue'
+watch(() => playerStore.queue, updateQueueStatus, { deep: true })
 </script>
 
 <style scoped>
@@ -659,5 +734,47 @@ onUnmounted(() => {
 
 .menu-item:hover {
   background: var(--hover-bg);
+}
+
+/* 快捷操作按钮 */
+.col-actions {
+  flex: 0 0 100px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.list-item:hover .col-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+}
+
+.action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.action-btn.active {
+  color: var(--color-primary);
+}
+
+.action-btn.active:hover {
+  color: var(--color-primary-light);
 }
 </style>
