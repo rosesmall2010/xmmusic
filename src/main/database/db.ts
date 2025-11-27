@@ -1041,14 +1041,18 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         m.*,
-        f.added_at as favorite_added_at
+        f.added_at as favorite_added_at,
+        f.file_path as fav_file_path
       FROM favorites f
       LEFT JOIN music m ON f.file_path = m.file_path
       ORDER BY f.added_at DESC
     `)
     const rows = stmt.all() as any[]
 
-    return rows.map(row => {
+    return rows.filter(row => {
+      // 过滤掉 file_path 为 null 的记录
+      return row.fav_file_path !== null
+    }).map(row => {
       // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
       if (row.id !== null) {
         const item = this.mapRowToMusicItem(row)
@@ -1057,7 +1061,7 @@ export default class MusicDatabase {
       } else {
         // 如果 music 表中没有数据，创建临时 MusicItem
         const path = require('path')
-        const filePath = row.file_path
+        const filePath = row.fav_file_path
         const fileName = path.basename(filePath)
         const ext = path.extname(filePath).toLowerCase()
 
@@ -1351,6 +1355,36 @@ export default class MusicDatabase {
   // ========== 辅助方法 ==========
 
   mapRowToMusicItem(row: any): MusicItem {
+    // 如果 file_path 为 null 或 undefined，返回一个默认的 MusicItem
+    if (!row.file_path) {
+      return {
+        id: row.id || -1,
+        title: '未知歌曲',
+        artist: '未知艺术家',
+        album: null,
+        year: null,
+        genre: null,
+        filePath: '',
+        fileName: '',
+        fileSize: 0,
+        fileHash: '',
+        fileExtension: '',
+        duration: 0,
+        bitrate: 0,
+        sampleRate: 0,
+        channels: 0,
+        coverPath: null,
+        lyricsPath: null,
+        playCount: 0,
+        lastPlayedAt: null,
+        favorite: false,
+        addedAt: row.added_at || new Date().toISOString(),
+        updatedAt: row.updated_at || new Date().toISOString(),
+        isCorrupted: true,
+        isDuplicate: false
+      }
+    }
+
     // 检查是否在收藏表中（基于文件路径）
     const isFavorite = this.isFileFavorite(row.file_path)
 
@@ -1955,6 +1989,7 @@ export default class MusicDatabase {
         m.*
       FROM favorites f
       LEFT JOIN music m ON f.file_path = m.file_path
+      WHERE f.file_path IS NOT NULL
       ORDER BY f.added_at DESC
       LIMIT ? OFFSET ?
     `)
