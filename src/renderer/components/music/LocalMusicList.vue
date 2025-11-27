@@ -9,6 +9,9 @@
         <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0">
           清除所有
         </button>
+        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0">
+          播放全部
+        </button>
         <button class="btn-primary" @click="handleScan" :disabled="isScanning">
           {{ isScanning ? '扫描中...' : '扫描音乐' }}
         </button>
@@ -185,11 +188,25 @@ const handleClearAll = async () => {
   }
 
   try {
-    await window.electronAPI.clearAllMusic()
+    await window.electronAPI.clearLocalMusic()
     // 刷新列表
     await musicStore.loadMusic(0, 20, true)
   } catch (error: any) {
     alert(`清除失败: ${error.message}`)
+  }
+}
+
+const handlePlayAll = async () => {
+  if (totalCount.value === 0) return
+  
+  try {
+    // 获取所有歌曲
+    const allSongs = await window.electronAPI.getMusicList(0, totalCount.value)
+    playerStore.queue = allSongs
+    playerStore.setCurrentQueueIndex(0)
+    await play(allSongs[0])
+  } catch (error) {
+    console.error('播放全部失败:', error)
   }
 }
 

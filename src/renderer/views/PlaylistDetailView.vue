@@ -19,8 +19,11 @@
             <span>创建于 {{ formatDate(playlist.createdAt) }}</span>
           </div>
           <div class="actions">
-            <button class="btn-primary" @click="playAll" :disabled="songs.length === 0">
+            <button class="btn-primary" @click="playAll" :disabled="totalSongs === 0">
               播放全部
+            </button>
+            <button class="btn-secondary" @click="clearPlaylist" :disabled="totalSongs === 0">
+              清空歌单
             </button>
             <button class="btn-secondary" @click="openEditModal">
               编辑信息
@@ -193,10 +196,24 @@ const playMusic = async (music: MusicItem) => {
 }
 
 const playAll = async () => {
-  if (songs.value.length === 0) return
-  playerStore.queue = [...songs.value]
-  playerStore.setCurrentQueueIndex(0)
-  await play(songs.value[0])
+  if (totalSongs.value === 0) return
+  
+  // 如果还有未加载的歌曲，先全部加载
+  if (hasMore) {
+    loading.value = true
+    try {
+      const allSongs = await window.electronAPI.getPlaylistSongs(Number(route.params.id))
+      playerStore.queue = allSongs
+      playerStore.setCurrentQueueIndex(0)
+      await play(allSongs[0])
+    } finally {
+      loading.value = false
+    }
+  } else {
+    playerStore.queue = [...songs.value]
+    playerStore.setCurrentQueueIndex(0)
+    await play(songs.value[0])
+  }
 }
 
 const openEditModal = () => {
@@ -220,6 +237,26 @@ const removeSong = async (music: MusicItem) => {
     await loadPlaylist()
   } catch (error) {
     console.error('Failed to remove song:', error)
+  }
+}
+
+const clearPlaylist = async () => {
+  if (!playlist.value || totalSongs.value === 0) return
+  
+  if (!confirm(`确定要清空歌单"${playlist.value.name}"吗？这将删除 ${totalSongs.value} 首歌曲。`)) {
+    return
+  }
+  
+  try {
+    await window.electronAPI.clearPlaylist(playlist.value.id)
+    // 重新加载
+    songs.value = []
+    totalSongs.value = 0
+    currentOffset = 0
+    hasMore = true
+    await loadPlaylist()
+  } catch (error) {
+    console.error('清空歌单失败:', error)
   }
 }
 
