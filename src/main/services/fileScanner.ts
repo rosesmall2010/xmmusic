@@ -4,7 +4,7 @@ import { createReadStream } from 'fs'
 import { join, extname, basename } from 'path'
 import { createRequire } from 'module'
 import { app } from 'electron'
-import MusicDatabase from '../database/db'
+import MusicDatabase, { calculateFilePathMD5 } from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
 
 // 动态加载 music-metadata（解决 Electron 中的 exports 问题）
@@ -88,7 +88,25 @@ export default class FileScanner {
     const total = files.length
     let current = 0
     let lastProgressUpdate = 0
-    const PROGRESS_UPDATE_INTERVAL = 100 // 每100ms最多更新一次进度
+    const PROGRESS_UPDATE_INTERVAL = 200 // 每200ms最多更新一次进度（优化：从100ms增加到200ms）
+
+    // 批量插入缓冲区
+    const BATCH_SIZE = 50 // 每50条记录批量插入一次
+    let pendingInserts: any[] = []
+
+    // 批量插入函数
+    const flushPendingInserts = () => {
+      if (pendingInserts.length > 0) {
+        try {
+          // 批量添加到本地音乐列表
+          const filePaths = pendingInserts.map(item => item.filePath)
+          this.db.addToLocalMusicBatch(filePaths)
+          pendingInserts = []
+        } catch (error) {
+          console.error('批量插入失败:', error)
+        }
+      }
+    }
 
     // 进度更新函数（节流）
     const updateProgress = (file: string) => {
@@ -130,9 +148,16 @@ export default class FileScanner {
       }
 
       try {
-        const processed = await this.processFile(file, options)
-        if (processed) {
+        const musicItem = await this.processFile(file, options)
+        if (musicItem) {
           result.success++
+          // 添加到批量插入缓冲区
+          pendingInserts.push(musicItem)
+          
+          // 如果达到批量大小，执行插入
+          if (pendingInserts.length >= BATCH_SIZE) {
+            flushPendingInserts()
+          }
         } else {
           result.skipped++
         }
@@ -151,8 +176,13 @@ export default class FileScanner {
     try {
       // 并发执行
       await this.executeWithConcurrency(tasks)
+      
+      // 处理剩余的待插入记录
+      flushPendingInserts()
     } catch (error: any) {
       if (error.message === '扫描已取消') {
+        // 即使取消，也尝试保存已处理的数据
+        flushPendingInserts()
         throw error
       }
     }
@@ -212,40 +242,39 @@ export default class FileScanner {
     return files
   }
 
-  private async processFile(filePath: string, _options: ScanOptions): Promise<boolean> {
+  private async processFile(filePath: string, _options: ScanOptions): Promise<MusicItem | null> {
     try {
-      // 计算 MD5
-      const hash = await this.calculateMD5(filePath)
+      // 优化：计算文件路径的 MD5（而不是文件内容）
+      const filePathMd5 = calculateFilePathMD5(filePath)
 
-      // 检查是否已存在（通过 hash）
-      const existingByHash = this.db.getMusicByHash(hash)
-      if (existingByHash.length > 0) {
+      // 检查是否已存在（通过 file_path）
+      const existingByPath = this.db.getMusicByPath(filePath)
+      if (existingByPath) {
         // 检查现有记录是否缺少封面
-        const existing = existingByHash[0]
-        if (!existing.coverPath) {
+        if (!existingByPath.coverPath) {
           try {
             // 尝试提取封面
-            const metadata = await this.parseMetadata(filePath, hash)
+            const metadata = await this.parseMetadata(filePath, filePathMd5)
             if (metadata.coverPath) {
               // 更新数据库
-              this.db.updateMusic(existing.id, { coverPath: metadata.coverPath })
+              this.db.updateMusic(existingByPath.id, { coverPath: metadata.coverPath })
             }
           } catch (updateError) {
             console.warn(`更新封面失败: ${filePath}`, updateError)
           }
         }
-        return false // 跳过重复文件（不计入新增）
+        return null // 跳过重复文件（不计入新增）
       }
 
       // 检测损坏
       const isCorrupted = await this.detectCorruptedFile(filePath)
       if (isCorrupted) {
         // 添加到损坏文件表
-        return false
+        return null
       }
 
       // 解析元数据
-      const metadata = await this.parseMetadata(filePath, hash)
+      const metadata = await this.parseMetadata(filePath, filePathMd5)
 
       // 获取文件信息
       const fileStat = await stat(filePath)
@@ -260,7 +289,7 @@ export default class FileScanner {
         filePath,
         fileName: basename(filePath),
         fileSize: fileStat.size,
-        fileHash: hash,
+        fileHash: filePathMd5, // 使用文件路径 MD5
         fileExtension: extname(filePath).toLowerCase(),
         duration: metadata.duration || 0,
         bitrate: metadata.bitrate || 0,
@@ -277,7 +306,7 @@ export default class FileScanner {
 
       // 插入数据库
       this.db.insertMusic(musicItem)
-      return true
+      return musicItem as MusicItem
     } catch (error) {
       throw error
     }
