@@ -6,9 +6,17 @@
         <Check :size="16" />
         已选择 {{ selectedSongs.size }} 首
       </div>
+      <button class="batch-btn" @click="handleBatchAddToFavorites">
+        <Heart :size="16" />
+        添加到我喜欢
+      </button>
       <button class="batch-btn" @click="handleBatchAddToPlaylist">
         <Music :size="16" />
         添加到歌单
+      </button>
+      <button class="batch-btn" @click="handleBatchAddToQueue">
+        <ListMusic :size="16" />
+        添加到播放队列
       </button>
       <button v-if="showRemoveFromPlaylist" class="batch-btn danger" @click="handleBatchRemove">
         <Trash2 :size="16" />
@@ -299,9 +307,56 @@ const enableSelectionMode = () => {
 }
 
 // 批量添加到歌单
+// 批量添加到我喜欢
+const handleBatchAddToFavorites = async () => {
+  if (selectedSongs.value.size === 0) return
+
+  try {
+    const filePaths = Array.from(selectedSongs.value)
+    let addedCount = 0
+    
+    for (const filePath of filePaths) {
+      // 检查是否已经在我喜欢中
+      if (!favoriteFiles.value.has(filePath)) {
+        await window.electronAPI.toggleFavorite(filePath)
+        favoriteFiles.value.add(filePath)
+        addedCount++
+      }
+    }
+    
+    console.log(`Added ${addedCount} songs to favorites`)
+    cancelSelection()
+    window.dispatchEvent(new Event('favorites-updated'))
+  } catch (error) {
+    console.error('Failed to batch add to favorites:', error)
+  }
+}
+
 const handleBatchAddToPlaylist = () => {
   if (selectedSongs.value.size === 0) return
   showBatchAddToPlaylist.value = true
+}
+
+// 批量添加到播放队列
+const handleBatchAddToQueue = () => {
+  if (selectedSongs.value.size === 0) return
+
+  try {
+    const filePaths = Array.from(selectedSongs.value)
+    const songsToAdd = props.songs.filter(s => filePaths.includes(s.filePath))
+    
+    for (const song of songsToAdd) {
+      if (!isInQueue(song.filePath)) {
+        playerStore.addToQueue(song)
+        queueFiles.value.add(song.filePath)
+      }
+    }
+    
+    console.log(`Added ${songsToAdd.length} songs to queue`)
+    cancelSelection()
+  } catch (error) {
+    console.error('Failed to batch add to queue:', error)
+  }
 }
 
 // 批量删除
