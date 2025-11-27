@@ -255,12 +255,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   // 数据库操作（需要数据库）
   ipcMain.handle('get-music-list', async (_, offset: number, limit: number) => {
     if (!db) return []
-    return db.getMusicList(offset, limit)
+    // 使用 getLocalMusicPaginated 从 local_music 表读取
+    return db.getLocalMusicPaginated(offset, limit)
   })
 
   ipcMain.handle('get-music-total-count', () => {
     if (!db) return 0
-    return db.getMusicTotalCount()
+    // 使用 getLocalMusicCount 从 local_music 表读取总数
+    return db.getLocalMusicCount()
   })
 
   ipcMain.handle('search-music', async (_, query: string) => {

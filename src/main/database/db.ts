@@ -1751,7 +1751,9 @@ export default class MusicDatabase {
    * 清空本地音乐列表
    */
   clearLocalMusic(): void {
+    // 只清空本地音乐列表，不影响 music 主表和其他列表
     this.db!.prepare('DELETE FROM local_music').run()
+    // 注意：不重置自增ID，让它继续累加
   }
 
   /**
