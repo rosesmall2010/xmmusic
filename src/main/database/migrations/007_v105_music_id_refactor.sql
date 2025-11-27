@@ -174,8 +174,10 @@ CREATE TABLE IF NOT EXISTS id3_backup (
 -- 搜索历史表
 CREATE TABLE IF NOT EXISTS search_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  keyword TEXT NOT NULL,
-  searched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  query TEXT NOT NULL,
+  search_type TEXT DEFAULT 'basic',
+  criteria TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================
@@ -228,6 +230,10 @@ CREATE INDEX IF NOT EXISTS idx_play_queue_position ON play_queue(position);
 -- play_history 表索引
 CREATE INDEX IF NOT EXISTS idx_play_history_music_id ON play_history(music_id);
 CREATE INDEX IF NOT EXISTS idx_play_history_played_at ON play_history(played_at DESC);
+
+-- search_history 表索引
+CREATE INDEX IF NOT EXISTS idx_search_history_created_at ON search_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_history_query ON search_history(query);
 
 -- ============================================
 -- 12. 触发器：更新 music_fts

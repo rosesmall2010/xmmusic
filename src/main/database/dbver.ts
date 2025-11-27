@@ -22,8 +22,11 @@
  *   - music表移除file_hash字段，使用file_path作为唯一标识
  *   - 所有列表表改为通过music_id关联music表
  *   - 简化数据模型，提升查询性能
+ * - 4: v1.0.5 修复版本
+ *   - 修复playlist表缺少display_order字段
+ *   - 修复search_history表字段定义（使用query而不是keyword）
  */
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 
 /**
  * 数据库版本设置键名
