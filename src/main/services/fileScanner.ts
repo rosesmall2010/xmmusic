@@ -52,7 +52,7 @@ const getParseFile = async () => {
 
 export default class FileScanner {
   private db: MusicDatabase
-  private concurrency: number = 3 // 进一步降低并发数，避免阻塞主线程
+  private concurrency: number = 2 // 降低到2个并发，减少主线程压力
   private activeTasks: number = 0
   private isPaused: boolean = false
   private isCancelled: boolean = false
@@ -98,12 +98,16 @@ export default class FileScanner {
     const flushPendingInserts = async () => {
       if (pendingInserts.length > 0) {
         try {
-          // 使用 setImmediate 让出控制权，避免阻塞主线程
+          // 插入前：多重让出控制权，确保UI响应
           await new Promise(resolve => setImmediate(resolve))
-
-          // 批量插入到 music 表
+          await new Promise(resolve => setTimeout(resolve, 0))
+          
+          // 批量插入到 music 表（同步操作，快速执行）
           this.db.insertMusicBatch(pendingInserts)
 
+          // 再次让出控制权
+          await new Promise(resolve => setImmediate(resolve))
+          
           // 批量添加到本地音乐列表（传递已计算的 MD5，避免重复计算）
           const localMusicItems = pendingInserts.map(item => ({
             filePath: item.filePath,
@@ -112,9 +116,10 @@ export default class FileScanner {
           this.db.addToLocalMusicBatch(localMusicItems)
 
           pendingInserts = []
-
-          // 再次让出控制权
+          
+          // 插入后：多重让出控制权
           await new Promise(resolve => setImmediate(resolve))
+          await new Promise(resolve => setTimeout(resolve, 0))
         } catch (error) {
           console.error('批量插入失败:', error)
         }
@@ -161,7 +166,14 @@ export default class FileScanner {
       }
 
       try {
+        // 处理前让出控制权
+        await new Promise(resolve => setImmediate(resolve))
+        
         const musicItem = await this.processFile(file, options)
+        
+        // 处理后立即让出控制权
+        await new Promise(resolve => setImmediate(resolve))
+        
         if (musicItem) {
           result.success++
           // 添加到批量插入缓冲区
@@ -184,10 +196,10 @@ export default class FileScanner {
         current++
         updateProgress(file)
 
-        // 每处理5个文件，主动让出控制权（更频繁）
-        if (current % 5 === 0) {
-          await new Promise(resolve => setImmediate(resolve))
-        }
+        // 每处理1个文件，主动让出控制权（非常频繁，确保UI响应）
+        // 使用双重让出，确保UI有机会更新
+        await new Promise(resolve => setImmediate(resolve))
+        await new Promise(resolve => setTimeout(resolve, 0))
       }
     })
 
@@ -263,7 +275,7 @@ export default class FileScanner {
   private async processFile(filePath: string, _options: ScanOptions): Promise<MusicItem | null> {
     // 整个文件处理超时保护（10秒总超时）
     const FILE_PROCESS_TIMEOUT = 10000
-    
+
     const processFileTask = async (): Promise<MusicItem | null> => {
       try {
         // 优化：计算文件路径的 MD5（而不是文件内容）
@@ -282,11 +294,11 @@ export default class FileScanner {
                   this.db.updateMusic(existingByPath.id, { coverPath: metadata.coverPath })
                 }
               })()
-              
+
               const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => reject(new Error('更新封面超时')), 5000)
               })
-              
+
               await Promise.race([updatePromise, timeoutPromise])
             } catch (updateError) {
               console.warn(`更新封面失败: ${filePath}`, updateError)
@@ -300,7 +312,7 @@ export default class FileScanner {
         let metadata: any
         try {
           metadata = await this.parseMetadata(filePath, filePathMd5)
-          
+
           // 检查是否损坏（没有时长）
           if (!metadata.duration || metadata.duration <= 0) {
             return null // 视为损坏，跳过
@@ -315,13 +327,13 @@ export default class FileScanner {
       let fileStat: any
       try {
         await new Promise(resolve => setImmediate(resolve))
-        
+
         const STAT_TIMEOUT = 2000 // 2秒超时
         const statPromise = stat(filePath)
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('获取文件信息超时')), STAT_TIMEOUT)
         })
-        
+
         fileStat = await Promise.race([statPromise, timeoutPromise])
       } catch (statError: any) {
         console.warn(`获取文件信息失败: ${filePath}`, statError.message)
@@ -360,7 +372,7 @@ export default class FileScanner {
         throw error
       }
     }
-    
+
     // 执行处理任务，添加总超时保护
     try {
       const timeoutPromise = new Promise<null>((resolve) => {
@@ -369,7 +381,7 @@ export default class FileScanner {
           resolve(null)
         }, FILE_PROCESS_TIMEOUT)
       })
-      
+
       return await Promise.race([processFileTask(), timeoutPromise])
     } catch (error) {
       console.warn(`文件处理异常，跳过: ${filePath}`, error)
@@ -463,13 +475,13 @@ export default class FileScanner {
           const picture = metadata.common.picture[0]
           const pictureSize = picture.data ? picture.data.length : 0
           const MAX_COVER_SIZE = 5 * 1024 * 1024 // 5MB限制
-          
+
           if (pictureSize > MAX_COVER_SIZE) {
             console.warn(`封面过大(${Math.round(pictureSize / 1024)}KB)，跳过: ${filePath}`)
           } else {
             // 让出控制权
             await new Promise(resolve => setImmediate(resolve))
-            
+
             // 添加超时保护
             const COVER_TIMEOUT = 2000 // 2秒超时
             const coverPromise = this.extractCover(picture, fileHash)
@@ -479,7 +491,7 @@ export default class FileScanner {
                 resolve(null)
               }, COVER_TIMEOUT)
             })
-            
+
             coverPath = await Promise.race([coverPromise, timeoutPromise])
           }
         } catch (coverError) {
@@ -585,21 +597,22 @@ export default class FileScanner {
           break
         }
 
+        // 任务开始前让出控制权，确保UI响应
+        await new Promise(resolve => setImmediate(resolve))
+
         const currentIndex = index++
         this.activeTasks++
 
         try {
           const result = await tasks[currentIndex]()
           results[currentIndex] = result
-
-          // 每处理几个文件后让出控制权，避免阻塞
-          if (currentIndex % 5 === 0) {
-            await new Promise(resolve => setImmediate(resolve))
-          }
         } catch (error) {
           // 错误已在 processFile 中处理
         } finally {
           this.activeTasks--
+          
+          // 任务完成后让出控制权
+          await new Promise(resolve => setImmediate(resolve))
         }
       }
     }
