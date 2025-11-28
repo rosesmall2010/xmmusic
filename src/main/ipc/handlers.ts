@@ -148,17 +148,29 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   let currentScanner: FileScanner | null = null
 
   ipcMain.handle('scan-music-folder', async (_, path: string) => {
-    if (!db) {
+    // 检查数据库是否已初始化
+    if (!db || !db.isInitialized()) {
       const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
         '可能的原因：\n' +
         '1. @vscode/sqlite3 模块未正确安装\n' +
-        '2. 数据库文件权限问题\n' +
-        '3. 数据库初始化失败\n\n' +
-        '请查看终端控制台的错误信息，或尝试重新安装依赖：\n' +
-        'npm install'
+        '2. deasync 模块未正确编译\n' +
+        '3. 数据库文件权限问题\n' +
+        '4. 数据库初始化失败（检查终端日志）\n\n' +
+        '请查看终端控制台的错误信息，或尝试：\n' +
+        '1. 重新安装依赖: npm install\n' +
+        '2. 重新编译原生模块: npm run rebuild\n' +
+        '3. 重启应用'
       console.error('❌ 数据库未初始化，无法执行扫描操作')
+      console.error(`   数据库对象存在: ${db !== null}`)
+      console.error(`   数据库已初始化: ${db?.isInitialized() || false}`)
       console.error('💡 提示：请检查终端控制台的数据库初始化错误信息')
       throw new Error(errorMsg)
+    }
+
+    // 类型保护：确保 db 不是 null
+    const database = db
+    if (!database || !database.isInitialized()) {
+      throw new Error('数据库未初始化')
     }
 
     // 检查是否已有扫描任务
@@ -175,8 +187,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return { success: 0, failed: 0, corrupted: 0, skipped: 0, duration: 0, errors: [] }
     }
 
-    // 创建新的扫描器
-    currentScanner = new FileScanner(db)
+    // 创建新的扫描器（使用已验证的 database 变量）
+    currentScanner = new FileScanner(database)
     scanManager.setScanning(true)
     scanManager.setCancelled(false)
 
@@ -332,9 +344,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('get-playlists', () => {
-    if (!db) {
-      console.error('❌ 数据库未初始化，无法获取歌单列表')
-      return []
+    if (!db || !db.isInitialized()) {
+      console.warn('⚠️ 数据库未初始化，返回空歌单列表')
+      return [] // 返回空数组而非抛错，避免前端卡住
     }
     try {
       return db.getPlaylists()
@@ -344,7 +356,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       if (error?.stack) {
         console.error('   错误堆栈:', error.stack)
       }
-      return []
+      return [] // 失败时也返回空数组
     }
   })
 
@@ -594,8 +606,16 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('get-favorites', () => {
-    if (!db) return []
-    return db.getFavorites()
+    if (!db || !db.isInitialized()) {
+      console.warn('⚠️ 数据库未初始化，返回空收藏列表')
+      return []
+    }
+    try {
+      return db.getFavorites()
+    } catch (error) {
+      console.error('获取收藏列表失败:', error)
+      return []
+    }
   })
 
   // 收藏功能（分页）
@@ -616,8 +636,16 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('get-recent-plays', (_, limit?: number) => {
-    if (!db) return []
-    return db.getPlayHistory(limit)
+    if (!db || !db.isInitialized()) {
+      console.warn('⚠️ 数据库未初始化，返回空播放历史')
+      return []
+    }
+    try {
+      return db.getPlayHistory(limit)
+    } catch (error) {
+      console.error('获取播放历史失败:', error)
+      return []
+    }
   })
 
   ipcMain.handle('clear-play-history', async () => {
@@ -677,14 +705,15 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   ipcMain.handle('get-settings', () => {
     let settings: Record<string, any> = {}
-    if (db) {
+    if (db && db.isInitialized()) {  // ← 添加 isInitialized 检查
       try {
         settings = db.getAllSettings()
       } catch (error) {
-        console.error('读取数据库设置失败，使用文件缓存:', error)
+        console.warn('⚠️ 读取数据库设置失败，使用文件缓存:', error)
         settings = loadSettingsFromFile()
       }
     } else {
+      console.warn('⚠️ 数据库未初始化，使用文件缓存设置')
       settings = loadSettingsFromFile()
     }
     return { ...defaultSettings, ...settings }
