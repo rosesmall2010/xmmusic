@@ -288,106 +288,133 @@ app.whenReady().then(async () => {
   // 先创建窗口，避免数据库初始化阻塞界面
   createWindow()
 
-  // 异步初始化数据库（不阻塞窗口创建）
+  // 立即设置基础 IPC（不依赖数据库，让前端能正常工作）
+  if (mainWindow) {
+    console.log('🔧 设置基础 IPC handlers...')
+    setupIPC(null, mainWindow, null, null, null)
+    console.log('✅ 基础 IPC 已设置')
+  }
+
+  // 异步初始化数据库（完全不阻塞窗口）
   console.log('🔧 开始初始化数据库...')
-  // 使用 setTimeout 确保窗口先创建
-  setTimeout(() => {
-    try {
-      db = MusicDatabase.getInstance()
-      db.initialize()
-      console.log('✅ 数据库初始化成功')
-      
-      // 数据库初始化成功后，初始化文件监控
-      if (db) {
-        fileMonitor = new FileMonitor(db)
-        console.log('✅ 文件监控服务已初始化')
-      }
-    } catch (error: any) {
-      console.error('='.repeat(60))
-      console.error('❌ 数据库初始化失败!')
-      console.error('='.repeat(60))
-      console.error('错误信息:', error?.message || error)
-      if (error?.stack) {
-        console.error('错误堆栈:', error.stack)
-      }
-      console.error('')
-      console.error('⚠️ 可能的原因:')
-      console.error('  1. @vscode/sqlite3 模块未正确安装')
-      console.error('  2. 数据库文件权限问题')
-      console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
-      console.error('')
-      console.error('💡 解决方案:')
-      console.error('  1. 重新安装依赖: npm install')
-      console.error('  2. 检查数据库文件权限')
-      console.error('  3. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
-      console.error('')
-      console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
-      console.error('='.repeat(60))
-      db = null
-    }
-  }, 100) // 延迟 100ms，确保窗口先创建
 
-  // 立即读取并应用主题设置到窗口外观
-  if (mainWindow && db) {
-    try {
-      const settings = db.getAllSettings()
-      const theme = settings.theme || 'light'
-      const { nativeTheme } = require('electron')
-      if (theme === 'system') {
-        nativeTheme.themeSource = 'system'
-      } else {
-        nativeTheme.themeSource = theme
-      }
-      console.log(`✅ 窗口外观已设置为: ${theme}`)
-    } catch (error) {
-      console.error('设置窗口外观失败:', error)
-    }
-  }
+  // 封装数据库初始化为Promise（不使用await，让它在后台运行）
+  const initDatabase = new Promise<void>((resolve) => {
+    // 使用 setTimeout 确保窗口先创建
+    setTimeout(() => {
+      try {
+        db = MusicDatabase.getInstance()
+        db.initialize()
 
-  // 初始化系统托盘
-  if (mainWindow) {
-    trayService = new TrayService(mainWindow)
-    trayService.createTray()
-    console.log('✅ 系统托盘已初始化')
+        if (db.isInitialized()) {
+          console.log('✅ 数据库初始化成功')
 
-    // 监听窗口关闭事件，根据设置决定是否最小化到托盘
-    mainWindow.on('close', (event) => {
-      const settings = db?.getAllSettings() || {}
-      if (settings.minimizeToTray) {
-        event.preventDefault()
-        mainWindow?.hide()
-      }
-    })
-  }
+          // 数据库初始化成功后，初始化文件监控
+          fileMonitor = new FileMonitor(db)
+          console.log('✅ 文件监控服务已初始化')
 
-  // 初始化快捷键管理器
-  shortcutManager = new ShortcutManager()
-  if (mainWindow) {
-    shortcutManager.setMainWindow(mainWindow)
-    console.log('✅ 快捷键管理器已初始化')
-  }
+          // 读取并应用主题设置到窗口外观
+          if (mainWindow) {
+            try {
+              const settings = db.getAllSettings()
+              const theme = settings.theme || 'light'
+              const { nativeTheme } = require('electron')
+              if (theme === 'system') {
+                nativeTheme.themeSource = 'system'
+              } else {
+                nativeTheme.themeSource = theme
+              }
+              console.log(`✅ 窗口外观已设置为: ${theme}`)
+            } catch (error) {
+              console.error('设置窗口外观失败:', error)
+            }
+          }
 
-  // 文件监控将在数据库初始化成功后异步初始化（见上方 setTimeout）
+          // 初始化系统托盘
+          if (mainWindow) {
+            trayService = new TrayService(mainWindow)
+            trayService.createTray()
+            console.log('✅ 系统托盘已初始化')
 
-  // 设置 IPC（即使数据库未初始化也要设置基础 handlers）
-  if (mainWindow) {
-    setupIPC(db, mainWindow, fileMonitor, shortcutManager, trayService)
+            // 监听窗口关闭事件，根据设置决定是否最小化到托盘
+            mainWindow.on('close', (event) => {
+              const settings = db?.getAllSettings() || {}
+              if (settings.minimizeToTray) {
+                event.preventDefault()
+                mainWindow?.hide()
+              }
+            })
+          }
 
-    // 加载并注册快捷键
-    if (shortcutManager) {
-      mainWindow.webContents.once('did-finish-load', async () => {
-        try {
-          await mainWindow?.webContents.executeJavaScript(`
-            window.electronAPI.loadShortcuts()
-          `)
-        } catch (error) {
-          console.error('加载快捷键失败:', error)
+          // 初始化快捷键管理器
+          shortcutManager = new ShortcutManager()
+          if (mainWindow) {
+            shortcutManager.setMainWindow(mainWindow)
+            console.log('✅ 快捷键管理器已初始化')
+          }
+
+          // IPC 已经在窗口创建时设置了基础 handlers
+          // 数据库初始化后，重新设置完整的 IPC（会覆盖之前的 handlers，添加数据库相关功能）
+          if (mainWindow) {
+            console.log('🔧 更新 IPC handlers（添加数据库支持）...')
+            setupIPC(db, mainWindow, fileMonitor, shortcutManager, trayService)
+            console.log('✅ IPC handlers 已更新')
+
+            // 加载并注册快捷键
+            if (shortcutManager) {
+              mainWindow.webContents.once('did-finish-load', async () => {
+                try {
+                  await mainWindow?.webContents.executeJavaScript(`
+                    window.electronAPI.loadShortcuts()
+                  `)
+                } catch (error) {
+                  console.error('加载快捷键失败:', error)
+                }
+              })
+            }
+          }
+
+          resolve()
+        } else {
+          throw new Error('数据库初始化标志未设置')
         }
-      })
-    }
-  } else {
-    console.warn('⚠️ IPC 未设置：主窗口未创建')
-  }
+      } catch (error: any) {
+        console.error('='.repeat(60))
+        console.error('❌ 数据库初始化失败!')
+        console.error('='.repeat(60))
+        console.error('错误信息:', error?.message || error)
+        if (error?.stack) {
+          console.error('错误堆栈:', error.stack)
+        }
+        console.error('')
+        console.error('⚠️ 可能的原因:')
+        console.error('  1. @vscode/sqlite3 模块未正确安装')
+        console.error('  2. 数据库文件权限问题')
+        console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
+        console.error('  4. deasync 模块未正确编译')
+        console.error('')
+        console.error('💡 解决方案:')
+        console.error('  1. 重新安装依赖: npm install')
+        console.error('  2. 重新编译原生模块: npm run rebuild')
+        console.error('  3. 检查数据库文件权限')
+        console.error('  4. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
+        console.error('')
+        console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
+        console.error('='.repeat(60))
+        db = null
+        // 即使数据库初始化失败，也设置基础 IPC（如果还没设置）
+        if (mainWindow) {
+          console.log('🔧 数据库初始化失败，但应用将继续运行')
+          // IPC 已经在窗口创建时设置了，不需要重复设置
+        }
+        resolve() // 即使失败也resolve，让应用继续运行
+      }
+    }, 100) // 延迟 100ms，确保窗口先创建
+  })
+
+  // 不使用 await，让数据库初始化在后台完成
+  // 界面会立即响应，数据库会在100ms后初始化完成
+  // 所有依赖数据库的初始化（主题、托盘、快捷键、IPC）都在Promise内部完成
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
