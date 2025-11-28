@@ -288,10 +288,17 @@ app.whenReady().then(async () => {
   // 先创建窗口，避免数据库初始化阻塞界面
   createWindow()
 
+  // 立即初始化快捷键管理器（不依赖数据库）
+  shortcutManager = new ShortcutManager()
+  if (mainWindow) {
+    shortcutManager.setMainWindow(mainWindow)
+    console.log('✅ 快捷键管理器已初始化')
+  }
+
   // 立即设置基础 IPC（不依赖数据库，让前端能正常工作）
   if (mainWindow) {
     console.log('🔧 设置基础 IPC handlers...')
-    setupIPC(null, mainWindow, null, null, null)
+    setupIPC(null, mainWindow, null, shortcutManager, null)
     console.log('✅ 基础 IPC 已设置')
   }
 
@@ -346,11 +353,10 @@ app.whenReady().then(async () => {
             })
           }
 
-          // 初始化快捷键管理器
-          shortcutManager = new ShortcutManager()
-          if (mainWindow) {
+          // 快捷键管理器已经在窗口创建时初始化，这里只需要确保窗口已设置
+          if (mainWindow && shortcutManager) {
             shortcutManager.setMainWindow(mainWindow)
-            console.log('✅ 快捷键管理器已初始化')
+            console.log('✅ 快捷键管理器窗口已更新')
           }
 
           // IPC 已经在窗口创建时设置了基础 handlers
