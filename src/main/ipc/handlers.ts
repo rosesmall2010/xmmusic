@@ -144,18 +144,37 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return result.canceled ? null : result.filePath
   })
 
+  // 检查数据库状态
+  ipcMain.handle('check-database-status', () => {
+    return {
+      initialized: db !== null && db.isInitialized(),
+      exists: db !== null
+    }
+  })
+
   // 扫描管理器状态
   let currentScanner: FileScanner | null = null
 
   ipcMain.handle('scan-music-folder', async (_, path: string) => {
+    // 等待数据库初始化（最多等待 5 秒）
+    const maxWaitTime = 5000 // 5 秒
+    const checkInterval = 100 // 每 100ms 检查一次
+    let waited = 0
+
+    while ((!db || !db.isInitialized()) && waited < maxWaitTime) {
+      console.log(`⏳ 等待数据库初始化... (已等待 ${waited}ms)`)
+      await new Promise(resolve => setTimeout(resolve, checkInterval))
+      waited += checkInterval
+    }
+
     // 检查数据库是否已初始化
     if (!db || !db.isInitialized()) {
       const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
         '可能的原因：\n' +
-        '1. @vscode/sqlite3 模块未正确安装\n' +
-        '2. deasync 模块未正确编译\n' +
-        '3. 数据库文件权限问题\n' +
-        '4. 数据库初始化失败（检查终端日志）\n\n' +
+        '1. 数据库初始化失败（检查终端日志）\n' +
+        '2. @vscode/sqlite3 模块未正确安装\n' +
+        '3. deasync 模块未正确编译\n' +
+        '4. 数据库文件权限问题\n\n' +
         '请查看终端控制台的错误信息，或尝试：\n' +
         '1. 重新安装依赖: npm install\n' +
         '2. 重新编译原生模块: npm run rebuild\n' +
@@ -163,6 +182,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       console.error('❌ 数据库未初始化，无法执行扫描操作')
       console.error(`   数据库对象存在: ${db !== null}`)
       console.error(`   数据库已初始化: ${db?.isInitialized() || false}`)
+      console.error(`   已等待时间: ${waited}ms`)
       console.error('💡 提示：请检查终端控制台的数据库初始化错误信息')
       throw new Error(errorMsg)
     }
