@@ -75,6 +75,7 @@ export default class FileScanner {
    */
   async scanAllDirectories(options: ScanOptions): Promise<ScanResult> {
     // 1. 获取所有启用的扫描根目录
+    // 注意：better-sqlite3 是同步的，不需要 await
     const scanDirs = this.db.getEnabledLocalMusicDirs()
 
     if (scanDirs.length === 0) {
@@ -99,6 +100,17 @@ export default class FileScanner {
     }
 
     const startTime = Date.now()
+
+    // 发送开始扫描的进度事件
+    if (options.onProgress) {
+      options.onProgress({
+        current: 0,
+        total: 0,
+        currentFile: '',
+        speed: 0,
+        percentage: 0
+      })
+    }
 
     // 3. 逐个扫描每个根目录
     for (const scanDir of scanDirs) {
@@ -161,30 +173,48 @@ export default class FileScanner {
     let lastProgressUpdate = 0
     const PROGRESS_UPDATE_INTERVAL = 100 // 每100ms最多更新一次进度
 
+    // 发送初始进度（total > 0 时）
+    if (total > 0 && options.onProgress) {
+      options.onProgress({
+        current: 0,
+        total,
+        currentFile: '',
+        speed: 0,
+        percentage: 0
+      })
+    }
+
     // 3. 批量获取目录ID映射（性能优化）
+    // 注意：better-sqlite3 是同步的，不需要 await
     const dirPaths = [...new Set(files.map(f => parsePath(f, process.platform).dirPath))]
     const dirIdMap = batchGetOrCreateMusicDir(this.db.getDatabase(), dirPaths, process.platform)
 
     // 进度更新函数（节流）
-    const updateProgress = (file: string) => {
+    const updateProgress = (file: string, force: boolean = false) => {
       const now = Date.now()
-      if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
+      if (force || now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
         lastProgressUpdate = now
         if (options.onProgress && !this.isCancelled) {
           // 使用 setImmediate 让出控制权，避免阻塞
           setImmediate(() => {
-            if (options.onProgress) {
+            if (options.onProgress && !this.isCancelled) {
+              const elapsed = (Date.now() - startTime) / 1000
               options.onProgress({
                 current,
                 total,
                 currentFile: file,
-                speed: current / ((Date.now() - startTime) / 1000),
-                percentage: (current / total) * 100
+                speed: elapsed > 0 ? current / elapsed : 0,
+                percentage: total > 0 ? (current / total) * 100 : 0
               })
             }
           })
         }
       }
+    }
+
+    // 发送初始进度（文件收集完成后）
+    if (total > 0 && options.onProgress) {
+      updateProgress('', true)
     }
 
     // 处理文件
@@ -234,18 +264,15 @@ export default class FileScanner {
       }
     }
 
-    // 确保最后更新一次进度
-    if (options.onProgress && !this.isCancelled && current > 0) {
-      setImmediate(() => {
-        if (options.onProgress) {
-          options.onProgress({
-            current,
-            total,
-            currentFile: '',
-            speed: current / ((Date.now() - startTime) / 1000),
-            percentage: 100
-          })
-        }
+    // 确保最后更新一次进度（完成时）
+    if (options.onProgress && !this.isCancelled && total > 0) {
+      const elapsed = (Date.now() - startTime) / 1000
+      options.onProgress({
+        current,
+        total,
+        currentFile: '',
+        speed: elapsed > 0 ? current / elapsed : 0,
+        percentage: 100
       })
     }
 
