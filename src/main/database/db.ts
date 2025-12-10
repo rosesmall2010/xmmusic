@@ -1942,11 +1942,13 @@ export default class MusicDatabase {
   addSearchHistory(query: string, searchType: 'basic' | 'advanced' = 'basic', criteria?: AdvancedSearchCriteria): void {
     if (!this.db) return
     try {
+      // v1.0.6 新架构：search_history 表只有 query、search_type、created_at 列
+      // criteria 信息不再单独存储（如果需要可以序列化到 query 中）
       const stmt = this.db.prepare(`
-        INSERT INTO search_history (query, search_type, criteria)
-        VALUES (?, ?, ?)
+        INSERT INTO search_history (query, search_type)
+        VALUES (?, ?)
       `)
-      stmt.run(query, searchType, criteria ? JSON.stringify(criteria) : null)
+      stmt.run(query, searchType)
 
       // 只保留最近 10 条历史记录
       const deleteStmt = this.db.prepare(`
