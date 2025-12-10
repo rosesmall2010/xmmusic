@@ -717,7 +717,7 @@ export default class MusicDatabase {
   }
 
   getMusicTotalCount(): number {
-    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM music WHERE is_duplicate = 0')
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM all_music WHERE is_duplicate = 0')
     const result = stmt.get() as { count: number }
     return result.count
   }
@@ -729,130 +729,175 @@ export default class MusicDatabase {
     }
 
     try {
+      // 使用 all_music_fts 全文搜索表（v1.0.6 新架构）
       const stmt = this.db!.prepare(`
-        SELECT m.*
-        FROM music_fts fts
-        JOIN music m ON m.id = fts.rowid
-        WHERE music_fts MATCH ?
+        SELECT
+          am.*,
+          md.path as dir_path
+        FROM all_music_fts fts
+        JOIN all_music am ON am.id = fts.rowid
+        JOIN music_dir md ON am.dir_id = md.id
+        WHERE all_music_fts MATCH ?
         ORDER BY rank
         LIMIT ?
       `)
       // 添加通配符支持模糊搜索
       const searchQuery = `${query.trim()}*`
       const rows = stmt.all(searchQuery, limit) as any[]
-      return rows.map(row => this.mapRowToMusicItem(row))
+      return rows.map(row => {
+        const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+        return this.mapAllMusicRowToMusicItem(row, fullPath)
+      })
     } catch (error) {
       console.error('搜索错误:', error)
       // 如果 FTS5 搜索失败，使用 LIKE 作为回退
       const stmt = this.db!.prepare(`
-        SELECT * FROM music
-        WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
+        SELECT
+          am.*,
+          md.path as dir_path
+        FROM all_music am
+        JOIN music_dir md ON am.dir_id = md.id
+        WHERE am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ?
         LIMIT ?
       `)
       const likeQuery = `%${query.trim()}%`
       const rows = stmt.all(likeQuery, likeQuery, likeQuery, limit) as any[]
-      return rows.map(row => this.mapRowToMusicItem(row))
+      return rows.map(row => {
+        const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+        return this.mapAllMusicRowToMusicItem(row, fullPath)
+      })
     }
   }
 
   advancedSearch(criteria: AdvancedSearchCriteria): MusicItem[] {
-    const conditions: string[] = ['is_duplicate = 0']
+    const conditions: string[] = ['am.is_duplicate = 0']
     const params: any[] = []
 
     if (criteria.keyword) {
       const like = `%${criteria.keyword.trim()}%`
-      conditions.push('(title LIKE ? OR artist LIKE ? OR album LIKE ? OR file_name LIKE ?)')
+      conditions.push('(am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ? OR am.file_name LIKE ?)')
       params.push(like, like, like, like)
     }
 
     if (criteria.artist) {
-      conditions.push('artist LIKE ?')
+      conditions.push('am.artist LIKE ?')
       params.push(`%${criteria.artist.trim()}%`)
     }
 
     if (criteria.album) {
-      conditions.push('album LIKE ?')
+      conditions.push('am.album LIKE ?')
       params.push(`%${criteria.album.trim()}%`)
     }
 
     if (criteria.genre) {
-      conditions.push('genre LIKE ?')
+      conditions.push('am.genre LIKE ?')
       params.push(`%${criteria.genre.trim()}%`)
     }
 
     if (criteria.favorite !== undefined) {
-      // 使用独立的收藏表进行过滤
+      // 使用独立的收藏表进行过滤（基于 music_id）
       if (criteria.favorite) {
-        conditions.push('file_path IN (SELECT file_path FROM favorites)')
+        conditions.push('am.id IN (SELECT music_id FROM favorites)')
       } else {
-        conditions.push('file_path NOT IN (SELECT file_path FROM favorites)')
+        conditions.push('am.id NOT IN (SELECT music_id FROM favorites)')
       }
     }
 
     if (criteria.directory) {
-      conditions.push('file_path LIKE ?')
-      params.push(`${criteria.directory.replace(/%/g, '\\%')}%`)
+      // 使用 music_dir 表进行目录过滤
+      const dirPattern = `${criteria.directory.replace(/%/g, '\\%')}%`
+      conditions.push('md.path LIKE ?')
+      params.push(dirPattern)
     }
 
     if (criteria.fileExtension) {
-      conditions.push('file_extension = ?')
+      conditions.push('am.file_extension = ?')
       params.push(criteria.fileExtension.toLowerCase())
     }
 
     if (criteria.minDuration !== undefined) {
-      conditions.push('duration >= ?')
+      conditions.push('am.duration >= ?')
       params.push(criteria.minDuration)
     }
 
     if (criteria.maxDuration !== undefined) {
-      conditions.push('duration <= ?')
+      conditions.push('am.duration <= ?')
       params.push(criteria.maxDuration)
     }
 
     if (criteria.yearFrom !== undefined) {
-      conditions.push('(year IS NOT NULL AND year >= ?)')
+      conditions.push('(am.year IS NOT NULL AND am.year >= ?)')
       params.push(criteria.yearFrom)
     }
 
     if (criteria.yearTo !== undefined) {
-      conditions.push('(year IS NOT NULL AND year <= ?)')
+      conditions.push('(am.year IS NOT NULL AND am.year <= ?)')
       params.push(criteria.yearTo)
     }
 
     const sortFieldMap: Record<string, string> = {
-      addedAt: 'added_at',
-      title: 'title',
-      duration: 'duration',
-      playCount: 'play_count'
+      addedAt: 'am.added_at',
+      title: 'am.title',
+      duration: 'am.duration',
+      playCount: 'am.play_count'
     }
     const sortField = sortFieldMap[criteria.sortBy || 'addedAt']
     const sortOrder = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC'
     const limit = criteria.limit && criteria.limit > 0 ? criteria.limit : 200
 
+    // 使用 all_music 表和 music_dir 表进行查询
     const stmt = this.db!.prepare(`
-      SELECT * FROM music
+      SELECT
+        am.*,
+        md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
       WHERE ${conditions.join(' AND ')}
       ORDER BY ${sortField} ${sortOrder}
       LIMIT ?
     `)
     const rows = stmt.all(...params, limit) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return this.mapAllMusicRowToMusicItem(row, fullPath)
+    })
   }
 
   getMusicByHash(hash: string): MusicItem[] {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE file_hash = ?')
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE am.file_hash = ?
+    `)
     const rows = stmt.all(hash) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return this.mapAllMusicRowToMusicItem(row, fullPath)
+    })
   }
 
   getMusicByGenre(genre: string): MusicItem[] {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE genre = ? AND is_duplicate = 0 ORDER BY title')
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE am.genre = ? AND am.is_duplicate = 0
+      ORDER BY am.title
+    `)
     const rows = stmt.all(genre) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return this.mapAllMusicRowToMusicItem(row, fullPath)
+    })
   }
 
   getSimilarMusic(musicId: number, limit: number = 20, minSimilarity: number = 0.5): Array<MusicItem & { similarity: number }> {
-    const target = this.getMusicById(musicId)
+    const target = this.getAllMusicById(musicId)
     if (!target) {
       return []
     }
@@ -864,34 +909,37 @@ export default class MusicDatabase {
     const yearWeight = 0.1
     const durationWeight = 0.1
 
-    // 构建相似度计算SQL - 使用子查询来过滤 similarity
+    // 构建相似度计算SQL - 使用子查询来过滤 similarity（v1.0.6 使用 all_music 表）
     const stmt = this.db!.prepare(`
       SELECT * FROM (
-        SELECT m.*,
+        SELECT
+          am.*,
+          md.path as dir_path,
           (
-            (CASE WHEN m.artist = ? THEN ${artistWeight} ELSE 0 END) +
-            (CASE WHEN m.album = ? THEN ${albumWeight} ELSE 0 END) +
-            (CASE WHEN m.genre = ? THEN ${genreWeight} ELSE 0 END) +
+            (CASE WHEN am.artist = ? THEN ${artistWeight} ELSE 0 END) +
+            (CASE WHEN am.album = ? THEN ${albumWeight} ELSE 0 END) +
+            (CASE WHEN am.genre = ? THEN ${genreWeight} ELSE 0 END) +
             (CASE
-              WHEN m.year IS NOT NULL AND ? IS NOT NULL THEN
-                ${yearWeight} * (1.0 - ABS(m.year - ?) / 50.0)
+              WHEN am.year IS NOT NULL AND ? IS NOT NULL THEN
+                ${yearWeight} * (1.0 - ABS(am.year - ?) / 50.0)
               ELSE 0
             END) +
             (CASE
-              WHEN m.duration > 0 AND ? > 0 THEN
-                ${durationWeight} * (1.0 - ABS(m.duration - ?) / 600.0)
+              WHEN am.duration > 0 AND ? > 0 THEN
+                ${durationWeight} * (1.0 - ABS(am.duration - ?) / 600.0)
               ELSE 0
             END)
           ) AS similarity
-        FROM music m
-        WHERE m.id != ?
-          AND m.is_duplicate = 0
+        FROM all_music am
+        JOIN music_dir md ON am.dir_id = md.id
+        WHERE am.id != ?
+          AND am.is_duplicate = 0
           AND (
-            m.artist = ? OR
-            m.album = ? OR
-            m.genre = ? OR
-            (m.year IS NOT NULL AND ? IS NOT NULL AND ABS(m.year - ?) <= 5) OR
-            (m.duration > 0 AND ? > 0 AND ABS(m.duration - ?) <= 60)
+            am.artist = ? OR
+            am.album = ? OR
+            am.genre = ? OR
+            (am.year IS NOT NULL AND ? IS NOT NULL AND ABS(am.year - ?) <= 5) OR
+            (am.duration > 0 AND ? > 0 AND ABS(am.duration - ?) <= 60)
           )
       )
       WHERE similarity >= ?
@@ -919,10 +967,13 @@ export default class MusicDatabase {
       limit
     ) as any[]
 
-    return rows.map(row => ({
-      ...this.mapRowToMusicItem(row),
-      similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
-    }))
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return {
+        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
+      }
+    })
   }
 
   // ========== 播放列表操作 ==========
