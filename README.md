@@ -71,7 +71,7 @@
 - **@tanstack/vue-virtual** `3.13.12` - 虚拟滚动
 
 ### 数据 & 工具
-- **@vscode/sqlite3** `5.1.2` - SQLite数据库
+- **better-sqlite3** `12.5.0` - SQLite数据库
 - **ExcelJS** `4.4.0` - Excel导入导出
 - **Fuse.js** `7.0.0` - 模糊搜索
 - **Chokidar** `4.0.3` - 文件监控
@@ -145,7 +145,7 @@ npm run dist:win    # Windows
     *   **Git**: 最新版本
     *   **包管理器**: npm (随 Node 安装)
 
-2.  **平台特定要求** (必须配置，因为项目使用了原生模块 `@vscode/sqlite3`)：
+2.  **平台特定要求** (必须配置，因为项目使用了原生模块 `better-sqlite3`)：
 
     *   **macOS**:
         *   安装 Xcode Command Line Tools: `xcode-select --install`

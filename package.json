@@ -37,6 +37,7 @@
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "concurrently": "^9.2.1",
@@ -51,11 +52,10 @@
   },
   "dependencies": {
     "@tanstack/vue-virtual": "^3.13.12",
-    "@vscode/sqlite3": "^5.1.2",
     "@vueuse/core": "^11.3.0",
+    "better-sqlite3": "^12.5.0",
     "chokidar": "^4.0.3",
     "colorthief": "^2.4.0",
-    "deasync": "^0.1.31",
     "exceljs": "^4.4.0",
     "fuse.js": "^7.0.0",
     "howler": "^2.2.4",

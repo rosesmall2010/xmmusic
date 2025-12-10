@@ -124,7 +124,7 @@ XMMusic 是基于 Electron 的跨平台本地音乐播放器，采用主进程 +
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| @vscode/sqlite3 | 5.1.2 | SQLite 数据库 |
+| better-sqlite3 | 12.5.0 | SQLite 数据库 |
 | ExcelJS | 4.4.0 | Excel 导入导出 |
 | Fuse.js | 7.0.0 | 模糊搜索 |
 | Chokidar | 4.0.3 | 文件监控 |

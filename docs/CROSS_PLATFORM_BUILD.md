@@ -11,7 +11,7 @@
 
 ## 问题说明
 
-xmmusic 使用了原生 Node.js 模块（`@vscode/sqlite3` 和 `deasync`），这些模块需要为不同平台编译不同的二进制文件。
+xmmusic 使用了原生 Node.js 模块（`better-sqlite3`），这些模块需要为不同平台编译不同的二进制文件。
 
 ### 技术限制
 
@@ -108,8 +108,7 @@ npm install
 
 # 打包原生模块
 tar -czf windows-native-modules.tar.gz \
-  node_modules/@vscode/sqlite3/build \
-  node_modules/deasync/bin
+  node_modules/better-sqlite3/build
 ```
 
 2. **传输到 macOS**：
@@ -148,8 +147,7 @@ docker build -f Dockerfile.win -t xmmusic-win-builder .
 docker create --name xmmusic-temp xmmusic-win-builder
 
 # 3. 复制原生模块
-docker cp xmmusic-temp:/app/node_modules/@vscode/sqlite3/build ./node_modules/@vscode/sqlite3/
-docker cp xmmusic-temp:/app/node_modules/deasync/bin ./node_modules/deasync/
+docker cp xmmusic-temp:/app/node_modules/better-sqlite3/build ./node_modules/better-sqlite3/
 
 # 4. 清理
 docker rm xmmusic-temp
@@ -177,13 +175,10 @@ npm run dist:win
 
 项目依赖以下原生模块：
 
-1. **@vscode/sqlite3** - SQLite 数据库驱动
+1. **better-sqlite3** - SQLite 数据库驱动
    - 用于音乐元数据存储
    - 需要为每个平台编译
-
-2. **deasync** - 同步等待库
-   - 用于将异步 SQLite 操作包装为同步接口
-   - 需要为每个平台编译
+   - v12.5.0 已提供 Electron 39/40 预编译二进制
 
 ### electron-builder 配置
 
@@ -197,8 +192,7 @@ npmRebuild: false
 
 # 原生模块从 asar 中解包
 asarUnpack:
-  - node_modules/@vscode/sqlite3/**/*
-  - node_modules/deasync/**/*
+  - node_modules/better-sqlite3/**/*
 ```
 
 ## 常见问题
@@ -249,5 +243,5 @@ git push --tags
 
 - [electron-builder 文档](https://www.electron.build/)
 - [GitHub Actions 文档](https://docs.github.com/en/actions)
-- [@vscode/sqlite3 文档](https://www.npmjs.com/package/@vscode/sqlite3)
+- [better-sqlite3 文档](https://github.com/WiseLibs/better-sqlite3)
 - [Node.js 原生模块指南](https://nodejs.org/api/addons.html)
