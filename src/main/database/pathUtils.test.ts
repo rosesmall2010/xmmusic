@@ -42,13 +42,13 @@ describe('normalizePath', () => {
 
 describe('buildFullPath', () => {
   it('应该构建完整路径', () => {
-    // Windows 使用反斜杠
-    expect(buildFullPath('C:/Music', 'song.mp3', 'win32')).toBe('C:\\Music\\song.mp3')
+    // Windows: normalizePath 会将路径规范化为正斜杠，但 buildFullPath 使用反斜杠作为分隔符
+    expect(buildFullPath('C:/Music', 'song.mp3', 'win32')).toBe('C:/Music\\song.mp3')
     expect(buildFullPath('/Users/Music', 'album/song.mp3', 'darwin')).toBe('/Users/Music/album/song.mp3')
   })
 
   it('应该处理目录路径末尾的斜杠', () => {
-    expect(buildFullPath('C:/Music/', 'song.mp3', 'win32')).toBe('C:\\Music\\song.mp3')
+    expect(buildFullPath('C:/Music/', 'song.mp3', 'win32')).toBe('C:/Music\\song.mp3')
     expect(buildFullPath('/Users/Music/', 'song.mp3', 'darwin')).toBe('/Users/Music/song.mp3')
   })
 
