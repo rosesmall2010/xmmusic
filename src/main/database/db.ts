@@ -693,27 +693,31 @@ export default class MusicDatabase {
     transaction()
   }
 
+  /**
+   * @deprecated 使用 getAllMusicById() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getMusicById(id: number): MusicItem | null {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE id = ?')
-    const row = stmt.get(id) as any
-    return row ? this.mapRowToMusicItem(row) : null
+    const result = this.getAllMusicById(id)
+    return result ? { ...result, fullPath: undefined as any } : null
   }
 
+  /**
+   * @deprecated 使用 getAllMusicByPath() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getMusicByPath(filePath: string): MusicItem | null {
-    const stmt = this.db!.prepare('SELECT * FROM music WHERE file_path = ?')
-    const row = stmt.get(filePath) as any
-    return row ? this.mapRowToMusicItem(row) : null
+    const result = this.getAllMusicByPath(filePath)
+    return result ? { ...result, fullPath: undefined as any } : null
   }
 
+  /**
+   * @deprecated 使用 getLocalMusicPaginated() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getMusicList(offset: number, limit: number): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT * FROM music
-      WHERE is_duplicate = 0
-      ORDER BY added_at DESC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = stmt.all(limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法
+    return this.getLocalMusicPaginated(offset, limit)
   }
 
   getMusicTotalCount(): number {
