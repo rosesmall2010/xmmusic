@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.6] - 2025-12-10
+
+### 变更
+- **数据库驱动升级**
+  - 将 `@vscode/sqlite3` + `deasync` 替换为 `better-sqlite3`
+  - 性能提升：better-sqlite3 相比原方案快 3-20 倍（视操作类型而定）
+  - 简化架构：移除 deasync 同步 hack，使用 better-sqlite3 原生同步 API
+  - sqlite3-sync.ts 包装层从 218 行精简至 ~80 行
+
+### 文档
+- 更新 README.md、SystemArchitecture.md、CROSS_PLATFORM_BUILD.md 中的数据库相关说明
+
 ## [1.0.5] - 2025-11-26
 
 ### 新增
