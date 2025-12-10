@@ -34,15 +34,43 @@ export default class MusicDatabase {
     return MusicDatabase.instance
   }
 
-  initialize(dbPath?: string): void {
+  initialize(dbPath?: string, skipVersionCheck: boolean = false): void {
     try {
       // 根据环境变量选择数据库文件名
       const isDev = process.env.NODE_ENV !== 'production'
-      const dbFileName = isDev ? 'xm-dev.db' : 'xm.db'
+      const dbFileName = isDev ? 'm-dev.db' : 'm.db'
       const path = dbPath || join(app.getPath('userData'), dbFileName)
 
       console.log(`🌍 运行环境: ${isDev ? '开发环境' : '生产环境'}`)
       console.log(`📂 数据库路径: ${path}`)
+
+      // 如果数据库文件已存在，先检查版本（避免不必要的删除）
+      if (existsSync(path) && !skipVersionCheck) {
+        try {
+          const tempDb = new Database(path)
+          // 尝试读取版本号
+          const versionStmt = tempDb.prepare('SELECT value FROM settings WHERE key = ?')
+          const versionResult = versionStmt.get(DB_VERSION_KEY) as { value: string } | undefined
+          tempDb.close()
+
+          if (versionResult && parseInt(versionResult.value) !== DB_VERSION) {
+            // 版本不匹配，删除数据库文件
+            console.warn(`⚠️  数据库版本不匹配，删除旧数据库文件...`)
+            unlinkSync(path)
+            console.log(`✅ 已删除旧数据库文件`)
+          }
+        } catch (checkError) {
+          // 如果读取失败（可能是旧版本数据库），删除文件
+          console.warn(`⚠️  无法读取数据库版本，删除旧数据库文件...`)
+          try {
+            unlinkSync(path)
+            console.log(`✅ 已删除旧数据库文件`)
+          } catch (deleteError) {
+            // 忽略删除错误
+          }
+        }
+      }
+
       console.log(`🔧 尝试创建数据库连接...`)
 
       try {
@@ -84,21 +112,24 @@ export default class MusicDatabase {
         throw migrateError
       }
 
-      // 创建索引
-      try {
-        this.createIndexes()
-        console.log(`✅ 数据库索引创建完成`)
-      } catch (indexError: any) {
-        console.error(`❌ 数据库索引创建失败: ${indexError?.message || indexError}`)
-        throw indexError
-      }
+      // 创建索引（迁移脚本中已包含索引创建，这里可以跳过或作为补充）
+      // 注意：007_v106_db_restructure.sql 已经包含了所有索引，这里可以跳过
+      // try {
+      //   this.createIndexes()
+      //   console.log(`✅ 数据库索引创建完成`)
+      // } catch (indexError: any) {
+      //   console.error(`❌ 数据库索引创建失败: ${indexError?.message || indexError}`)
+      //   throw indexError
+      // }
 
-      // 检查数据库版本
+      // 设置数据库版本
       try {
-        this.checkDatabaseVersion()
+        const stmt = this.db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)')
+        stmt.run(DB_VERSION_KEY, DB_VERSION.toString())
+        console.log(`✅ 数据库版本已设置为: ${DB_VERSION}`)
       } catch (versionError: any) {
-        console.error(`❌ 数据库版本检查失败: ${versionError?.message || versionError}`)
-        throw versionError
+        console.error(`❌ 设置数据库版本失败: ${versionError?.message || versionError}`)
+        // 不抛出错误，因为这不是致命错误
       }
     } catch (error: any) {
       // 清理失败的数据库连接
@@ -117,7 +148,7 @@ export default class MusicDatabase {
 
         try {
           const isDev = process.env.NODE_ENV !== 'production'
-          const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
+          const dbFileName = isDev ? 'm-dev.db' : 'm.db'
           const path = dbPath || join(app.getPath('userData'), dbFileName)
 
           if (require('fs').existsSync(path)) {
@@ -139,76 +170,21 @@ export default class MusicDatabase {
   }
 
   private migrate(): void {
-    // 执行初始迁移
-    const migrationPath = join(__dirname, 'migrations', '001_initial.sql')
-    if (existsSync(migrationPath)) {
-      const sql = readFileSync(migrationPath, 'utf8')
-      this.db!.exec(sql)
-    }
-
-    // 执行搜索历史迁移
-    const searchHistoryPath = join(__dirname, 'migrations', '002_add_search_history.sql')
-    if (existsSync(searchHistoryPath)) {
-      try {
-        const sql = readFileSync(searchHistoryPath, 'utf8')
-        this.db!.exec(sql)
-      } catch (error) {
-        // 表可能已存在，忽略错误
-        console.log('Search history migration:', error)
-      }
-    }
-
-    // 执行收藏表迁移
+    // v1.0.6 数据库重构：直接执行新的迁移脚本，不进行数据迁移
+    // 新数据库直接创建新结构，旧数据库会被删除重建
     try {
-      const favoritesPath = join(__dirname, 'migrations', '004_create_favorites_table.sql')
-      if (existsSync(favoritesPath)) {
-        const sql = readFileSync(favoritesPath, 'utf8')
+      const v106MigrationPath = join(__dirname, 'migrations', '007_v106_db_restructure.sql')
+      if (existsSync(v106MigrationPath)) {
+        console.log('📦 执行 v1.0.6 数据库重构迁移...')
+        const sql = readFileSync(v106MigrationPath, 'utf8')
         this.db!.exec(sql)
+        console.log('✅ v1.0.6 数据库重构迁移完成')
+      } else {
+        console.warn('⚠️  v1.0.6 迁移脚本未找到，跳过迁移')
       }
     } catch (error: any) {
-      // 表可能已存在
-      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('already exists')) {
-        console.error('Favorites table migration error:', error)
-      }
-    }
-
-    // 执行歌单增强迁移
-    try {
-      const playlistEnhancementsPath = join(
-        __dirname,
-        'migrations',
-        '005_playlist_enhancements.sql'
-      )
-      if (existsSync(playlistEnhancementsPath)) {
-        const sql = readFileSync(playlistEnhancementsPath, 'utf8')
-        this.db!.exec(sql)
-      }
-    } catch (error: any) {
-      // 列可能已存在
-      if (error?.code !== 'SQLITE_ERROR' || !error?.message?.includes('duplicate column')) {
-        console.error('Playlist enhancements migration error:', error)
-      }
-    }
-
-    // 执行 v1.0.5 列表独立性架构迁移
-    try {
-      const listIndependencePath = join(
-        __dirname,
-        'migrations',
-        '006_v105_list_independence.sql'
-      )
-      if (existsSync(listIndependencePath)) {
-        const sql = readFileSync(listIndependencePath, 'utf8')
-        this.db!.exec(sql)
-        console.log('✅ v1.0.5 列表独立性架构迁移完成')
-      }
-    } catch (error: any) {
-      // 表或列可能已存在
-      if (error?.code !== 'SQLITE_ERROR' ||
-          (!error?.message?.includes('already exists') &&
-           !error?.message?.includes('duplicate column'))) {
-        console.error('List independence migration error:', error)
-      }
+      console.error('❌ v1.0.6 数据库迁移失败:', error)
+      throw error
     }
 
     // 执行播放列表迁移（从 music_id 改为 file_path）
@@ -1580,17 +1556,15 @@ export default class MusicDatabase {
       }
 
       if (storedVersion !== DB_VERSION) {
-        // 版本不匹配，需要清空并重建
+        // 版本不匹配（这种情况不应该发生，因为在 initialize 开始时已经检查过了）
         console.warn(`⚠️  数据库版本不匹配！`)
         console.warn(`   预期版本: ${DB_VERSION}`)
         console.warn(`   实际版本: ${storedVersion}`)
-        console.warn(`🔄 开始清空并重建数据库...`)
-
-        this.clearAndRebuildDatabase()
-
-        console.log(`✅ 数据库已清空并重建`)
+        // 更新版本号
+        this.setSetting(DB_VERSION_KEY, DB_VERSION.toString())
+        console.log(`✅ 已更新数据库版本为: ${DB_VERSION}`)
       } else {
-        console.log(`✅ 数据库版本匹配，无需重建`)
+        console.log(`✅ 数据库版本匹配`)
       }
     } catch (error: any) {
       console.error(`❌ 版本检查失败:`, error)
