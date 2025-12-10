@@ -114,6 +114,8 @@ export interface ScanOptions {
   recursive: boolean
   fileTypes: string[]
   excludePaths: string[]
+  concurrency?: number
+  forceRescan?: boolean
   onProgress?: (progress: ScanProgress) => void
 }
 

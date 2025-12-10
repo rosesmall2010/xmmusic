@@ -474,6 +474,7 @@ export default class MusicDatabase {
     genre: string | null
     cover_path: string | null
     lyrics_path: string | null
+    file_size: number
     is_exists: number
     is_playable: number
     play_error_reason: string | null

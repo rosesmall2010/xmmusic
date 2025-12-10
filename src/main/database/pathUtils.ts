@@ -316,7 +316,9 @@ export class MusicDirCache {
     // 如果缓存已满，删除最旧的条目（FIFO）
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value
-      this.cache.delete(firstKey)
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey)
+      }
     }
 
     this.cache.set(path, dirId)
