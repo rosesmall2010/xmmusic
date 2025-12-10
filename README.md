@@ -134,48 +134,147 @@ npm run dist:win    # Windows
 
 > 待添加应用截图
 
-## � 开发
+## 💻 开发指南
 
-### 项目结构
+### 🔧 环境搭建
+
+在开始开发之前，请确保你的环境满足以下要求：
+
+1.  **基础环境**:
+    *   **Node.js**: >= 18.0.0 (推荐 v20 LTS)
+    *   **Git**: 最新版本
+    *   **包管理器**: npm (随 Node 安装)
+
+2.  **平台特定要求** (必须配置，因为项目使用了原生模块 `@vscode/sqlite3`)：
+
+    *   **macOS**:
+        *   安装 Xcode Command Line Tools: `xcode-select --install`
+        *   Python 3.11+ (推荐使用 Homebrew安装: `brew install python@3.11`)
+
+    *   **Windows**:
+        *   **方案 A (推荐)**: 以管理员身份运行 Powershell 安装构建工具:
+            ```powershell
+            npm install --global --production windows-build-tools
+            ```
+        *   **方案 B**: 安装 Visual Studio Community (勾选 "Desktop development with C++")
+        *   需安装 Python 3.11+ 并添加到 PATH
+
+    *   **Linux (Ubuntu/Debian)**:
+        ```bash
+        sudo apt-get install build-essential libsqlite3-dev python3
+        ```
+
+### 📂 项目目录结构
 
 ```
 xmmusic/
 ├── src/
-│   ├── main/           # Electron主进程
-│   │   ├── database/   # 数据库
-│   │   ├── ipc/        # IPC通信
-│   │   ├── services/   # 服务(托盘、快捷键等)
-│   │   └── main.ts     # 主进程入口
-│   └── renderer/       # Vue渲染进程
-│       ├── components/ # 组件
-│       ├── views/      # 页面
-│       ├── stores/     # Pinia状态
-│       ├── composables/# 组合式函数
-│       └── utils/      # 工具函数
-├── build/              # 构建资源
-└── scripts/            # 构建脚本
+│   ├── main/                 # 🟢 Electron 主进程 (Node.js 环境)
+│   │   ├── database/         # 数据库层 (SQLite 封装, 定义 Model 和 Migration)
+│   │   ├── ipc/              # IPC 通信处理 (注册 invoke/on 事件)
+│   │   ├── services/         # 业务逻辑服务 (文件扫描, 托盘, 快捷键)
+│   │   └── main.ts           # 应用入口，负责创建窗口和初始化服务
+│   │
+│   ├── renderer/             # 🔵 Vue 渲染进程 (浏览器环境)
+│   │   ├── components/       # 通用 UI 组件 (Button, Modal 等)
+│   │   ├── views/            # 路由页面 (Home, Playlist, Settings 等)
+│   │   ├── stores/           # Pinia 状态管理 (PlayerStore, DataStore)
+│   │   └── utils/            # 前端工具函数
+│   │
+│   └── shared/               # 🟡 共享代码
+│       └── types/            # TypeScript 类型定义 (前后端共用)
+│
+├── build/                    # 构建所需的静态资源 (应用图标等)
+└── scripts/                  # 工程脚本 (数据库迁移, 构建辅助)
 ```
 
-### 开发环境要求
+### 🐛 调试与工具
 
-- Node.js >= 18
-- npm >= 9
+1.  **启动开发模式**:
+    ```bash
+    npm run dev
+    ```
+    此命令会同时启动 Vite 开发服务器 (渲染进程) 和 Electron (主进程)。
 
-### 调试
+2.  **DevTools (开发者工具)**:
+    *   **自动开启**: 在 `npm run dev` 模式下，主窗口会自动打开 DevTools。
+    *   **手动切换**:
+        *   **macOS**: `Cmd + Option + I`
+        *   **Windows / Linux**: `Ctrl + Shift + I`
+    *   **功能**: 可用于查看 Console 日志、调试 DOM/CSS、监控 Network 请求 (仅限渲染进程请求)。
 
-```bash
-# 启动开发服务器(带DevTools)
-npm run dev
+3.  **数据库调试**:
+    *   **开发环境**: 使用完全独立的数据库，避免污染生产数据。
+    *   **文件位置**:
+        *   macOS: `~/Library/Application Support/xmmusic-dev/xmmusic-dev.db`
+        *   Windows: `%APPDATA%/xmmusic-dev/xmmusic-dev.db`
+    *   **查看**: 推荐使用 **DB Browser for SQLite** 或 VS Code 插件打开该文件查看实时数据。
 
-# 重新构建原生模块
-# 重新构建原生模块
-npm run rebuild
-```
+4.  **常见问题**:
+    *   **原生模块报错**: 如果遇到 `Module not found` 或 DLL 错误，请运行 `npm run rebuild`。
+    *   **端口占用**: 默认使用 3000 端口，如果被占用，Vite 会自动切换，控制台会显示实际地址。
 
-### 数据库隔离
+### 🔌 跨平台开发注意事项
 
-开发环境会自动使用独立的 UserData 目录 (`xmmusic-dev`) 和数据库 (`xmmusic-dev.db`)，
-确保开发测试数据不会污染已安装的生产版本数据，同时避免数据库锁定冲突。
+*   **路径处理**: 严禁硬编码分隔符 (如 `\\` 或 `/`)，必须使用 `path.join()`。
+*   **窗口控制**:
+    *   **macOS**: 使用原生"红绿灯"按钮 (HiddenInset 风格)。
+    *   **Windows**: 隐藏原生标题栏，使用前端模拟的控制按钮。
+    *   代码中通过 `process.platform === 'darwin'` 区分处理逻辑。
+
+## 📘 开发流程指南
+
+如果你想为 xmmusic 开发新功能（特别是涉及数据库、文件操作和 UI 的功能），请参考以下标准流程。本指南特别适合使用 **Cursor**、**VS Code + Copilot** 等 AI IDE 的开发者。
+
+### 🤖 AI 辅助开发建议
+
+在使用 AI IDE 时，为了获得最佳代码生成效果：
+
+1.  **明确上下文**: 在提问前，打开相关文件（如 `db.ts`, `types/music.ts`, `handlers.ts`）。
+2.  **分步指令**: 不要一次性要求完成所有功能，建议按 `数据库 -> 后端逻辑 -> IPC接口 -> 前端UI` 的顺序分步进行。
+3.  **遵循规范**: 提示 AI "请遵循项目现有的代码风格和设计模式"。
+
+### 📋 标准开发步骤
+
+以"开发一个功能"为例（例如：添加"音乐备注"功能）：
+
+#### Step 1: 数据库设计 & 类型定义
+
+1.  **定义类型**: 在 `src/shared/types/` 下修改或创建类型定义。
+2.  **创建迁移脚本**:
+    - 在 `src/main/database/migrations/` 创建新 SQL 文件（自增序号）。
+    - 编写 `ALTER TABLE` 或 `CREATE TABLE` 语句。
+3.  **更新数据库类**:
+    - 在 `src/main/database/db.ts` 中实现 CRUD 方法。
+    - **注意**: 涉及文件路径时，必须同步计算并存储 `file_path_md5`。
+
+#### Step 2: 后端服务与文件操作
+
+如果功能涉及文件读写（如封面提取、歌词保存）：
+
+1.  **创建/更新服务**: 在 `src/main/services/` 下编写逻辑（如 `NoteManager.ts`）。
+2.  **处理文件路径**: 始终使用绝对路径，注意跨平台兼容性 (`path.join`)。
+
+#### Step 3: IPC 通信定义
+
+1.  **注册 Handler**: 在 `src/main/ipc/handlers.ts` 中注册 `ipcMain.handle`。
+2.  **暴露接口**: 在 `src/main/preload.ts` 中暴露方法给渲染进程。
+3.  **扩展类型**: 更新 `src/electron.d.ts` 确保 TypeScript 类型安全。
+
+#### Step 4: 前端界面实现
+
+1.  **状态管理**: 在 `src/renderer/stores/` 中更新 Pinia store（如果数据需要全局共享）。
+2.  **组件开发**:
+    - 在 `src/renderer/components/` 创建 Vue 组件。
+    - 使用 `window.electronAPI.xxx` 调用后端接口。
+3.  **页面集成**: 将组件添加到 `src/renderer/views/` 下的对应页面。
+
+### 💡 最佳实践
+
+- **数据库隔离**: 开发时项目会自动使用 `xmmusic-dev.db`，放心测试，不会影响生产数据。
+- **文件操作**: 避免直接在渲染进程使用 Node.js API，必须通过 IPC 调用主进程方法。
+- **图标使用**: 请使用 `lucide-vue-next` 图标库，保持风格统一。
+- **异步处理**: 耗时操作（如批量扫描）应支持进度回调，避免阻塞主线程。
 
 ## 🤝 贡献
 
