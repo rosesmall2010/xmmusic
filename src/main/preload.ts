@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearRecentPlays: () => ipcRenderer.invoke('clear-recent-plays'),
   clearPlaylist: (playlistId: number) => ipcRenderer.invoke('clear-playlist', playlistId),
 
-  // 音乐目录
+  // 音乐目录（旧版，保留兼容）
   getMusicDirectories: () => ipcRenderer.invoke('get-music-directories'),
   addMusicDirectory: (directory: any) =>
     ipcRenderer.invoke('add-music-directory', directory),
@@ -106,6 +106,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-music-directory', id, updates),
   deleteMusicDirectory: (id: string) =>
     ipcRenderer.invoke('delete-music-directory', id),
+
+  // 本地音乐目录管理（v1.0.6 新架构）
+  addLocalMusicDir: (path: string, displayOrder?: number) =>
+    ipcRenderer.invoke('local-music-dir:add', path, displayOrder),
+  deleteLocalMusicDir: (id: number, options?: { removeScannedFiles?: boolean }) =>
+    ipcRenderer.invoke('local-music-dir:delete', id, options),
+  updateLocalMusicDir: (id: number, updates: { path?: string; display_order?: number; enabled?: boolean }) =>
+    ipcRenderer.invoke('local-music-dir:update', id, updates),
+  getAllLocalMusicDirs: (options?: { enabled?: boolean; sortBy?: 'display_order' | 'created_at' | 'path'; order?: 'ASC' | 'DESC' }) =>
+    ipcRenderer.invoke('local-music-dir:get-all', options),
+  getEnabledLocalMusicDirs: () => ipcRenderer.invoke('local-music-dir:get-enabled'),
+  getLocalMusicDirById: (id: number) => ipcRenderer.invoke('local-music-dir:get-by-id', id),
+  updateLocalMusicDirOrders: (orders: Record<number, number>) =>
+    ipcRenderer.invoke('local-music-dir:update-orders', orders),
+  validateLocalMusicDir: (path: string) => ipcRenderer.invoke('local-music-dir:validate', path),
+  scanAllDirectories: (options?: { concurrency?: number; fileTypes?: string[]; excludePaths?: string[]; forceRescan?: boolean }) =>
+    ipcRenderer.invoke('scan-all-directories', options),
 
   // 设置
   getSettings: () => ipcRenderer.invoke('get-settings'),
@@ -282,6 +299,16 @@ declare global {
       addMusicDirectory: (directory: any) => Promise<string>
       updateMusicDirectory: (id: string, updates: any) => Promise<void>
       deleteMusicDirectory: (id: string) => Promise<void>
+      // 本地音乐目录管理（v1.0.6）
+      addLocalMusicDir: (path: string, displayOrder?: number) => Promise<number>
+      deleteLocalMusicDir: (id: number, options?: { removeScannedFiles?: boolean }) => Promise<void>
+      updateLocalMusicDir: (id: number, updates: { path?: string; display_order?: number; enabled?: boolean }) => Promise<void>
+      getAllLocalMusicDirs: (options?: { enabled?: boolean; sortBy?: 'display_order' | 'created_at' | 'path'; order?: 'ASC' | 'DESC' }) => Promise<Array<{ id: number; path: string; display_order: number; enabled: boolean; created_at: string }>>
+      getEnabledLocalMusicDirs: () => Promise<Array<{ id: number; path: string; display_order: number; enabled: boolean; created_at: string }>>
+      getLocalMusicDirById: (id: number) => Promise<{ id: number; path: string; display_order: number; enabled: boolean; created_at: string } | null>
+      updateLocalMusicDirOrders: (orders: Record<number, number>) => Promise<void>
+      validateLocalMusicDir: (path: string) => Promise<{ valid: boolean; error?: string }>
+      scanAllDirectories: (options?: { concurrency?: number; fileTypes?: string[]; excludePaths?: string[]; forceRescan?: boolean }) => Promise<ScanResult>
       getSettings: () => Promise<any>
       saveSettings: (settings: any) => Promise<void>
       clearCache: () => Promise<boolean>
