@@ -38,7 +38,7 @@ export default class MusicDatabase {
     try {
       // 根据环境变量选择数据库文件名
       const isDev = process.env.NODE_ENV !== 'production'
-      const dbFileName = isDev ? 'xmmusic-dev.db' : 'xmmusic.db'
+      const dbFileName = isDev ? 'xm-dev.db' : 'xm.db'
       const path = dbPath || join(app.getPath('userData'), dbFileName)
 
       console.log(`🌍 运行环境: ${isDev ? '开发环境' : '生产环境'}`)
