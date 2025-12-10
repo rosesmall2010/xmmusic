@@ -2467,11 +2467,20 @@ export default class MusicDatabase {
    * 分页获取本地音乐列表（v1.0.6 使用 music_id）
    */
   getLocalMusicPaginated(offset: number, limit: number): MusicItem[] {
-    // 使用新的基于 music_id 的方法
-    const allLocalMusic = this.getLocalMusicByMusicId(0, offset + limit)
-    // 返回分页结果，移除 fullPath 属性
-    return allLocalMusic.slice(offset, offset + limit).map(item => {
-      const { fullPath, ...musicItem } = item
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path
+      FROM local_music lm
+      JOIN all_music am ON lm.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY lm.added_at DESC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       return musicItem as MusicItem
     })
   }
