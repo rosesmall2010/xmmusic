@@ -2464,23 +2464,16 @@ export default class MusicDatabase {
   }
 
   /**
-   * 分页获取本地音乐列表
+   * 分页获取本地音乐列表（v1.0.6 使用 music_id）
    */
   getLocalMusicPaginated(offset: number, limit: number): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT
-        lm.id as list_id,
-        lm.file_path,
-        lm.file_path_md5,
-        lm.added_at,
-        m.*
-      FROM local_music lm
-      LEFT JOIN music m ON lm.file_path = m.file_path
-      ORDER BY lm.id ASC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = stmt.all(limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法
+    const allLocalMusic = this.getLocalMusicByMusicId(0, offset + limit)
+    // 返回分页结果，移除 fullPath 属性
+    return allLocalMusic.slice(offset, offset + limit).map(item => {
+      const { fullPath, ...musicItem } = item
+      return musicItem as MusicItem
+    })
   }
 
   // ========== 发现音乐列表 ==========
