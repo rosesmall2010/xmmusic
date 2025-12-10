@@ -21,7 +21,10 @@
     "trigger:build": "gh workflow run build.yml",
     "trigger:watch": "gh run watch",
     "trigger:list": "gh run list --workflow=build.yml --limit=5",
-    "trigger:script": "./scripts/trigger-build.sh"
+    "trigger:script": "./scripts/trigger-build.sh",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "keywords": [
     "音乐",
@@ -40,6 +43,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
+    "@vitest/ui": "^2.1.9",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^39.2.1",
@@ -47,6 +51,7 @@
     "electron-rebuild": "^3.2.9",
     "typescript": "^5.9.3",
     "vite": "^7.2.2",
+    "vitest": "^2.1.9",
     "vue": "^3.5.24",
     "wait-on": "^9.0.3"
   },
