@@ -1431,29 +1431,37 @@ export default class MusicDatabase {
 
   // ========== 收藏和历史（旧版，保留兼容，后续将废弃） ==========
 
+  /**
+   * @deprecated 使用 toggleFavoriteByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   toggleFavorite(filePath: string): void {
-    // 计算文件路径 MD5
-    const filePathMd5 = calculateFilePathMD5(filePath)
-
-    // 检查是否已在收藏表中
-    const checkStmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
-    const result = checkStmt.get(filePath) as { count: number }
-
-    if (result.count > 0) {
-      // 如果已收藏，移除
-      const deleteStmt = this.db!.prepare('DELETE FROM favorites WHERE file_path = ?')
-      deleteStmt.run(filePath)
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法找到文件: ${filePath}`)
+      return
+    }
+    // 使用新的基于 music_id 的方法
+    if (this.isFavoriteByMusicId(music.id)) {
+      this.removeFromFavoritesByMusicId(music.id)
     } else {
-      // 如果未收藏，添加
-      const insertStmt = this.db!.prepare('INSERT INTO favorites (file_path, file_path_md5) VALUES (?, ?)')
-      insertStmt.run(filePath, filePathMd5)
+      this.addToFavoritesByMusicId(music.id)
     }
   }
 
+  /**
+   * @deprecated 使用 isFavoriteByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   isFileFavorite(filePath: string): boolean {
-    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE file_path = ?')
-    const result = stmt.get(filePath) as { count: number }
-    return result.count > 0
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      return false
+    }
+    // 使用新的基于 music_id 的方法
+    return this.isFavoriteByMusicId(music.id)
   }
 
   /**
