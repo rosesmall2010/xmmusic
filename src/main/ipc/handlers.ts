@@ -147,6 +147,72 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   // 扫描管理器状态
   let currentScanner: FileScanner | null = null
 
+  // ========== 扫描操作（v1.0.6 更新） ==========
+
+  /**
+   * 扫描所有配置的目录（v1.0.6 新方法）
+   */
+  ipcMain.handle('scan-all-directories', async (_, options?: {
+    concurrency?: number
+    fileTypes?: string[]
+    excludePaths?: string[]
+    forceRescan?: boolean
+  }) => {
+    if (!db) {
+      const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
+        '可能的原因：\n' +
+        '1. @vscode/sqlite3 模块未正确安装\n' +
+        '2. 数据库文件权限问题\n' +
+        '3. 数据库初始化失败\n\n' +
+        '请查看终端控制台的错误信息，或尝试重新安装依赖：\n' +
+        'npm install'
+      console.error('❌ 数据库未初始化，无法执行扫描操作')
+      console.error('💡 提示：请检查终端控制台的数据库初始化错误信息')
+      throw new Error(errorMsg)
+    }
+
+    // 检查是否已有扫描任务
+    const state = scanManager.getState()
+    if (state.isScanning && !state.isPaused) {
+      throw new Error('已有扫描任务正在进行中，请先暂停或取消当前任务')
+    }
+
+    // 如果已暂停，恢复扫描
+    if (state.isPaused) {
+      scanManager.resume()
+      mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: false })
+      return { success: 0, failed: 0, corrupted: 0, skipped: 0, duration: 0, errors: [] }
+    }
+
+    try {
+      const result = await scanManager.startScan({
+        concurrency: options?.concurrency || 10,
+        fileTypes: options?.fileTypes || ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
+        excludePaths: options?.excludePaths || [],
+        forceRescan: options?.forceRescan || false,
+        onProgress: (progress: any) => {
+          scanManager.setProgress(progress)
+          // 使用 setImmediate 确保不阻塞主线程
+          setImmediate(() => {
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('scan-progress', progress)
+            }
+          })
+        }
+      })
+
+      return result
+    } catch (error: any) {
+      if (error.message === '扫描已取消') {
+        throw error
+      }
+      throw error
+    }
+  })
+
+  /**
+   * 扫描单个目录（保留兼容）
+   */
   ipcMain.handle('scan-music-folder', async (_, path: string) => {
     if (!db) {
       const errorMsg = '数据库未初始化，无法扫描音乐。\n\n' +
@@ -213,9 +279,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     const state = scanManager.getState()
     if (state.isScanning && !state.isPaused) {
       scanManager.pause()
-      if (currentScanner) {
-        currentScanner.setPaused(true)
-      }
       mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: true })
       return true
     }
@@ -226,9 +289,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     const state = scanManager.getState()
     if (state.isScanning && state.isPaused) {
       scanManager.resume()
-      if (currentScanner) {
-        currentScanner.setPaused(false)
-      }
       mainWindow.webContents.send('scan-state-changed', { isScanning: true, isPaused: false })
       return true
     }
@@ -239,10 +299,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     const state = scanManager.getState()
     if (state.isScanning) {
       scanManager.cancel()
-      if (currentScanner) {
-        currentScanner.setCancelled(true)
-      }
-      currentScanner = null
       mainWindow.webContents.send('scan-state-changed', { isScanning: false, isPaused: false })
       return true
     }
@@ -643,6 +699,83 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   // 音乐目录
+  // ========== local_music_dir 管理（v1.0.6 新架构） ==========
+
+  ipcMain.handle('local-music-dir:add', async (_, path: string, displayOrder?: number) => {
+    if (!db) {
+      throw new Error('数据库未初始化')
+    }
+    try {
+      return db.addLocalMusicDir(path, displayOrder)
+    } catch (error: any) {
+      throw new Error(error.message || '添加扫描目录失败')
+    }
+  })
+
+  ipcMain.handle('local-music-dir:delete', async (_, id: number, options?: { removeScannedFiles?: boolean }) => {
+    if (!db) {
+      throw new Error('数据库未初始化')
+    }
+    try {
+      return db.deleteLocalMusicDir(id, options)
+    } catch (error: any) {
+      throw new Error(error.message || '删除扫描目录失败')
+    }
+  })
+
+  ipcMain.handle('local-music-dir:update', async (_, id: number, updates: {
+    path?: string
+    display_order?: number
+    enabled?: boolean
+  }) => {
+    if (!db) {
+      throw new Error('数据库未初始化')
+    }
+    try {
+      return db.updateLocalMusicDir(id, updates)
+    } catch (error: any) {
+      throw new Error(error.message || '更新扫描目录失败')
+    }
+  })
+
+  ipcMain.handle('local-music-dir:get-all', async (_, options?: {
+    enabled?: boolean
+    sortBy?: 'display_order' | 'created_at' | 'path'
+    order?: 'ASC' | 'DESC'
+  }) => {
+    if (!db) return []
+    return db.getAllLocalMusicDirs(options)
+  })
+
+  ipcMain.handle('local-music-dir:get-enabled', () => {
+    if (!db) return []
+    return db.getEnabledLocalMusicDirs()
+  })
+
+  ipcMain.handle('local-music-dir:get-by-id', async (_, id: number) => {
+    if (!db) return null
+    return db.getLocalMusicDirById(id)
+  })
+
+  ipcMain.handle('local-music-dir:update-orders', async (_, orders: Record<number, number>) => {
+    if (!db) return
+    db.updateLocalMusicDirOrders(orders)
+  })
+
+  ipcMain.handle('local-music-dir:validate', async (_, path: string) => {
+    if (!db) {
+      throw new Error('数据库未初始化')
+    }
+    try {
+      await db.validateDirectoryPath(path)
+      return { valid: true }
+    } catch (error: any) {
+      return { valid: false, error: error.message || '路径验证失败' }
+    }
+  })
+
+  // ========== 音乐目录管理（旧版，保留兼容） ==========
+
   ipcMain.handle('get-music-directories', () => {
     if (!db) return []
     return db.getMusicDirectories()
