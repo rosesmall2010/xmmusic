@@ -1,7 +1,7 @@
 import Database from './sqlite3-sync'
 import { app } from 'electron'
 import { join, dirname } from 'path'
-import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync } from 'fs'
+import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync, access, constants } from 'fs'
 import { promisify } from 'util'
 import { createHash } from 'crypto'
 import type {
@@ -11,6 +11,7 @@ import type {
   AdvancedSearchCriteria
 } from '@shared/types/music'
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
+import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
 
 const copyFileAsync = promisify(copyFile)
 
@@ -334,7 +335,266 @@ export default class MusicDatabase {
     }
   }
 
-  // ========== 音乐操作 ==========
+  // ========== all_music 表操作（v1.0.6 新架构） ==========
+
+  /**
+   * 插入音乐记录（使用 dir_id + file_name）
+   */
+  insertAllMusic(data: {
+    dir_id: number
+    file_name: string
+    title: string
+    artist: string
+    album?: string | null
+    year?: number | null
+    genre?: string | null
+    file_size: number
+    file_hash: string
+    file_extension: string
+    duration?: number | null
+    bitrate?: number | null
+    sample_rate?: number | null
+    channels?: number | null
+    cover_path?: string | null
+    lyrics_path?: string | null
+    is_exists?: number
+    is_playable?: number
+    play_error_reason?: string | null
+    play_count?: number
+    last_played_at?: string | null
+    is_corrupted?: number
+    is_duplicate?: number
+  }): number {
+    const stmt = this.db!.prepare(`
+      INSERT INTO all_music (
+        dir_id, file_name, title, artist, album, year, genre,
+        file_size, file_hash, file_extension,
+        duration, bitrate, sample_rate, channels,
+        cover_path, lyrics_path,
+        is_exists, is_playable, play_error_reason,
+        play_count, last_played_at,
+        is_corrupted, is_duplicate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    const result = stmt.run(
+      data.dir_id,
+      data.file_name,
+      data.title,
+      data.artist,
+      data.album || null,
+      data.year || null,
+      data.genre || null,
+      data.file_size,
+      data.file_hash,
+      data.file_extension,
+      data.duration || null,
+      data.bitrate || null,
+      data.sample_rate || null,
+      data.channels || null,
+      data.cover_path || null,
+      data.lyrics_path || null,
+      data.is_exists ?? 1,
+      data.is_playable ?? 1,
+      data.play_error_reason || null,
+      data.play_count || 0,
+      data.last_played_at || null,
+      data.is_corrupted || 0,
+      data.is_duplicate || 0
+    )
+
+    return Number(result.lastInsertRowid)
+  }
+
+  /**
+   * 根据ID获取音乐记录（返回完整路径）
+   */
+  getAllMusicById(id: number): (MusicItem & { fullPath: string }) | null {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE am.id = ?
+    `)
+    const row = stmt.get(id) as any
+
+    if (!row) {
+      return null
+    }
+
+    // 构建完整路径
+    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+
+    return this.mapAllMusicRowToMusicItem(row, fullPath)
+  }
+
+  /**
+   * 根据路径获取音乐记录（使用 dir_id + file_name 查询）
+   */
+  getAllMusicByPath(filePath: string): (MusicItem & { fullPath: string }) | null {
+    const { dirPath, fileName } = parsePath(filePath, process.platform)
+    const normalizedDirPath = normalizePath(dirPath, process.platform)
+
+    // 先查找目录ID
+    const dir = this.getMusicDirByPath(normalizedDirPath)
+    if (!dir) {
+      return null
+    }
+
+    // 查找音乐记录
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE am.dir_id = ? AND am.file_name = ?
+    `)
+    const row = stmt.get(dir.id, fileName) as any
+
+    if (!row) {
+      return null
+    }
+
+    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+
+    return this.mapAllMusicRowToMusicItem(row, fullPath)
+  }
+
+  /**
+   * 更新音乐记录
+   */
+  updateAllMusic(id: number, updates: Partial<{
+    title: string
+    artist: string
+    album: string | null
+    year: number | null
+    genre: string | null
+    cover_path: string | null
+    lyrics_path: string | null
+    is_exists: number
+    is_playable: number
+    play_error_reason: string | null
+    play_count: number
+    last_played_at: string | null
+    is_corrupted: number
+    is_duplicate: number
+  }>): void {
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.title !== undefined) {
+      fields.push('title = ?')
+      values.push(updates.title)
+    }
+    if (updates.artist !== undefined) {
+      fields.push('artist = ?')
+      values.push(updates.artist)
+    }
+    if (updates.album !== undefined) {
+      fields.push('album = ?')
+      values.push(updates.album)
+    }
+    if (updates.year !== undefined) {
+      fields.push('year = ?')
+      values.push(updates.year)
+    }
+    if (updates.genre !== undefined) {
+      fields.push('genre = ?')
+      values.push(updates.genre)
+    }
+    if (updates.cover_path !== undefined) {
+      fields.push('cover_path = ?')
+      values.push(updates.cover_path)
+    }
+    if (updates.lyrics_path !== undefined) {
+      fields.push('lyrics_path = ?')
+      values.push(updates.lyrics_path)
+    }
+    if (updates.is_exists !== undefined) {
+      fields.push('is_exists = ?')
+      values.push(updates.is_exists)
+    }
+    if (updates.is_playable !== undefined) {
+      fields.push('is_playable = ?')
+      values.push(updates.is_playable)
+    }
+    if (updates.play_error_reason !== undefined) {
+      fields.push('play_error_reason = ?')
+      values.push(updates.play_error_reason)
+    }
+    if (updates.play_count !== undefined) {
+      fields.push('play_count = ?')
+      values.push(updates.play_count)
+    }
+    if (updates.last_played_at !== undefined) {
+      fields.push('last_played_at = ?')
+      values.push(updates.last_played_at)
+    }
+    if (updates.is_corrupted !== undefined) {
+      fields.push('is_corrupted = ?')
+      values.push(updates.is_corrupted)
+    }
+    if (updates.is_duplicate !== undefined) {
+      fields.push('is_duplicate = ?')
+      values.push(updates.is_duplicate)
+    }
+
+    if (fields.length === 0) return
+
+    fields.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(id)
+
+    const stmt = this.db!.prepare(`
+      UPDATE all_music SET ${fields.join(', ')} WHERE id = ?
+    `)
+    stmt.run(...values)
+  }
+
+  /**
+   * 删除音乐记录
+   */
+  deleteAllMusic(id: number): void {
+    const stmt = this.db!.prepare('DELETE FROM all_music WHERE id = ?')
+    stmt.run(id)
+  }
+
+  /**
+   * 将 all_music 行映射为 MusicItem（带完整路径）
+   */
+  private mapAllMusicRowToMusicItem(row: any, fullPath: string): MusicItem & { fullPath: string } {
+    return {
+      id: row.id,
+      title: row.title,
+      artist: row.artist,
+      album: row.album,
+      year: row.year,
+      genre: row.genre,
+      filePath: fullPath,
+      fileName: row.file_name,
+      fileSize: row.file_size,
+      fileHash: row.file_hash,
+      fileExtension: row.file_extension,
+      duration: row.duration || 0,
+      bitrate: row.bitrate || 0,
+      sampleRate: row.sample_rate || 0,
+      channels: row.channels || 0,
+      coverPath: row.cover_path,
+      lyricsPath: row.lyrics_path,
+      playCount: row.play_count || 0,
+      lastPlayedAt: row.last_played_at,
+      favorite: false, // 需要从 favorites 表查询
+      addedAt: row.added_at,
+      updatedAt: row.updated_at,
+      isCorrupted: row.is_corrupted === 1,
+      isDuplicate: row.is_duplicate === 1,
+      fullPath
+    }
+  }
+
+  // ========== 音乐操作（旧版，保留兼容，后续将废弃） ==========
 
   insertMusic(music: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'>): number {
     const stmt = this.db!.prepare(`
@@ -992,7 +1252,247 @@ export default class MusicDatabase {
     stmt.run(isDuplicate ? 1 : 0, musicId)
   }
 
-  // ========== 收藏和历史 ==========
+  // ========== 列表表操作（v1.0.6 新架构，基于 music_id） ==========
+
+  /**
+   * local_music 表操作（基于 music_id）
+   */
+  addToLocalMusicByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('INSERT OR IGNORE INTO local_music (music_id) VALUES (?)')
+    stmt.run(musicId)
+  }
+
+  removeFromLocalMusicByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('DELETE FROM local_music WHERE music_id = ?')
+    stmt.run(musicId)
+  }
+
+  isInLocalMusicByMusicId(musicId: number): boolean {
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM local_music WHERE music_id = ?')
+    const result = stmt.get(musicId) as { count: number }
+    return result.count > 0
+  }
+
+  getLocalMusicByMusicId(offset: number, limit: number): Array<MusicItem & { fullPath: string }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path
+      FROM local_music lm
+      JOIN all_music am ON lm.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY lm.added_at DESC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return this.mapAllMusicRowToMusicItem(row, fullPath)
+    })
+  }
+
+  /**
+   * favorites 表操作（基于 music_id）
+   */
+  addToFavoritesByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('INSERT OR IGNORE INTO favorites (music_id) VALUES (?)')
+    stmt.run(musicId)
+  }
+
+  removeFromFavoritesByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('DELETE FROM favorites WHERE music_id = ?')
+    stmt.run(musicId)
+  }
+
+  isFavoriteByMusicId(musicId: number): boolean {
+    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM favorites WHERE music_id = ?')
+    const result = stmt.get(musicId) as { count: number }
+    return result.count > 0
+  }
+
+  getFavoritesByMusicId(): Array<MusicItem & { fullPath: string }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path
+      FROM favorites f
+      JOIN all_music am ON f.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY f.added_at DESC
+    `)
+    const rows = stmt.all() as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return this.mapAllMusicRowToMusicItem(row, fullPath)
+    })
+  }
+
+  /**
+   * playlist_item 表操作（基于 music_id）
+   */
+  addToPlaylistByMusicId(playlistId: number, musicId: number, position?: number): void {
+    // 如果没有指定位置，添加到末尾
+    if (position === undefined) {
+      const maxPositionStmt = this.db!.prepare('SELECT MAX(position) as max_pos FROM playlist_item WHERE playlist_id = ?')
+      const maxPos = maxPositionStmt.get(playlistId) as { max_pos: number } | undefined
+      position = (maxPos?.max_pos ?? -1) + 1
+    }
+
+    const stmt = this.db!.prepare(`
+      INSERT OR IGNORE INTO playlist_item (playlist_id, music_id, position)
+      VALUES (?, ?, ?)
+    `)
+    stmt.run(playlistId, musicId, position)
+  }
+
+  removeFromPlaylistByMusicId(playlistId: number, musicId: number): void {
+    const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+    stmt.run(playlistId, musicId)
+  }
+
+  getPlaylistSongsByMusicId(playlistId: number): Array<MusicItem & { fullPath: string; position: number }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path,
+        pi.position
+      FROM playlist_item pi
+      JOIN all_music am ON pi.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE pi.playlist_id = ?
+      ORDER BY pi.position ASC
+    `)
+    const rows = stmt.all(playlistId) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return {
+        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        position: row.position
+      }
+    })
+  }
+
+  /**
+   * recent_plays 表操作（基于 music_id）
+   */
+  addToRecentPlaysByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('INSERT INTO recent_plays (music_id) VALUES (?)')
+    stmt.run(musicId)
+
+    // 限制最近播放记录数量（保留最近1000条）
+    const limitStmt = this.db!.prepare(`
+      DELETE FROM recent_plays
+      WHERE id NOT IN (
+        SELECT id FROM recent_plays
+        ORDER BY played_at DESC
+        LIMIT 1000
+      )
+    `)
+    limitStmt.run()
+  }
+
+  getRecentPlaysByMusicId(limit: number = 50): Array<MusicItem & { fullPath: string; playedAt: string }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path,
+        rp.played_at
+      FROM recent_plays rp
+      JOIN all_music am ON rp.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY rp.played_at DESC
+      LIMIT ?
+    `)
+    const rows = stmt.all(limit) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return {
+        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        playedAt: row.played_at
+      }
+    })
+  }
+
+  /**
+   * play_queue 表操作（基于 music_id）
+   */
+  addToPlayQueueByMusicId(musicId: number, position?: number): void {
+    if (position === undefined) {
+      const maxPositionStmt = this.db!.prepare('SELECT MAX(position) as max_pos FROM play_queue')
+      const maxPos = maxPositionStmt.get() as { max_pos: number } | undefined
+      position = (maxPos?.max_pos ?? -1) + 1
+    }
+
+    const stmt = this.db!.prepare('INSERT INTO play_queue (music_id, position) VALUES (?, ?)')
+    stmt.run(musicId, position)
+  }
+
+  removeFromPlayQueueByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('DELETE FROM play_queue WHERE music_id = ?')
+    stmt.run(musicId)
+  }
+
+  clearPlayQueue(): void {
+    this.db!.prepare('DELETE FROM play_queue').run()
+  }
+
+  getPlayQueueByMusicId(): Array<MusicItem & { fullPath: string; position: number }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path,
+        pq.position
+      FROM play_queue pq
+      JOIN all_music am ON pq.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY pq.position ASC
+    `)
+    const rows = stmt.all() as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return {
+        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        position: row.position
+      }
+    })
+  }
+
+  /**
+   * discover_music 表操作（基于 music_id）
+   */
+  addToDiscoverMusicByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('INSERT OR IGNORE INTO discover_music (music_id) VALUES (?)')
+    stmt.run(musicId)
+  }
+
+  removeFromDiscoverMusicByMusicId(musicId: number): void {
+    const stmt = this.db!.prepare('DELETE FROM discover_music WHERE music_id = ?')
+    stmt.run(musicId)
+  }
+
+  getDiscoverMusicByMusicId(limit: number = 100): Array<MusicItem & { fullPath: string; discoveredAt: string }> {
+    const stmt = this.db!.prepare(`
+      SELECT 
+        am.*,
+        md.path as dir_path,
+        dm.discovered_at
+      FROM discover_music dm
+      JOIN all_music am ON dm.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      ORDER BY dm.discovered_at DESC
+      LIMIT ?
+    `)
+    const rows = stmt.all(limit) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      return {
+        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        discoveredAt: row.discovered_at
+      }
+    })
+  }
+
+  // ========== 收藏和历史（旧版，保留兼容，后续将废弃） ==========
 
   toggleFavorite(filePath: string): void {
     // 计算文件路径 MD5
@@ -1120,7 +1620,303 @@ export default class MusicDatabase {
     resetStmt.run()
   }
 
-  // ========== 音乐目录管理 ==========
+  // ========== music_dir 表操作 ==========
+
+  /**
+   * 根据ID获取目录记录
+   */
+  getMusicDirById(id: number): { id: number; path: string; created_at: string; updated_at: string } | null {
+    const stmt = this.db!.prepare('SELECT * FROM music_dir WHERE id = ?')
+    return stmt.get(id) as { id: number; path: string; created_at: string; updated_at: string } | null
+  }
+
+  /**
+   * 根据路径获取目录记录
+   */
+  getMusicDirByPath(path: string): { id: number; path: string; created_at: string; updated_at: string } | null {
+    const normalizedPath = normalizePath(path, process.platform)
+    const stmt = this.db!.prepare('SELECT * FROM music_dir WHERE path = ?')
+    return stmt.get(normalizedPath) as { id: number; path: string; created_at: string; updated_at: string } | null
+  }
+
+  /**
+   * 创建目录记录
+   */
+  createMusicDir(path: string): number {
+    return getOrCreateMusicDir(this.db!, path, process.platform)
+  }
+
+  /**
+   * 批量创建目录记录
+   */
+  batchCreateMusicDirs(paths: string[]): Record<string, number> {
+    return batchGetOrCreateMusicDir(this.db!, paths, process.platform)
+  }
+
+  /**
+   * 删除目录记录
+   */
+  deleteMusicDir(id: number): boolean {
+    const stmt = this.db!.prepare('DELETE FROM music_dir WHERE id = ?')
+    const result = stmt.run(id)
+    return result.changes > 0
+  }
+
+  /**
+   * 获取所有目录记录
+   */
+  getAllMusicDirs(): Array<{ id: number; path: string; created_at: string; updated_at: string }> {
+    const stmt = this.db!.prepare('SELECT * FROM music_dir ORDER BY id ASC')
+    return stmt.all() as Array<{ id: number; path: string; created_at: string; updated_at: string }>
+  }
+
+  // ========== local_music_dir 表操作 ==========
+
+  /**
+   * 添加扫描根目录
+   */
+  addLocalMusicDir(path: string, displayOrder?: number): { id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string } {
+    // 验证路径
+    if (!existsSync(path)) {
+      throw new Error('目录不存在')
+    }
+
+    // 规范化路径
+    const normalizedPath = normalizePath(path, process.platform)
+
+    // 检查是否已存在
+    const existing = this.db!.prepare('SELECT id FROM local_music_dir WHERE path = ?').get(normalizedPath)
+    if (existing) {
+      throw new Error('目录已存在')
+    }
+
+    // 检查数量限制（最多20个）
+    const count = this.db!.prepare('SELECT COUNT(*) as count FROM local_music_dir').get() as { count: number }
+    if (count.count >= 20) {
+      throw new Error('最多只能添加20个扫描目录')
+    }
+
+    // 确定显示顺序
+    if (displayOrder === undefined) {
+      const maxOrder = this.db!.prepare('SELECT MAX(display_order) as max_order FROM local_music_dir').get() as { max_order: number }
+      displayOrder = (maxOrder.max_order ?? -1) + 1
+    }
+
+    // 插入记录
+    const stmt = this.db!.prepare(`
+      INSERT INTO local_music_dir (path, display_order, enabled)
+      VALUES (?, ?, 1)
+    `)
+    const result = stmt.run(normalizedPath, displayOrder)
+
+    return this.getLocalMusicDirById(result.lastInsertRowid as number)!
+  }
+
+  /**
+   * 删除扫描根目录
+   */
+  deleteLocalMusicDir(id: number, options?: { removeScannedFiles?: boolean }): boolean {
+    // 获取目录信息
+    const dir = this.getLocalMusicDirById(id)
+    if (!dir) {
+      throw new Error('目录不存在')
+    }
+
+    // 如果选择删除已扫描的文件
+    if (options?.removeScannedFiles) {
+      this.removeScannedFilesFromDir(dir.path)
+    }
+
+    // 删除目录记录
+    const stmt = this.db!.prepare('DELETE FROM local_music_dir WHERE id = ?')
+    const result = stmt.run(id)
+
+    return result.changes > 0
+  }
+
+  /**
+   * 删除指定目录下已扫描的文件
+   */
+  private removeScannedFilesFromDir(rootPath: string): void {
+    // 查找所有相关的 music_dir 记录（路径以 rootPath 开头）
+    const normalizedRoot = normalizePath(rootPath, process.platform)
+    const dirs = this.db!.prepare(`
+      SELECT id FROM music_dir
+      WHERE path LIKE ? || '%'
+    `).all(normalizedRoot) as Array<{ id: number }>
+
+    const dirIds = dirs.map(d => d.id)
+
+    if (dirIds.length === 0) {
+      return
+    }
+
+    // 删除相关的 all_music 记录（级联删除会处理列表表）
+    const placeholders = dirIds.map(() => '?').join(',')
+    this.db!.prepare(`
+      DELETE FROM all_music
+      WHERE dir_id IN (${placeholders})
+    `).run(...dirIds)
+
+    // 删除相关的 music_dir 记录
+    this.db!.prepare(`
+      DELETE FROM music_dir
+      WHERE id IN (${placeholders})
+    `).run(...dirIds)
+  }
+
+  /**
+   * 更新扫描目录信息
+   */
+  updateLocalMusicDir(
+    id: number,
+    updates: {
+      path?: string
+      display_order?: number
+      enabled?: boolean
+    }
+  ): { id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string } {
+    // 检查目录是否存在
+    const existing = this.getLocalMusicDirById(id)
+    if (!existing) {
+      throw new Error('目录不存在')
+    }
+
+    // 如果更新路径，需要验证
+    if (updates.path) {
+      if (!existsSync(updates.path)) {
+        throw new Error('目录不存在')
+      }
+      updates.path = normalizePath(updates.path, process.platform)
+
+      // 检查新路径是否已存在（排除自己）
+      const conflict = this.db!.prepare('SELECT id FROM local_music_dir WHERE path = ? AND id != ?').get(updates.path, id)
+      if (conflict) {
+        throw new Error('目录路径已存在')
+      }
+    }
+
+    // 构建更新SQL
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.path !== undefined) {
+      fields.push('path = ?')
+      values.push(updates.path)
+    }
+    if (updates.display_order !== undefined) {
+      fields.push('display_order = ?')
+      values.push(updates.display_order)
+    }
+    if (updates.enabled !== undefined) {
+      fields.push('enabled = ?')
+      values.push(updates.enabled ? 1 : 0)
+    }
+
+    if (fields.length === 0) {
+      return existing
+    }
+
+    fields.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(id)
+
+    // 执行更新
+    const sql = `UPDATE local_music_dir SET ${fields.join(', ')} WHERE id = ?`
+    this.db!.prepare(sql).run(...values)
+
+    // 返回更新后的记录
+    return this.getLocalMusicDirById(id)!
+  }
+
+  /**
+   * 获取所有扫描目录
+   */
+  getAllLocalMusicDirs(options?: {
+    enabled?: boolean
+    sortBy?: 'display_order' | 'created_at' | 'path'
+    order?: 'ASC' | 'DESC'
+  }): Array<{ id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string }> {
+    let sql = 'SELECT * FROM local_music_dir WHERE 1=1'
+    const params: any[] = []
+
+    if (options?.enabled !== undefined) {
+      sql += ' AND enabled = ?'
+      params.push(options.enabled ? 1 : 0)
+    }
+
+    const sortBy = options?.sortBy || 'display_order'
+    const order = options?.order || 'ASC'
+    sql += ` ORDER BY ${sortBy} ${order}`
+
+    return this.db!.prepare(sql).all(...params) as Array<{ id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string }>
+  }
+
+  /**
+   * 根据ID获取扫描目录
+   */
+  getLocalMusicDirById(id: number): { id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string } | null {
+    const stmt = this.db!.prepare('SELECT * FROM local_music_dir WHERE id = ?')
+    return stmt.get(id) as { id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string } | null
+  }
+
+  /**
+   * 获取启用的扫描目录（用于扫描）
+   */
+  getEnabledLocalMusicDirs(): Array<{ id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string }> {
+    return this.getAllLocalMusicDirs({
+      enabled: true,
+      sortBy: 'display_order',
+      order: 'ASC'
+    })
+  }
+
+  /**
+   * 批量更新显示顺序
+   */
+  updateLocalMusicDirOrders(orders: Record<number, number>): void {
+    const stmt = this.db!.prepare('UPDATE local_music_dir SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    const updateMany = this.db!.transaction((orders: Record<number, number>) => {
+      for (const [id, order] of Object.entries(orders)) {
+        stmt.run(order, parseInt(id))
+      }
+    })
+
+    updateMany(orders)
+  }
+
+  /**
+   * 验证目录路径是否有效
+   */
+  async validateDirectoryPath(path: string): Promise<void> {
+    const fs = await import('fs/promises')
+
+    // 检查路径是否存在
+    try {
+      const stat = await fs.stat(path)
+      if (!stat.isDirectory()) {
+        throw new Error('路径不是目录')
+      }
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        throw new Error('目录不存在')
+      }
+      throw new Error(`无法访问目录: ${error.message}`)
+    }
+
+    // 检查是否有读取权限
+    try {
+      await fs.access(path, fs.constants.R_OK)
+    } catch (error: any) {
+      throw new Error('目录没有读取权限')
+    }
+
+    // 检查路径长度（避免过长的路径）
+    if (path.length > 4096) {
+      throw new Error('路径过长')
+    }
+  }
+
+  // ========== 音乐目录管理（旧版，保留兼容） ==========
 
   getMusicDirectories(): any[] {
     const stmt = this.db!.prepare('SELECT * FROM music_directory ORDER BY priority DESC, created_at ASC')
