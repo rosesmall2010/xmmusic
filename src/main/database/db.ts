@@ -699,7 +699,10 @@ export default class MusicDatabase {
    */
   getMusicById(id: number): MusicItem | null {
     const result = this.getAllMusicById(id)
-    return result ? { ...result, fullPath: undefined as any } : null
+    if (!result) return null
+    // 移除 fullPath 属性，返回标准的 MusicItem
+    const { fullPath, ...musicItem } = result
+    return musicItem as MusicItem
   }
 
   /**
@@ -708,7 +711,10 @@ export default class MusicDatabase {
    */
   getMusicByPath(filePath: string): MusicItem | null {
     const result = this.getAllMusicByPath(filePath)
-    return result ? { ...result, fullPath: undefined as any } : null
+    if (!result) return null
+    // 移除 fullPath 属性，返回标准的 MusicItem
+    const { fullPath, ...musicItem } = result
+    return musicItem as MusicItem
   }
 
   /**
