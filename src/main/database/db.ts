@@ -411,7 +411,7 @@ export default class MusicDatabase {
    */
   getAllMusicById(id: number): (MusicItem & { fullPath: string }) | null {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path
       FROM all_music am
@@ -445,7 +445,7 @@ export default class MusicDatabase {
 
     // 查找音乐记录
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path
       FROM all_music am
@@ -1275,7 +1275,7 @@ export default class MusicDatabase {
 
   getLocalMusicByMusicId(offset: number, limit: number): Array<MusicItem & { fullPath: string }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path
       FROM local_music lm
@@ -1312,7 +1312,7 @@ export default class MusicDatabase {
 
   getFavoritesByMusicId(): Array<MusicItem & { fullPath: string }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path
       FROM favorites f
@@ -1352,7 +1352,7 @@ export default class MusicDatabase {
 
   getPlaylistSongsByMusicId(playlistId: number): Array<MusicItem & { fullPath: string; position: number }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path,
         pi.position
@@ -1393,7 +1393,7 @@ export default class MusicDatabase {
 
   getRecentPlaysByMusicId(limit: number = 50): Array<MusicItem & { fullPath: string; playedAt: string }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path,
         rp.played_at
@@ -1438,7 +1438,7 @@ export default class MusicDatabase {
 
   getPlayQueueByMusicId(): Array<MusicItem & { fullPath: string; position: number }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path,
         pq.position
@@ -1472,7 +1472,7 @@ export default class MusicDatabase {
 
   getDiscoverMusicByMusicId(limit: number = 100): Array<MusicItem & { fullPath: string; discoveredAt: string }> {
     const stmt = this.db!.prepare(`
-      SELECT 
+      SELECT
         am.*,
         md.path as dir_path,
         dm.discovered_at
@@ -1651,6 +1651,16 @@ export default class MusicDatabase {
    */
   batchCreateMusicDirs(paths: string[]): Record<string, number> {
     return batchGetOrCreateMusicDir(this.db!, paths, process.platform)
+  }
+
+  /**
+   * 获取数据库实例（用于路径工具函数）
+   */
+  getDatabase(): Database {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+    return this.db
   }
 
   /**
@@ -2721,13 +2731,6 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM play_queue WHERE file_path = ?')
     const result = stmt.get(filePath) as { count: number }
     return result.count > 0
-  }
-
-  /**
-   * 清空播放队列
-   */
-  clearPlayQueue(): void {
-    this.db!.prepare('DELETE FROM play_queue').run()
   }
 
   /**

@@ -1,4 +1,4 @@
-import { readdir, stat, writeFile, mkdir } from 'fs/promises'
+import { readdir, stat, writeFile, mkdir, access, constants } from 'fs/promises'
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
 import { join, extname, basename } from 'path'
@@ -6,6 +6,7 @@ import { createRequire } from 'module'
 import { app } from 'electron'
 import MusicDatabase from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
+import { parsePath, normalizePath, batchGetOrCreateMusicDir } from '../database/pathUtils'
 
 // 动态加载 music-metadata（解决 Electron 中的 exports 问题）
 // 使用字符串拼接完全隐藏模块名，避免 TypeScript 静态分析
@@ -69,6 +70,73 @@ export default class FileScanner {
     this.isCancelled = cancelled
   }
 
+  /**
+   * 扫描所有配置的目录（v1.0.6 新方法）
+   */
+  async scanAllDirectories(options: ScanOptions): Promise<ScanResult> {
+    // 1. 获取所有启用的扫描根目录
+    const scanDirs = this.db.getEnabledLocalMusicDirs()
+
+    if (scanDirs.length === 0) {
+      return {
+        success: 0,
+        failed: 0,
+        corrupted: 0,
+        skipped: 0,
+        duration: 0,
+        errors: []
+      }
+    }
+
+    // 2. 初始化扫描结果
+    const result: ScanResult = {
+      success: 0,
+      failed: 0,
+      corrupted: 0,
+      skipped: 0,
+      duration: 0,
+      errors: []
+    }
+
+    const startTime = Date.now()
+
+    // 3. 逐个扫描每个根目录
+    for (const scanDir of scanDirs) {
+      try {
+        const dirResult = await this.scanDirectory(scanDir.path, {
+          ...options,
+          onProgress: (progress) => {
+            // 更新总体进度
+            if (options.onProgress) {
+              options.onProgress({
+                ...progress,
+                currentDirectory: scanDir.path
+              } as any)
+            }
+          }
+        })
+
+        // 合并结果
+        result.success += dirResult.success
+        result.failed += dirResult.failed
+        result.corrupted += dirResult.corrupted
+        result.skipped += dirResult.skipped
+        result.errors.push(...dirResult.errors)
+      } catch (error: any) {
+        result.errors.push({
+          file: scanDir.path,
+          error: error.message || '扫描失败'
+        })
+      }
+    }
+
+    result.duration = Date.now() - startTime
+    return result
+  }
+
+  /**
+   * 扫描单个目录（递归，v1.0.6 更新）
+   */
   async scanDirectory(path: string, options: ScanOptions): Promise<ScanResult> {
     const startTime = Date.now()
     const result: ScanResult = {
@@ -83,12 +151,19 @@ export default class FileScanner {
     this.isPaused = false
     this.isCancelled = false
 
-    // 收集所有文件
-    const files = await this.collectFiles(path, options)
+    // 1. 规范化根目录路径
+    const normalizedRoot = normalizePath(path, process.platform)
+
+    // 2. 收集所有音乐文件（递归）
+    const files = await this.collectFiles(normalizedRoot, options)
     const total = files.length
     let current = 0
     let lastProgressUpdate = 0
     const PROGRESS_UPDATE_INTERVAL = 100 // 每100ms最多更新一次进度
+
+    // 3. 批量获取目录ID映射（性能优化）
+    const dirPaths = [...new Set(files.map(f => parsePath(f, process.platform).dirPath))]
+    const dirIdMap = batchGetOrCreateMusicDir(this.db.getDatabase(), dirPaths, process.platform)
 
     // 进度更新函数（节流）
     const updateProgress = (file: string) => {
@@ -130,9 +205,11 @@ export default class FileScanner {
       }
 
       try {
-        const processed = await this.processFile(file, options)
-        if (processed) {
+        const processed = await this.processFile(file, options, dirIdMap)
+        if (processed.success) {
           result.success++
+        } else if (processed.corrupted) {
+          result.corrupted++
         } else {
           result.skipped++
         }
@@ -212,67 +289,141 @@ export default class FileScanner {
     return files
   }
 
-  private async processFile(filePath: string, _options: ScanOptions): Promise<boolean> {
+  /**
+   * 处理单个音乐文件（v1.0.6 更新，使用新表结构）
+   */
+  private async processFile(
+    filePath: string,
+    options: ScanOptions,
+    dirIdMap: Record<string, number>
+  ): Promise<{
+    success: boolean
+    corrupted: boolean
+    musicId?: number
+  }> {
     try {
-      // 1. 检查 local_music 表是否已存在（列表独立性判断）
-      if (this.db.isInLocalMusic(filePath)) {
-        return false // 已在本地音乐列表中，跳过
+      // 1. 解析路径
+      const { dirPath, fileName } = parsePath(filePath, process.platform)
+      const normalizedDirPath = normalizePath(dirPath, process.platform)
+
+      // 2. 获取目录ID
+      const dirId = dirIdMap[normalizedDirPath]
+      if (!dirId) {
+        throw new Error(`目录ID未找到: ${normalizedDirPath}`)
       }
 
-      // 2. 检查 music 表是否已有该文件的元数据
-      const existingMusic = this.db.getMusicByPath(filePath)
+      // 3. 检查文件是否已存在
+      const db = this.db.getDatabase()
+      const existing = db.prepare(`
+        SELECT id FROM all_music
+        WHERE dir_id = ? AND file_name = ?
+      `).get(dirId, fileName) as { id: number } | undefined
 
-      if (existingMusic) {
-        // music 表已有元数据，直接添加到 local_music，不重新解析
-        this.db.addToLocalMusic(filePath)
-        return true
+      if (existing) {
+        // 文件已存在，检查是否需要更新
+        const fileStat = await stat(filePath)
+        const existingMusic = db.prepare('SELECT * FROM all_music WHERE id = ?').get(existing.id) as any
+
+        // 如果文件大小或修改时间变化，可能需要重新扫描
+        if (options.forceRescan ||
+            existingMusic.file_size !== fileStat.size ||
+            existingMusic.updated_at < fileStat.mtime.toISOString()) {
+          // 重新扫描（这里简化处理，只更新文件大小）
+          this.db.updateAllMusic(existing.id, {
+            file_size: fileStat.size,
+            is_exists: 1
+          })
+        }
+
+        // 确保在 local_music 列表中
+        if (!this.db.isInLocalMusicByMusicId(existing.id)) {
+          this.db.addToLocalMusicByMusicId(existing.id)
+        }
+
+        return { success: false, corrupted: false }
       }
 
-      // 3. music 表中没有，需要解析文件
-      // 计算文件内容 MD5（用于去重）
-      const hash = await this.calculateMD5(filePath)
+      // 4. 检查文件是否存在
+      let isExists = true
+      try {
+        await access(filePath, constants.F_OK)
+      } catch {
+        isExists = false
+      }
 
-      // 检测损坏
+      // 5. 计算文件哈希（用于去重）
+      const fileHash = await this.calculateMD5(filePath)
+
+      // 6. 检测文件是否损坏
       const isCorrupted = await this.detectCorruptedFile(filePath)
       if (isCorrupted) {
-        return false
+        // 插入损坏文件记录
+        const musicId = this.db.insertAllMusic({
+          dir_id: dirId,
+          file_name: fileName,
+          title: fileName.replace(/\.[^/.]+$/, ''),
+          artist: '未知艺术家',
+          album: null,
+          year: null,
+          genre: null,
+          file_size: 0,
+          file_hash: fileHash,
+          file_extension: extname(fileName).toLowerCase(),
+          duration: null,
+          bitrate: null,
+          sample_rate: null,
+          channels: null,
+          cover_path: null,
+          lyrics_path: null,
+          is_exists: isExists ? 1 : 0,
+          is_playable: 0,
+          play_error_reason: '文件损坏',
+          play_count: 0,
+          last_played_at: null,
+          is_corrupted: 1,
+          is_duplicate: 0
+        })
+        return { success: false, corrupted: true, musicId }
       }
 
-      // 解析元数据
-      const metadata = await this.parseMetadata(filePath, hash)
+      // 7. 解析元数据
+      const metadata = await this.parseMetadata(filePath, fileHash)
 
-      // 获取文件信息
+      // 8. 获取文件信息
       const fileStat = await stat(filePath)
 
-      // 创建音乐项
-      const musicItem: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'> = {
-        title: metadata.title || basename(filePath, extname(filePath)),
+      // 9. 插入 all_music 记录
+      const musicId = this.db.insertAllMusic({
+        dir_id: dirId,
+        file_name: fileName,
+        title: metadata.title || fileName.replace(/\.[^/.]+$/, ''),
         artist: metadata.artist || '未知艺术家',
         album: metadata.album || null,
         year: metadata.year || null,
         genre: metadata.genre || null,
-        filePath,
-        fileName: basename(filePath),
-        fileSize: fileStat.size,
-        fileHash: hash,
-        fileExtension: extname(filePath).toLowerCase(),
-        duration: metadata.duration || 0,
-        bitrate: metadata.bitrate || 0,
-        sampleRate: metadata.sampleRate || 0,
-        channels: metadata.channels || 0,
-        coverPath: metadata.coverPath || null,
-        lyricsPath: null,
-        playCount: 0,
-        lastPlayedAt: null,
-        favorite: false,
-        isCorrupted: false,
-        isDuplicate: false
-      }
+        file_size: fileStat.size,
+        file_hash: fileHash,
+        file_extension: extname(fileName).toLowerCase(),
+        duration: metadata.duration || null,
+        bitrate: metadata.bitrate || null,
+        sample_rate: metadata.sampleRate || null,
+        channels: metadata.channels || null,
+        cover_path: metadata.coverPath || null,
+        lyrics_path: null,
+        is_exists: isExists ? 1 : 0,
+        is_playable: 1,
+        play_error_reason: null,
+        play_count: 0,
+        last_played_at: null,
+        is_corrupted: 0,
+        is_duplicate: 0
+      })
 
-      // 插入到 music 表（会自动同步到 local_music）
-      this.db.insertMusic(musicItem)
-      return true
-    } catch (error) {
+      // 10. 添加到 local_music 列表
+      this.db.addToLocalMusicByMusicId(musicId)
+
+      return { success: true, corrupted: false, musicId }
+    } catch (error: any) {
       throw error
     }
   }
