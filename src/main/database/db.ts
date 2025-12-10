@@ -1395,104 +1395,48 @@ export default class MusicDatabase {
     return result.count > 0
   }
 
+  /**
+   * @deprecated 使用 getFavoritesByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getFavorites(): MusicItem[] {
-    // 使用 LEFT JOIN 一次性获取所有收藏歌曲信息，避免 N+1 查询问题
-    const stmt = this.db!.prepare(`
-      SELECT
-        m.*,
-        f.added_at as favorite_added_at,
-        f.file_path as fav_file_path
-      FROM favorites f
-      LEFT JOIN music m ON f.file_path = m.file_path
-      WHERE f.file_path IS NOT NULL AND f.file_path != ''
-      ORDER BY f.added_at DESC
-    `)
-    const rows = stmt.all() as any[]
-
-    return rows.map(row => {
-      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
-      if (row.id !== null) {
-        const item = this.mapRowToMusicItem(row)
-        item.favorite = true // 确保 favorite 标记为 true
-        return item
-      } else {
-        // 如果 music 表中没有数据，创建临时 MusicItem
-        const filePath = row.fav_file_path
-
-        // 再次检查 filePath 有效性（双重保护）
-        if (!filePath || typeof filePath !== 'string') {
-          console.warn('收藏表中发现无效的 file_path:', filePath)
-          return null
-        }
-
-        const path = require('path')
-        const fileName = path.basename(filePath)
-        const ext = path.extname(filePath).toLowerCase()
-
-        return {
-          id: -1,
-          title: fileName.replace(ext, ''),
-          artist: '未知艺术家',
-          album: null,
-          year: null,
-          genre: null,
-          filePath: filePath,
-          fileName: fileName,
-          fileSize: 0,
-          fileHash: '',
-          fileExtension: ext,
-          duration: 0,
-          bitrate: 0,
-          sampleRate: 0,
-          channels: 0,
-          coverPath: null,
-          lyricsPath: null,
-          playCount: 0,
-          lastPlayedAt: null,
-          favorite: true,
-          addedAt: row.favorite_added_at || new Date().toISOString(),
-          updatedAt: row.favorite_added_at || new Date().toISOString(),
-          isCorrupted: false,
-          isDuplicate: false
-        }
-      }
-    }).filter(item => item !== null) as MusicItem[] // 过滤掉无效项
+    // 使用新的基于 music_id 的方法
+    return this.getFavoritesByMusicId()
   }
 
+  /**
+   * @deprecated 使用 recordPlayByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   recordPlay(filePath: string): void {
-    // 插入播放历史（使用 file_path）
-    const historyStmt = this.db!.prepare('INSERT INTO play_history (file_path) VALUES (?)')
-    historyStmt.run(filePath)
-
-    // 更新播放统计（如果该音乐在 music 表中存在）
-    const updateStmt = this.db!.prepare(`
-      UPDATE music SET
-        play_count = play_count + 1,
-        last_played_at = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE file_path = ?
-    `)
-    updateStmt.run(filePath)
+    // 尝试根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (music) {
+      // 使用新的基于 music_id 的方法
+      this.addToRecentPlaysByMusicId(music.id)
+      // 更新播放统计
+      this.updateAllMusic(music.id, {
+        play_count: (music.playCount || 0) + 1,
+        last_played_at: new Date().toISOString()
+      })
+    }
   }
 
+  /**
+   * @deprecated 使用 getRecentPlaysByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getPlayHistory(limit: number = 50): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT m.*
-      FROM music m
-      JOIN play_history ph ON m.file_path = ph.file_path
-      WHERE m.is_duplicate = 0
-      ORDER BY ph.played_at DESC
-      LIMIT ?
-    `)
-    const rows = stmt.all(limit) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法
+    return this.getRecentPlaysByMusicId(limit)
   }
 
   clearPlayHistory(): void {
-    const stmt = this.db!.prepare('DELETE FROM play_history')
+    // 清空 recent_plays 表（v1.0.6 新架构）
+    const stmt = this.db!.prepare('DELETE FROM recent_plays')
     stmt.run()
     // 重置所有音乐的播放次数和最后播放时间
-    const resetStmt = this.db!.prepare('UPDATE music SET play_count = 0, last_played_at = NULL')
+    const resetStmt = this.db!.prepare('UPDATE all_music SET play_count = 0, last_played_at = NULL')
     resetStmt.run()
   }
 
@@ -2553,21 +2497,14 @@ export default class MusicDatabase {
   /**
    * 分页获取最近播放列表
    */
+  /**
+   * @deprecated 使用 getRecentPlaysByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getRecentPlaysPaginated(offset: number, limit: number): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT
-        rp.id as list_id,
-        rp.file_path,
-        rp.file_path_md5,
-        rp.played_at as added_at,
-        m.*
-      FROM recent_plays rp
-      LEFT JOIN music m ON rp.file_path = m.file_path
-      ORDER BY rp.played_at DESC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = stmt.all(limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法，然后分页
+    const allPlays = this.getRecentPlaysByMusicId(1000) // 获取足够多的记录
+    return allPlays.slice(offset, offset + limit)
   }
 
   // ========== 播放队列 ==========
@@ -2652,22 +2589,14 @@ export default class MusicDatabase {
   /**
    * 分页获取我喜欢列表
    */
+  /**
+   * @deprecated 使用 getFavoritesByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getFavoritesPaginated(offset: number, limit: number): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT
-        f.id as list_id,
-        f.file_path,
-        f.file_path_md5,
-        f.added_at,
-        m.*
-      FROM favorites f
-      LEFT JOIN music m ON f.file_path = m.file_path
-      WHERE f.file_path IS NOT NULL
-      ORDER BY f.added_at DESC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = stmt.all(limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法，然后分页
+    const allFavorites = this.getFavoritesByMusicId()
+    return allFavorites.slice(offset, offset + limit)
   }
 
   // ========== 歌单列表（更新为分页）==========

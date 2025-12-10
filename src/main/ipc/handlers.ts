@@ -645,15 +645,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.isFileFavorite(filePath)
   })
 
+  // 收藏功能（v1.0.6 使用 music_id）
   ipcMain.handle('get-favorites', () => {
     if (!db) return []
-    return db.getFavorites()
+    return db.getFavoritesByMusicId()
   })
 
   // 收藏功能（分页）
   ipcMain.handle('get-favorites-paginated', (_, offset: number, limit: number) => {
     if (!db) return []
-    return db.getFavoritesPaginated(offset, limit)
+    // TODO: 实现基于 music_id 的分页方法
+    const allFavorites = db.getFavoritesByMusicId()
+    return allFavorites.slice(offset, offset + limit)
   })
 
   ipcMain.handle('get-favorites-count', () => {
@@ -661,15 +664,15 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getFavoritesCount()
   })
 
-  // 播放历史
+  // 播放历史（v1.0.6 使用 music_id）
   ipcMain.handle('get-play-history', () => {
     if (!db) return []
-    return db.getPlayHistory()
+    return db.getRecentPlaysByMusicId()
   })
 
   ipcMain.handle('get-recent-plays', (_, limit?: number) => {
     if (!db) return []
-    return db.getPlayHistory(limit)
+    return db.getRecentPlaysByMusicId(limit)
   })
 
   ipcMain.handle('clear-play-history', async () => {
