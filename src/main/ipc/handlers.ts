@@ -413,8 +413,30 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('add-to-playlist', async (_, playlistId: number, musicId: number) => {
-    if (!db) return
+    if (!db) throw new Error('数据库未初始化')
+    
+    // 检查歌单是否存在
+    const playlist = db.getPlaylistById(playlistId)
+    if (!playlist) {
+      throw new Error('歌单不存在')
+    }
+    
+    // 检查音乐是否存在
+    const music = db.getMusicById(musicId)
+    if (!music) {
+      throw new Error('音乐不存在')
+    }
+    
+    // 检查是否已在歌单中（使用现有的 IPC handler 逻辑）
+    const stmt = db['db']!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+    const result = stmt.get(playlistId, musicId) as { count: number }
+    if (result.count > 0) {
+      throw new Error('该歌曲已存在于该歌单中')
+    }
+    
+    // 添加到歌单
     db.addToPlaylistByMusicId(playlistId, musicId)
+    return { success: true }
   })
 
   // 批量添加到歌单 - 优化性能（v1.0.6 使用 music_id）

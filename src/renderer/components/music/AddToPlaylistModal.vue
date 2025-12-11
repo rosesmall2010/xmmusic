@@ -136,7 +136,18 @@ const selectPlaylist = async (playlist: any) => {
       }
     } else if (props.musicToAd) {
       // 单个添加（v1.0.6 使用 music_id）
-      await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.id)
+      try {
+        await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.id)
+        // 显示成功提示
+        alert(`已添加到歌单 "${playlist.name}"`)
+      } catch (error: any) {
+        // 检查是否是重复添加的错误
+        if (error?.message?.includes('UNIQUE constraint') || error?.message?.includes('已存在')) {
+          alert(`该歌曲已存在于歌单 "${playlist.name}" 中`)
+        } else {
+          throw error // 重新抛出其他错误
+        }
+      }
     }
 
     // 触发全局事件通知歌单更新
