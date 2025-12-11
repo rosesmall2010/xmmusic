@@ -452,7 +452,13 @@ const isFavorite = (music: MusicItem) => {
 const loadFavoriteStatus = async () => {
   try {
     const favorites = await window.electronAPI.getFavorites()
-    favoriteFiles.value = new Set(favorites.map((m: MusicItem) => m.filePath))
+    const favoriteFilePaths = new Set(favorites.map((m: MusicItem) => m.filePath))
+    favoriteFiles.value = favoriteFilePaths
+    
+    // 同步更新列表中每个 music 对象的 favorite 状态
+    props.songs.forEach(music => {
+      music.favorite = favoriteFilePaths.has(music.filePath)
+    })
   } catch (e) {
     console.error('Failed to load favorites', e)
   }
@@ -490,10 +496,11 @@ const isInQueue = (music: MusicItem) => {
 }
 
 const updateQueueStatus = () => {
-  queueFiles.value = new Set(playerStore.queue.map(m => m.filePath))
+  const queueFilePaths = new Set(playerStore.queue.map(m => m.filePath))
+  queueFiles.value = queueFilePaths
   // 同时更新列表中的 music.inQueue 状态
   props.songs.forEach(music => {
-    music.inQueue = queueFiles.value.has(music.filePath)
+    music.inQueue = queueFilePaths.has(music.filePath)
   })
 }
 
@@ -563,7 +570,9 @@ onMounted(() => {
   window.addEventListener('music-metadata-updated', () => {
     emit('songs-updated')
   })
-  window.addEventListener('favorites-updated', loadFavoriteStatus)
+  window.addEventListener('favorites-updated', () => {
+    loadFavoriteStatus()
+  })
 
   // 监听播放队列变化
   watch(() => playerStore.queue, () => {
