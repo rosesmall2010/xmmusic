@@ -454,7 +454,7 @@ const loadFavoriteStatus = async () => {
     const favorites = await window.electronAPI.getFavorites()
     const favoriteFilePaths = new Set(favorites.map((m: MusicItem) => m.filePath))
     favoriteFiles.value = favoriteFilePaths
-    
+
     // 同步更新列表中每个 music 对象的 favorite 状态
     props.songs.forEach(music => {
       music.favorite = favoriteFilePaths.has(music.filePath)
