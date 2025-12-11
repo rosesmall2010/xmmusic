@@ -193,7 +193,7 @@ export function usePlayer() {
             }
           }
         },
-        onloaderror: (_id, error) => {
+        onloaderror: async (_id, error) => {
           console.error('❌ Howler 加载失败，错误代码:', error)
 
           let errorMsg = '未知错误'
@@ -205,6 +205,15 @@ export function usePlayer() {
           }
 
           console.error(`跳过损坏文件: ${music.title} - ${errorMsg}`)
+          
+          // 更新数据库中的播放状态
+          try {
+            await window.electronAPI.updateMusicPlayStatus(music.id, false, errorMsg)
+            console.log(`✅ 已标记文件为不可播放: ${music.title} - ${errorMsg}`)
+          } catch (err) {
+            console.error('❌ 更新播放状态失败:', err)
+          }
+
           playerStore.isPlaying = false
           stopProgressUpdate()
 
