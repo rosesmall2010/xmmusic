@@ -148,6 +148,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportMusicToExcel: (musicIds: number[], options?: any) =>
     ipcRenderer.invoke('export-music-to-excel', musicIds, options),
 
+  // 更新音乐播放状态
+  updateMusicPlayStatus: (musicId: number, isPlayable: boolean, errorReason?: string) =>
+    ipcRenderer.invoke('update-music-play-status', musicId, isPlayable, errorReason),
+
   // 导出音乐文件
   exportMusicFiles: (musicIds: number[], options?: any) =>
     ipcRenderer.invoke('export-music-files', musicIds, options),

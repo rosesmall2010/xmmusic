@@ -531,7 +531,7 @@ const toggleFavorite = async (music: MusicItem) => {
     // 先获取当前状态（使用 isFavorite 函数确保获取准确的状态）
     const currentFavoriteStatus = isFavorite(music)
     const newFavoriteStatus = !currentFavoriteStatus
-    
+
     await window.electronAPI.toggleFavorite(music.id)
 
     // 更新 music 对象的状态（确保立即反映在UI上）
@@ -550,6 +550,9 @@ const toggleFavorite = async (music: MusicItem) => {
 
     // 触发全局事件，通知其他组件更新
     window.dispatchEvent(new Event('favorites-updated'))
+
+    // 使用 nextTick 确保 DOM 更新完成
+    await nextTick()
   } catch (e) {
     console.error('Failed to toggle favorite', e)
     // 如果失败，重新加载状态
@@ -598,11 +601,11 @@ const toggleQueue = async (music: MusicItem) => {
     queueFiles.value.add(music.filePath)
     music.inQueue = true
   }
-  
+
   // 强制触发响应式更新：重新创建 Set 对象，确保 Vue 检测到变化
   // 这会让 isInQueue 函数重新计算，因为它依赖于 queueFiles.value
   queueFiles.value = new Set(queueFiles.value)
-  
+
   // 使用 nextTick 确保 DOM 更新完成
   await nextTick()
 }
