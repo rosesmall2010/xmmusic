@@ -1720,16 +1720,28 @@ export default class MusicDatabase {
       VALUES (?, ?, 1)
     `)
     const result = stmt.run(normalizedPath, displayOrder)
-
+    const insertedId = result.lastInsertRowid as number
+    
+    console.log(`✅ 已插入 local_music_dir 记录: id=${insertedId}, path=${normalizedPath}`)
+    
     // 确保数据立即写入（WAL 模式下可能需要 checkpoint）
     // better-sqlite3 是同步的，数据应该立即写入，但为了确保，我们可以显式 checkpoint
     try {
-      this.db!.pragma('wal_checkpoint(PASSIVE)')
-    } catch (e) {
-      // 忽略 checkpoint 错误，不影响主流程
+      this.db!.pragma('wal_checkpoint(TRUNCATE)')
+      console.log(`✅ WAL checkpoint 完成，数据已同步到主数据库文件`)
+      
+      // 验证数据是否真的写入
+      const verify = this.db!.prepare('SELECT id, path FROM local_music_dir WHERE id = ?').get(insertedId)
+      if (verify) {
+        console.log(`✅ 验证成功：数据已写入数据库`)
+      } else {
+        console.error(`❌ 验证失败：数据未找到！`)
+      }
+    } catch (e: any) {
+      console.error('⚠️  checkpoint 错误:', e?.message || e)
     }
 
-    return this.getLocalMusicDirById(result.lastInsertRowid as number)!
+    return this.getLocalMusicDirById(insertedId)!
   }
 
   /**
