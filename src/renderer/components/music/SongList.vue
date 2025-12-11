@@ -197,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
 import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info } from 'lucide-vue-next'
@@ -256,10 +256,22 @@ const visibleRange = computed(() => {
 })
 
 const visibleSongs = computed(() => {
-  return props.songs.slice(visibleRange.value.start, visibleRange.value.end).map((song, index) => ({
-    ...song,
-    originalIndex: visibleRange.value.start + index
-  }))
+  // 保留原始对象引用，只添加 originalIndex 属性
+  // 这样当 music.favorite 或 music.inQueue 更新时，Vue 能够检测到变化
+  return props.songs.slice(visibleRange.value.start, visibleRange.value.end).map((song, index) => {
+    // 直接修改原始对象添加 originalIndex（如果还没有的话）
+    if (!('originalIndex' in song)) {
+      Object.defineProperty(song, 'originalIndex', {
+        value: visibleRange.value.start + index,
+        writable: true,
+        enumerable: true,
+        configurable: true
+      })
+    } else {
+      song.originalIndex = visibleRange.value.start + index
+    }
+    return song
+  })
 })
 
 const totalHeight = computed(() => props.songs.length * itemHeight)
@@ -412,7 +424,7 @@ const handlePlay = (music: MusicItem) => {
 const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   contextMenu.music = music
   contextMenu.visible = true
-  
+
   // 先设置初始位置，然后在 nextTick 中调整边界
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
@@ -422,7 +434,7 @@ const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   } catch (e) {
     console.error('Failed to check favorite status', e)
   }
-  
+
   // 在 nextTick 中调整菜单位置，确保不超出屏幕边界
   await nextTick()
   adjustContextMenuPosition()
@@ -430,40 +442,40 @@ const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
 
 const adjustContextMenuPosition = () => {
   if (!contextMenu.visible) return
-  
+
   // 获取菜单元素
   const menuElement = document.querySelector('.context-menu') as HTMLElement
   if (!menuElement) return
-  
+
   const menuRect = menuElement.getBoundingClientRect()
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
   const menuWidth = menuRect.width || 200 // 默认宽度 200px
   const menuHeight = menuRect.height || 300 // 默认高度 300px
-  
+
   let adjustedX = contextMenu.x
   let adjustedY = contextMenu.y
-  
+
   // 检查右边界
   if (adjustedX + menuWidth > viewportWidth) {
     adjustedX = viewportWidth - menuWidth - 10 // 留 10px 边距
   }
-  
+
   // 检查左边界
   if (adjustedX < 0) {
     adjustedX = 10 // 留 10px 边距
   }
-  
+
   // 检查下边界
   if (adjustedY + menuHeight > viewportHeight) {
     adjustedY = viewportHeight - menuHeight - 10 // 留 10px 边距
   }
-  
+
   // 检查上边界
   if (adjustedY < 0) {
     adjustedY = 10 // 留 10px 边距
   }
-  
+
   contextMenu.x = adjustedX
   contextMenu.y = adjustedY
 }
@@ -516,18 +528,25 @@ const loadFavoriteStatus = async () => {
 
 const toggleFavorite = async (music: MusicItem) => {
   try {
+    // 先获取当前状态（使用 isFavorite 函数确保获取准确的状态）
+    const currentFavoriteStatus = isFavorite(music)
+    const newFavoriteStatus = !currentFavoriteStatus
+    
     await window.electronAPI.toggleFavorite(music.id)
 
-    // 先更新 music 对象的状态（确保立即反映在UI上）
-    const newFavoriteStatus = !music.favorite
+    // 更新 music 对象的状态（确保立即反映在UI上）
+    // 直接赋值，Vue 3 应该能检测到对象属性的变化
     music.favorite = newFavoriteStatus
 
-    // 同步更新 favoriteFiles Set
+    // 同步更新 favoriteFiles Set（这个 Set 的变化会触发 isFavorite 的重新计算）
     if (newFavoriteStatus) {
       favoriteFiles.value.add(music.filePath)
     } else {
       favoriteFiles.value.delete(music.filePath)
     }
+
+    // 强制触发响应式更新：重新创建 Set 对象，确保 Vue 检测到变化
+    favoriteFiles.value = new Set(favoriteFiles.value)
 
     // 触发全局事件，通知其他组件更新
     window.dispatchEvent(new Event('favorites-updated'))
@@ -564,7 +583,7 @@ const updateQueueStatus = () => {
 
 const toggleQueue = async (music: MusicItem) => {
   const currentInQueue = isInQueue(music)
-  
+
   if (currentInQueue) {
     // 从队列移除：找到歌曲在队列中的索引
     const queueIndex = playerStore.queue.findIndex(m => m.id === music.id)
@@ -579,6 +598,13 @@ const toggleQueue = async (music: MusicItem) => {
     queueFiles.value.add(music.filePath)
     music.inQueue = true
   }
+  
+  // 强制触发响应式更新：重新创建 Set 对象，确保 Vue 检测到变化
+  // 这会让 isInQueue 函数重新计算，因为它依赖于 queueFiles.value
+  queueFiles.value = new Set(queueFiles.value)
+  
+  // 使用 nextTick 确保 DOM 更新完成
+  await nextTick()
 }
 
 const handleAddedToPlaylist = () => {
