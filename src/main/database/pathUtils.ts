@@ -168,48 +168,34 @@ export function batchGetOrCreateMusicDir(
   dirPaths: string[],
   platform: NodeJS.Platform = process.platform
 ): Record<string, number> {
-  console.log(`[batchGetOrCreateMusicDir] 开始处理，输入目录数量: ${dirPaths?.length || 0}`)
-
   if (!dirPaths || dirPaths.length === 0) {
-    console.log(`[batchGetOrCreateMusicDir] 目录数组为空，返回空对象`)
     return {}
   }
 
   // 规范化所有路径
   const normalizedPaths = dirPaths.map(path => normalizePath(path, platform))
   const uniquePaths = [...new Set(normalizedPaths)]
-  console.log(`[batchGetOrCreateMusicDir] 规范化后去重，唯一路径数量: ${uniquePaths.length}`)
-  console.log(`[batchGetOrCreateMusicDir] 唯一路径列表:`, uniquePaths.slice(0, 5), uniquePaths.length > 5 ? '...' : '')
 
   // 检查 music_dir 表是否存在
   try {
     const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='music_dir'").get()
     if (!tableCheck) {
-      console.error(`[batchGetOrCreateMusicDir] ❌ music_dir 表不存在！`)
+      console.error(`❌ music_dir 表不存在！`)
       throw new Error('music_dir table does not exist')
     }
-    console.log(`[batchGetOrCreateMusicDir] ✅ music_dir 表存在`)
   } catch (error: any) {
-    console.error(`[batchGetOrCreateMusicDir] ❌ 检查表时出错:`, error.message)
+    console.error(`❌ 检查 music_dir 表时出错:`, error.message)
     throw error
   }
 
   // 批量查询已存在的目录
   const placeholders = uniquePaths.map(() => '?').join(',')
-  console.log(`[batchGetOrCreateMusicDir] 准备查询已存在的目录，占位符数量: ${placeholders.split(',').length}`)
-
   let existing: Array<{ id: number; path: string }> = []
   try {
     const selectStmt = db.prepare(`SELECT id, path FROM music_dir WHERE path IN (${placeholders})`)
     existing = selectStmt.all(...uniquePaths) as Array<{ id: number; path: string }>
-    console.log(`[batchGetOrCreateMusicDir] 查询到已存在的目录数量: ${existing.length}`)
-    if (existing.length > 0) {
-      console.log(`[batchGetOrCreateMusicDir] 已存在的目录示例:`, existing.slice(0, 3))
-    }
   } catch (error: any) {
-    console.error(`[batchGetOrCreateMusicDir] ❌ 查询已存在目录时出错:`, error.message)
-    console.error(`[batchGetOrCreateMusicDir] SQL: SELECT id, path FROM music_dir WHERE path IN (${placeholders})`)
-    console.error(`[batchGetOrCreateMusicDir] 参数:`, uniquePaths.slice(0, 5))
+    console.error(`❌ 查询已存在目录时出错:`, error.message)
     throw error
   }
 
@@ -221,14 +207,9 @@ export function batchGetOrCreateMusicDir(
     existingMap.set(dir.path, dir.id)
     result[dir.path] = dir.id
   }
-  console.log(`[batchGetOrCreateMusicDir] 已存在目录映射数量: ${Object.keys(result).length}`)
 
   // 找出需要创建的目录
   const toCreate = uniquePaths.filter(path => !existingMap.has(path))
-  console.log(`[batchGetOrCreateMusicDir] 需要创建的目录数量: ${toCreate.length}`)
-  if (toCreate.length > 0) {
-    console.log(`[batchGetOrCreateMusicDir] 需要创建的目录示例:`, toCreate.slice(0, 5))
-  }
 
   if (toCreate.length > 0) {
     // 使用事务批量插入
@@ -239,24 +220,16 @@ export function batchGetOrCreateMusicDir(
         for (const path of paths) {
           const result = insertStmt.run(path)
           map[path] = result.lastInsertRowid as number
-          console.log(`[batchGetOrCreateMusicDir] 插入目录: ${path} -> id=${result.lastInsertRowid}`)
         }
         return map
       })
 
       const newMap = insertMany(toCreate)
-      console.log(`[batchGetOrCreateMusicDir] 新创建的目录映射数量: ${Object.keys(newMap).length}`)
       Object.assign(result, newMap)
     } catch (error: any) {
-      console.error(`[batchGetOrCreateMusicDir] ❌ 批量插入目录时出错:`, error.message)
-      console.error(`[batchGetOrCreateMusicDir] 错误堆栈:`, error.stack)
+      console.error(`❌ 批量插入目录时出错:`, error.message)
       throw error
     }
-  }
-
-  console.log(`[batchGetOrCreateMusicDir] 最终返回映射数量: ${Object.keys(result).length}`)
-  if (Object.keys(result).length > 0) {
-    console.log(`[batchGetOrCreateMusicDir] 最终映射示例:`, Object.entries(result).slice(0, 3))
   }
 
   return result
