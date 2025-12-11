@@ -845,8 +845,8 @@ const selectDirPath = async () => {
 }
 
 .btn-icon.danger:hover {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 /* 添加/编辑目录对话框 */
@@ -901,15 +901,15 @@ const selectDirPath = async () => {
 }
 
 .form-input-error {
-  border-color: var(--color-danger);
+  border-color: var(--color-error);
 }
 
 .form-input-error:focus {
-  border-color: var(--color-danger);
+  border-color: var(--color-error);
 }
 
 .form-error-hint {
-  color: var(--color-danger);
+  color: var(--color-error);
   font-size: var(--font-size-xs);
   margin-top: var(--spacing-xs);
   margin-bottom: var(--spacing-sm);
