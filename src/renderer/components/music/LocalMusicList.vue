@@ -280,38 +280,19 @@ const loadMore = async () => {
 
 const handleScan = async () => {
   try {
-    // 1. 选择目录
-    const folders = await window.electronAPI.selectMusicFolder()
-    if (folders.length === 0) return
-
-    // 2. 将选择的目录添加到 local_music_dir（如果不存在），并确保启用
-    for (const folder of folders) {
-      try {
-        // 检查是否已存在
-        const existing = dirStore.directories.find(d => d.path === folder)
-        if (!existing) {
-          // 验证路径
-          const validation = await dirStore.validatePath(folder)
-          if (validation.valid) {
-            await dirStore.addDirectory(folder)
-          } else {
-            console.warn(`目录无效，跳过: ${folder}`, validation.error)
-            continue
-          }
-        } else if (!existing.enabled) {
-          // 如果已存在但被禁用，则启用它
-          await dirStore.updateDirectory(existing.id, { enabled: true })
-        }
-      } catch (error: any) {
-        console.error(`添加目录失败: ${folder}`, error)
-        // 继续处理其他目录
-      }
-    }
-
-    // 重新加载目录列表以确保状态同步
+    // 1. 重新加载目录列表以确保状态同步
     await dirStore.loadDirectories()
 
-    // 3. 使用新的扫描方法扫描所有启用的目录
+    // 2. 获取所有启用的目录
+    const enabledDirs = dirStore.enabledDirs
+
+    // 3. 检查是否有启用的目录
+    if (enabledDirs.length === 0) {
+      alert('请先添加扫描目录\n\n点击"扫描目录管理"按钮添加音乐目录')
+      return
+    }
+
+    // 4. 直接开始扫描所有启用的目录
     isScanning.value = true
     try {
       await window.electronAPI.scanAllDirectories({
