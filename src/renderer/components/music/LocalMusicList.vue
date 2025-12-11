@@ -50,9 +50,9 @@
         </div>
         <div class="dialog-body">
           <div class="dir-manage-actions">
-            <button 
-              class="btn-primary" 
-              @click="showAddDirDialog = true" 
+            <button
+              class="btn-primary"
+              @click="showAddDirDialog = true"
               :disabled="dirStore.directories.length >= 20"
             >
               <Plus :size="16" />
@@ -112,22 +112,20 @@
         <div class="dialog-body">
           <div class="form-group">
             <label class="form-label">目录路径</label>
-            <div class="form-input-group">
-              <input
-                v-model="newDirPath"
-                type="text"
-                class="form-input"
-                placeholder="请输入或选择目录路径"
-                @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
-              />
-              <button
-                class="btn-secondary"
-                @click="selectDirPath"
-                title="选择目录"
-              >
-                浏览
-              </button>
-            </div>
+            <input
+              v-model="newDirPath"
+              type="text"
+              class="form-input form-input-full"
+              placeholder="请输入或选择目录路径"
+              @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
+            />
+            <button
+              class="btn-secondary form-input-btn"
+              @click="selectDirPath"
+              title="选择目录"
+            >
+              浏览
+            </button>
           </div>
         </div>
         <div class="dialog-actions">
@@ -301,7 +299,7 @@ const handleScan = async () => {
         excludePaths: [],
         forceRescan: false
       })
-      
+
       // 扫描完成后刷新列表
       await musicStore.loadMusic(0, 20, true)
       startBackgroundLoading()
@@ -668,9 +666,9 @@ const selectDirPath = async () => {
 .dir-manage-dialog {
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
-  min-width: 600px;
-  max-width: 800px;
-  max-height: 80vh;
+  min-width: 750px;
+  max-width: 1000px;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
@@ -825,8 +823,8 @@ const selectDirPath = async () => {
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
   padding: var(--spacing-xl);
-  min-width: 400px;
-  max-width: 600px;
+  min-width: 500px;
+  max-width: 700px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -848,7 +846,6 @@ const selectDirPath = async () => {
 }
 
 .form-input {
-  flex: 1;
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-base);
   background: var(--bg-secondary);
@@ -856,6 +853,16 @@ const selectDirPath = async () => {
   border: 1px solid var(--border-color);
   font-size: var(--font-size-sm);
   outline: none;
+  width: 100%;
+}
+
+.form-input-full {
+  width: 100%;
+  margin-bottom: var(--spacing-sm);
+}
+
+.form-input-btn {
+  width: 100%;
 }
 
 .form-input:focus {
