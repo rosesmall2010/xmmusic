@@ -316,7 +316,7 @@ END;
 -- ============================================================================
 
 INSERT OR REPLACE INTO settings (key, value, updated_at)
-VALUES ('db_version', '1.0.6', CURRENT_TIMESTAMP);
+VALUES ('db_version', '3', CURRENT_TIMESTAMP);
 
 -- ============================================================================
 -- 迁移完成
