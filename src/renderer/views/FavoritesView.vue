@@ -125,11 +125,20 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 }
 
 const playMusic = async (music: MusicItem) => {
-  const newQueue = [...songs.value]
-  playerStore.queue = newQueue
-  const index = newQueue.findIndex(m => m.id === music.id)
-  playerStore.setCurrentQueueIndex(index)
-  await play(music)
+  // 检查歌曲是否已在队列中
+  const existingIndex = playerStore.queue.findIndex(m => m.id === music.id)
+  
+  if (existingIndex >= 0) {
+    // 如果已在队列中，直接切换到该歌曲并播放
+    playerStore.setCurrentQueueIndex(existingIndex)
+    await play(music)
+  } else {
+    // 如果不在队列中，只添加这一首歌曲到队列并播放
+    playerStore.addToQueue(music)
+    const newIndex = playerStore.queue.length - 1
+    playerStore.setCurrentQueueIndex(newIndex)
+    await play(music)
+  }
 }
 
 const playAll = async () => {
