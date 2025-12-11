@@ -106,7 +106,7 @@ onMounted(async () => {
 
   // 监听歌单更新事件
   window.addEventListener('playlist-updated', loadPlaylists)
-  window.addEventListener('song if-added-to-playlist', loadPlaylists)
+  window.addEventListener('song-added-to-playlist', loadPlaylists)
 
   // 监听收藏和播放历史更新事件
   window.addEventListener('favorites-updated', refreshFavoritesCount)

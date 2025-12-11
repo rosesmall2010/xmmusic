@@ -100,11 +100,22 @@ onMounted(async () => {
   await loadPlaylist()
   // 监听元数据更新事件
   window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  // 监听歌曲添加到歌单事件，刷新当前歌单
+  window.addEventListener('song-added-to-playlist', handleSongAddedToPlaylist)
 })
 
 onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  window.removeEventListener('song-added-to-playlist', handleSongAddedToPlaylist)
 })
+
+// 处理歌曲添加到歌单事件
+const handleSongAddedToPlaylist = () => {
+  // 重置分页状态并重新加载
+  currentOffset = 0
+  hasMore = true
+  loadPlaylist()
+}
 
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail as MusicItem

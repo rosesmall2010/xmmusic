@@ -138,12 +138,15 @@ const selectPlaylist = async (playlist: any) => {
       // 单个添加（v1.0.6 使用 music_id）
       try {
         await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.id)
+        // 重新加载歌单列表以更新数量
+        await loadPlaylists()
         // 显示成功提示
         alert(`已添加到歌单 "${playlist.name}"`)
       } catch (error: any) {
         // 检查是否是重复添加的错误
         if (error?.message?.includes('UNIQUE constraint') || error?.message?.includes('已存在')) {
           alert(`该歌曲已存在于歌单 "${playlist.name}" 中`)
+          return // 重复添加时不关闭对话框
         } else {
           throw error // 重新抛出其他错误
         }
@@ -152,6 +155,7 @@ const selectPlaylist = async (playlist: any) => {
 
     // 触发全局事件通知歌单更新
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
     emit('added')
     close()
   } catch (error) {
