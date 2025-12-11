@@ -346,11 +346,12 @@ export default class MusicDatabase {
       data.is_duplicate || 0
     )
 
-    // 批量插入时不需要每次都 checkpoint，但可以定期 checkpoint
-    // better-sqlite3 是同步的，数据应该立即写入 WAL
-    // 如果需要确保数据持久化，可以在批量操作后统一 checkpoint
+    const insertedId = Number(result.lastInsertRowid)
 
-    return Number(result.lastInsertRowid)
+    // better-sqlite3 是同步的，数据应该立即写入 WAL
+    // checkpoint 会在扫描过程中定期执行，以及扫描完成后统一执行
+
+    return insertedId
   }
 
   /**
@@ -1721,15 +1722,15 @@ export default class MusicDatabase {
     `)
     const result = stmt.run(normalizedPath, displayOrder)
     const insertedId = result.lastInsertRowid as number
-    
+
     console.log(`✅ 已插入 local_music_dir 记录: id=${insertedId}, path=${normalizedPath}`)
-    
+
     // 确保数据立即写入（WAL 模式下可能需要 checkpoint）
     // better-sqlite3 是同步的，数据应该立即写入，但为了确保，我们可以显式 checkpoint
     try {
       this.db!.pragma('wal_checkpoint(TRUNCATE)')
       console.log(`✅ WAL checkpoint 完成，数据已同步到主数据库文件`)
-      
+
       // 验证数据是否真的写入
       const verify = this.db!.prepare('SELECT id, path FROM local_music_dir WHERE id = ?').get(insertedId)
       if (verify) {
