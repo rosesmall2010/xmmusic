@@ -381,7 +381,7 @@ onMounted(async () => {
 /* 搜索框 */
 .search-wrapper {
   flex: 1;
-  max-width: 500px;
+  max-width: 333px;
   position: relative;
 }
 

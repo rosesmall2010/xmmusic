@@ -503,13 +503,13 @@ const handleSaveEdit = async () => {
 
 // 删除目录
 const deleteDir = async (dir: { id: number; path: string }) => {
-  if (!confirm(`确定要删除目录 "${dir.path}" 吗？\n\n可以选择是否同时删除该目录下已扫描的音乐文件。`)) {
+  if (!confirm(`确定要从扫描目录列表中删除 "${dir.path}" 吗？\n\n注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。`)) {
     return
   }
 
-  const removeFiles = confirm('是否同时删除该目录下已扫描的音乐文件？')
   try {
-    await dirStore.deleteDirectory(dir.id, { removeScannedFiles: removeFiles })
+    // 只删除目录配置，不删除已扫描的音乐文件
+    await dirStore.deleteDirectory(dir.id, { removeScannedFiles: false })
     alert('目录删除成功')
   } catch (error: any) {
     alert(error.message || '删除目录失败')
