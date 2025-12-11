@@ -40,7 +40,6 @@
       <div class="col-title">标题</div>
       <div class="col-album">专辑</div>
       <div class="col-filename">文件名</div>
-      <div class="col-status">状态</div>
       <div class="col-duration">时长</div>
       <div class="col-actions">操作</div>
     </div>
@@ -98,38 +97,6 @@
           </div>
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
-          <div class="col-status">
-            <div class="status-icons">
-              <span
-                v-if="music.favorite"
-                class="status-icon favorite"
-                title="已收藏"
-              >
-                <Heart :size="14" :fill="'currentColor'" />
-              </span>
-              <span
-                v-else
-                class="status-icon favorite-empty"
-                title="未收藏"
-              >
-                <Heart :size="14" />
-              </span>
-              <span
-                v-if="music.inQueue"
-                class="status-icon queue"
-                title="在播放队列中"
-              >
-                <ListMusic :size="14" :fill="'currentColor'" />
-              </span>
-              <span
-                v-else
-                class="status-icon queue-empty"
-                title="不在播放队列"
-              >
-                <ListMusic :size="14" />
-              </span>
-            </div>
-          </div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
           <div class="col-actions">
             <button
@@ -366,7 +333,7 @@ const handleBatchAddToFavorites = async () => {
     for (const filePath of filePaths) {
       const music = props.songs.find(s => s.filePath === filePath)
       if (!music) continue
-      
+
       // 检查是否已经在我喜欢中
       if (!favoriteFiles.value.has(filePath)) {
         await window.electronAPI.toggleFavorite(music.id)
