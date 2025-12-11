@@ -169,7 +169,7 @@ export function batchGetOrCreateMusicDir(
   platform: NodeJS.Platform = process.platform
 ): Record<string, number> {
   console.log(`[batchGetOrCreateMusicDir] 开始处理，输入目录数量: ${dirPaths?.length || 0}`)
-  
+
   if (!dirPaths || dirPaths.length === 0) {
     console.log(`[batchGetOrCreateMusicDir] 目录数组为空，返回空对象`)
     return {}
@@ -197,7 +197,7 @@ export function batchGetOrCreateMusicDir(
   // 批量查询已存在的目录
   const placeholders = uniquePaths.map(() => '?').join(',')
   console.log(`[batchGetOrCreateMusicDir] 准备查询已存在的目录，占位符数量: ${placeholders.split(',').length}`)
-  
+
   let existing: Array<{ id: number; path: string }> = []
   try {
     const selectStmt = db.prepare(`SELECT id, path FROM music_dir WHERE path IN (${placeholders})`)
@@ -258,7 +258,7 @@ export function batchGetOrCreateMusicDir(
   if (Object.keys(result).length > 0) {
     console.log(`[batchGetOrCreateMusicDir] 最终映射示例:`, Object.entries(result).slice(0, 3))
   }
-  
+
   return result
 }
 

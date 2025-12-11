@@ -38,11 +38,11 @@ export class Database extends EventEmitter {
     return new Statement(this.db.prepare(sql))
   }
 
-  transaction<T extends any[]>(fn: (...args: T) => void): (...args: T) => void {
+  transaction<T extends any[], R>(fn: (...args: T) => R): (...args: T) => R {
     // better-sqlite3 的 transaction 返回一个事务包装函数
     const transactionFn = this.db.transaction(fn)
     return (...args: T) => {
-      transactionFn(...args)
+      return transactionFn(...args)
     }
   }
 

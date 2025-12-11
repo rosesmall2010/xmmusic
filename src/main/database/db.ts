@@ -13,7 +13,7 @@ import type {
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
 
-const dbname: string = 'm3'
+const dbname: string = 'm4'
 const dbnameDev: string = dbname +'-dev'
 
 const copyFileAsync = promisify(copyFile)
