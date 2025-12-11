@@ -476,7 +476,6 @@ const handleAddDir = async () => {
     await dirStore.addDirectory(newDirPath.value.trim())
     newDirPath.value = ''
     showAddDirDialog.value = false
-    alert('目录添加成功')
   } catch (error: any) {
     alert(error.message || '添加目录失败')
   }
