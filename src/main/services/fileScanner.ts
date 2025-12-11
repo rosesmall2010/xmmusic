@@ -193,7 +193,6 @@ export default class FileScanner {
     // 注意：better-sqlite3 是同步的，不需要 await
     const dirPaths = [...new Set(files.map(f => parsePath(f, process.platform).dirPath))]
     const dirIdMap = batchGetOrCreateMusicDir(this.db.getDatabase(), dirPaths, process.platform)
-    console.log('批量获取目录ID映射：dirIdMap:', dirIdMap);
     // 进度更新函数（节流）
     const updateProgress = (file: string, force: boolean = false) => {
       const now = Date.now()

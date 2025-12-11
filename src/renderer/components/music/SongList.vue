@@ -442,7 +442,8 @@ const favoriteFiles = ref<Set<string>>(new Set())
 
 const isFavorite = (music: MusicItem) => {
   // 优先使用 music.favorite（从数据库查询得到）
-  if (music.favorite !== undefined) {
+  // 如果 music.favorite 是明确的布尔值，直接返回
+  if (typeof music.favorite === 'boolean') {
     return music.favorite
   }
   // 回退到 filePath 查找（兼容旧逻辑）
@@ -467,18 +468,24 @@ const loadFavoriteStatus = async () => {
 const toggleFavorite = async (music: MusicItem) => {
   try {
     await window.electronAPI.toggleFavorite(music.id)
-    // 更新本地状态
-    if (favoriteFiles.value.has(music.filePath)) {
-      favoriteFiles.value.delete(music.filePath)
-    } else {
+    
+    // 先更新 music 对象的状态（确保立即反映在UI上）
+    const newFavoriteStatus = !music.favorite
+    music.favorite = newFavoriteStatus
+    
+    // 同步更新 favoriteFiles Set
+    if (newFavoriteStatus) {
       favoriteFiles.value.add(music.filePath)
+    } else {
+      favoriteFiles.value.delete(music.filePath)
     }
-    // 更新 music 对象的状态
-    music.favorite = !music.favorite
-    // 触发全局事件
+    
+    // 触发全局事件，通知其他组件更新
     window.dispatchEvent(new Event('favorites-updated'))
   } catch (e) {
     console.error('Failed to toggle favorite', e)
+    // 如果失败，重新加载状态
+    await loadFavoriteStatus()
   }
   closeContextMenu()
 }
