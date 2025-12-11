@@ -175,16 +175,45 @@ export default class MusicDatabase {
     // 新数据库直接创建新结构，旧数据库会被删除重建
     try {
       const v106MigrationPath = join(__dirname, 'migrations', '007_v106_db_restructure.sql')
+      console.log(`🔍 检查迁移文件路径: ${v106MigrationPath}`)
+      console.log(`🔍 迁移文件是否存在: ${existsSync(v106MigrationPath)}`)
+      
       if (existsSync(v106MigrationPath)) {
         console.log('📦 执行 v1.0.6 数据库重构迁移...')
         const sql = readFileSync(v106MigrationPath, 'utf8')
+        console.log(`📄 迁移脚本大小: ${sql.length} 字符`)
         this.db!.exec(sql)
         console.log('✅ v1.0.6 数据库重构迁移完成')
+        
+        // 验证表是否创建成功
+        const tables = this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+        console.log(`📊 数据库表列表: ${tables.map(t => t.name).join(', ')}`)
+        
+        // 检查 local_music_dir 表是否存在
+        const localMusicDirExists = tables.some(t => t.name === 'local_music_dir')
+        if (localMusicDirExists) {
+          console.log('✅ local_music_dir 表已创建')
+        } else {
+          console.error('❌ local_music_dir 表未创建！')
+        }
       } else {
-        console.warn('⚠️  v1.0.6 迁移脚本未找到，跳过迁移')
+        console.warn(`⚠️  v1.0.6 迁移脚本未找到: ${v106MigrationPath}`)
+        console.warn('⚠️  尝试查找迁移文件...')
+        // 尝试其他可能的路径
+        const altPath = join(process.cwd(), 'src', 'main', 'database', 'migrations', '007_v106_db_restructure.sql')
+        if (existsSync(altPath)) {
+          console.log(`📦 找到备用路径，执行迁移: ${altPath}`)
+          const sql = readFileSync(altPath, 'utf8')
+          this.db!.exec(sql)
+          console.log('✅ v1.0.6 数据库重构迁移完成（使用备用路径）')
+        }
       }
     } catch (error: any) {
       console.error('❌ v1.0.6 数据库迁移失败:', error)
+      console.error('错误详情:', error.message)
+      if (error.stack) {
+        console.error('错误堆栈:', error.stack)
+      }
       throw error
     }
 
