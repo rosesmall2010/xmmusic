@@ -44,28 +44,47 @@ export default class MusicDatabase {
 
       console.log(`🌍 运行环境: ${isDev ? '开发环境' : '生产环境'}`)
       console.log(`📂 数据库路径: ${path}`)
+      console.log(`📂 数据库文件是否存在: ${existsSync(path)}`)
 
       // 如果数据库文件已存在，先检查版本（避免不必要的删除）
       if (existsSync(path) && !skipVersionCheck) {
         try {
           const tempDb = new Database(path)
-          // 尝试读取版本号
-          const versionStmt = tempDb.prepare('SELECT value FROM settings WHERE key = ?')
-          const versionResult = versionStmt.get(DB_VERSION_KEY) as { value: string } | undefined
-          tempDb.close()
-
-          if (versionResult && parseInt(versionResult.value) !== DB_VERSION) {
-            // 版本不匹配，删除数据库文件
-            console.warn(`⚠️  数据库版本不匹配，删除旧数据库文件...`)
+          // 检查表是否存在
+          const tables = tempDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+          const hasSettingsTable = tables.some(t => t.name === 'settings')
+          const hasLocalMusicDirTable = tables.some(t => t.name === 'local_music_dir')
+          
+          if (!hasSettingsTable || !hasLocalMusicDirTable) {
+            // 表不存在，说明数据库结构不完整，删除重建
+            console.warn(`⚠️  数据库结构不完整（缺少必要表），删除数据库文件...`)
+            tempDb.close()
             unlinkSync(path)
-            console.log(`✅ 已删除旧数据库文件`)
+            console.log(`✅ 已删除不完整的数据库文件`)
+          } else {
+            // 尝试读取版本号
+            const versionStmt = tempDb.prepare('SELECT value FROM settings WHERE key = ?')
+            const versionResult = versionStmt.get(DB_VERSION_KEY) as { value: string } | undefined
+            tempDb.close()
+
+            if (versionResult && parseInt(versionResult.value) !== DB_VERSION) {
+              // 版本不匹配，删除数据库文件
+              console.warn(`⚠️  数据库版本不匹配（当前: ${versionResult.value}, 需要: ${DB_VERSION}），删除旧数据库文件...`)
+              unlinkSync(path)
+              console.log(`✅ 已删除旧数据库文件`)
+            } else if (!versionResult) {
+              // 没有版本信息，删除重建
+              console.warn(`⚠️  数据库缺少版本信息，删除数据库文件...`)
+              unlinkSync(path)
+              console.log(`✅ 已删除缺少版本信息的数据库文件`)
+            }
           }
-        } catch (checkError) {
-          // 如果读取失败（可能是旧版本数据库），删除文件
-          console.warn(`⚠️  无法读取数据库版本，删除旧数据库文件...`)
+        } catch (checkError: any) {
+          // 如果读取失败（可能是旧版本数据库或损坏），删除文件
+          console.warn(`⚠️  无法读取数据库（${checkError?.message || '未知错误'}），删除数据库文件...`)
           try {
             unlinkSync(path)
-            console.log(`✅ 已删除旧数据库文件`)
+            console.log(`✅ 已删除无法读取的数据库文件`)
           } catch (deleteError) {
             // 忽略删除错误
           }
@@ -177,27 +196,32 @@ export default class MusicDatabase {
       const v106MigrationPath = join(__dirname, 'migrations', '007_v106_db_restructure.sql')
       console.log(`🔍 检查迁移文件路径: ${v106MigrationPath}`)
       console.log(`🔍 迁移文件是否存在: ${existsSync(v106MigrationPath)}`)
-      
+
       if (existsSync(v106MigrationPath)) {
         console.log('📦 执行 v1.0.6 数据库重构迁移...')
         const sql = readFileSync(v106MigrationPath, 'utf8')
         console.log(`📄 迁移脚本大小: ${sql.length} 字符`)
+        
+        // 执行迁移脚本
         this.db!.exec(sql)
         console.log('✅ v1.0.6 数据库重构迁移完成')
-        
+
         // 验证表是否创建成功
         const tables = this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
         console.log(`📊 数据库表列表: ${tables.map(t => t.name).join(', ')}`)
+
+        // 检查关键表是否存在
+        const requiredTables = ['local_music_dir', 'music_dir', 'all_music', 'settings']
+        const missingTables = requiredTables.filter(table => !tables.some(t => t.name === table))
         
-        // 检查 local_music_dir 表是否存在
-        const localMusicDirExists = tables.some(t => t.name === 'local_music_dir')
-        if (localMusicDirExists) {
-          console.log('✅ local_music_dir 表已创建')
+        if (missingTables.length > 0) {
+          console.error(`❌ 缺少必要的表: ${missingTables.join(', ')}`)
+          throw new Error(`数据库迁移失败：缺少必要的表 ${missingTables.join(', ')}`)
         } else {
-          console.error('❌ local_music_dir 表未创建！')
+          console.log('✅ 所有必要的表都已创建')
         }
       } else {
-        console.warn(`⚠️  v1.0.6 迁移脚本未找到: ${v106MigrationPath}`)
+        console.error(`❌ v1.0.6 迁移脚本未找到: ${v106MigrationPath}`)
         console.warn('⚠️  尝试查找迁移文件...')
         // 尝试其他可能的路径
         const altPath = join(process.cwd(), 'src', 'main', 'database', 'migrations', '007_v106_db_restructure.sql')
@@ -206,6 +230,8 @@ export default class MusicDatabase {
           const sql = readFileSync(altPath, 'utf8')
           this.db!.exec(sql)
           console.log('✅ v1.0.6 数据库重构迁移完成（使用备用路径）')
+        } else {
+          throw new Error(`无法找到迁移脚本文件: ${v106MigrationPath} 或 ${altPath}`)
         }
       }
     } catch (error: any) {
