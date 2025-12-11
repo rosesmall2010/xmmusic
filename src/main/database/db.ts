@@ -54,7 +54,7 @@ export default class MusicDatabase {
           const tables = tempDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
           const hasSettingsTable = tables.some(t => t.name === 'settings')
           const hasLocalMusicDirTable = tables.some(t => t.name === 'local_music_dir')
-          
+
           if (!hasSettingsTable || !hasLocalMusicDirTable) {
             // 表不存在，说明数据库结构不完整，删除重建
             console.warn(`⚠️  数据库结构不完整（缺少必要表），删除数据库文件...`)
@@ -201,7 +201,7 @@ export default class MusicDatabase {
         console.log('📦 执行 v1.0.6 数据库重构迁移...')
         const sql = readFileSync(v106MigrationPath, 'utf8')
         console.log(`📄 迁移脚本大小: ${sql.length} 字符`)
-        
+
         // 执行迁移脚本
         this.db!.exec(sql)
         console.log('✅ v1.0.6 数据库重构迁移完成')
@@ -213,7 +213,7 @@ export default class MusicDatabase {
         // 检查关键表是否存在
         const requiredTables = ['local_music_dir', 'music_dir', 'all_music', 'settings']
         const missingTables = requiredTables.filter(table => !tables.some(t => t.name === table))
-        
+
         if (missingTables.length > 0) {
           console.error(`❌ 缺少必要的表: ${missingTables.join(', ')}`)
           throw new Error(`数据库迁移失败：缺少必要的表 ${missingTables.join(', ')}`)
