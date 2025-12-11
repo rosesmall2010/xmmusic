@@ -322,11 +322,17 @@ const handleScan = async () => {
     // 1. 重新加载目录列表以确保状态同步
     await dirStore.loadDirectories()
 
-    // 2. 获取所有启用的目录（使用 getEnabledDirectories 确保获取最新数据）
-    const enabledDirs = await dirStore.getEnabledDirectories()
+    // 2. 获取所有启用的目录（直接从后端获取最新数据，确保数据一致性）
+    // 如果第一次获取不到，稍等片刻再试一次（处理数据库写入延迟）
+    let enabledDirs = await dirStore.getEnabledDirectories()
+    if (!enabledDirs || enabledDirs.length === 0) {
+      // 等待一小段时间，确保数据库写入完成
+      await new Promise(resolve => setTimeout(resolve, 100))
+      enabledDirs = await dirStore.getEnabledDirectories()
+    }
 
     // 3. 检查是否有启用的目录
-    if (enabledDirs.length === 0) {
+    if (!enabledDirs || enabledDirs.length === 0) {
       alert('请先添加扫描目录\n\n点击"扫描目录管理"按钮添加音乐目录')
       return
     }
@@ -474,6 +480,8 @@ const handleAddDir = async () => {
     }
 
     await dirStore.addDirectory(newDirPath.value.trim())
+    // 确保目录已保存到数据库后再继续
+    await dirStore.loadDirectories()
     newDirPath.value = ''
     showAddDirDialog.value = false
   } catch (error: any) {
