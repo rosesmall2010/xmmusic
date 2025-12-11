@@ -77,6 +77,7 @@ export default class FileScanner {
     // 1. 获取所有启用的扫描根目录
     // 注意：better-sqlite3 是同步的，不需要 await
     const scanDirs = this.db.getEnabledLocalMusicDirs()
+    console.log('要扫描的目录：scanDirs:', scanDirs);
 
     if (scanDirs.length === 0) {
       return {
@@ -160,14 +161,19 @@ export default class FileScanner {
       errors: []
     }
 
+    console.log('要扫描的目录：path:', path);
+    console.log('要扫描的目录：options:', options);
+
     this.isPaused = false
     this.isCancelled = false
 
     // 1. 规范化根目录路径
     const normalizedRoot = normalizePath(path, process.platform)
+    console.log('规范化后的目录：normalizedRoot:', normalizedRoot);
 
     // 2. 收集所有音乐文件（递归）
     const files = await this.collectFiles(normalizedRoot, options)
+    console.log('收集到的文件：files:', files);
     const total = files.length
     let current = 0
     let lastProgressUpdate = 0
@@ -187,10 +193,13 @@ export default class FileScanner {
     // 3. 批量获取目录ID映射（性能优化）
     // 注意：better-sqlite3 是同步的，不需要 await
     const dirPaths = [...new Set(files.map(f => parsePath(f, process.platform).dirPath))]
+    console.log('批量获取目录ID映射：dirPaths:', dirPaths);
     const dirIdMap = batchGetOrCreateMusicDir(this.db.getDatabase(), dirPaths, process.platform)
-
+    console.log('批量获取目录ID映射：dirIdMap:', dirIdMap);
     // 进度更新函数（节流）
     const updateProgress = (file: string, force: boolean = false) => {
+      console.log('进度更新函数：file:', file);
+      console.log('进度更新函数：force:', force);
       const now = Date.now()
       if (force || now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
         lastProgressUpdate = now
@@ -214,13 +223,15 @@ export default class FileScanner {
 
     // 发送初始进度（文件收集完成后）
     if (total > 0 && options.onProgress) {
+      console.log('发送初始进度：total:', total);
+      console.log('发送初始进度：options.onProgress:', options.onProgress);
       updateProgress('', true)
     }
 
     // 处理文件
     let processedCount = 0
     const CHECKPOINT_INTERVAL = 100 // 每处理100个文件执行一次 checkpoint
-    
+
     const tasks = files.map(file => async () => {
       // 检查是否取消
       if (this.isCancelled) {
@@ -239,14 +250,18 @@ export default class FileScanner {
 
       try {
         const processed = await this.processFile(file, options, dirIdMap)
+        console.log('处理文件：processed:', processed);
         if (processed.success) {
           result.success++
+          console.log('处理文件：result.success:', result.success);
         } else if (processed.corrupted) {
           result.corrupted++
+          console.log('处理文件：result.corrupted:', result.corrupted);
         } else {
           result.skipped++
+          console.log('处理文件：result.skipped:', result.skipped);
         }
-        
+        console.log('处理文件：result:', result);
         processedCount++
         // 定期执行 checkpoint，确保数据及时持久化
         if (processedCount % CHECKPOINT_INTERVAL === 0) {

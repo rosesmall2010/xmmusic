@@ -13,6 +13,9 @@ import type {
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
 
+const dbname: string = 'm3'
+const dbnameDev: string = dbname +'-dev'
+
 const copyFileAsync = promisify(copyFile)
 
 /**
@@ -41,7 +44,7 @@ export default class MusicDatabase {
       // 注意：main.ts 中已经设置了开发模式的 userData 路径（添加了 -dev 后缀）
       // 所以这里直接使用 app.getPath('userData') 即可
       const isDev = process.env.NODE_ENV !== 'production'
-      const dbFileName = isDev ? 'm-dev.db' : 'm.db'
+      const dbFileName = isDev ? dbnameDev + '.db' : dbname + '.db'
       const path = dbPath || join(app.getPath('userData'), dbFileName)
 
       // 调试：输出数据库路径信息
@@ -174,7 +177,7 @@ export default class MusicDatabase {
 
         try {
           const isDev = process.env.NODE_ENV !== 'production'
-          const dbFileName = isDev ? 'm-dev.db' : 'm.db'
+          const dbFileName = isDev ? dbnameDev + '.db' : dbname + '.db'
           const path = dbPath || join(app.getPath('userData'), dbFileName)
 
           if (require('fs').existsSync(path)) {
@@ -196,48 +199,83 @@ export default class MusicDatabase {
   }
 
   private migrate(): void {
-    // v1.0.6 数据库重构：直接执行新的迁移脚本，不进行数据迁移
-    // 新数据库直接创建新结构，旧数据库会被删除重建
+    // v1.0.6 数据库重构：只在数据库不存在或版本不匹配时执行迁移脚本
+    // 检查数据库是否已经初始化（通过检查表是否存在）
     try {
-      const v106MigrationPath = join(__dirname, 'migrations', '007_v106_db_restructure.sql')
-      console.log(`🔍 检查迁移文件路径: ${v106MigrationPath}`)
-      console.log(`🔍 迁移文件是否存在: ${existsSync(v106MigrationPath)}`)
+      const tables = this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+      const hasSettingsTable = tables.some(t => t.name === 'settings')
+      const hasLocalMusicDirTable = tables.some(t => t.name === 'local_music_dir')
+      const hasAllMusicTable = tables.some(t => t.name === 'all_music')
 
-      if (existsSync(v106MigrationPath)) {
-        console.log('📦 执行 v1.0.6 数据库重构迁移...')
-        const sql = readFileSync(v106MigrationPath, 'utf8')
-        console.log(`📄 迁移脚本大小: ${sql.length} 字符`)
-
-        // 执行迁移脚本
-        this.db!.exec(sql)
-        console.log('✅ v1.0.6 数据库重构迁移完成')
-
-        // 验证表是否创建成功
-        const tables = this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
-        console.log(`📊 数据库表列表: ${tables.map(t => t.name).join(', ')}`)
-
-        // 检查关键表是否存在
-        const requiredTables = ['local_music_dir', 'music_dir', 'all_music', 'settings']
-        const missingTables = requiredTables.filter(table => !tables.some(t => t.name === table))
-
-        if (missingTables.length > 0) {
-          console.error(`❌ 缺少必要的表: ${missingTables.join(', ')}`)
-          throw new Error(`数据库迁移失败：缺少必要的表 ${missingTables.join(', ')}`)
-        } else {
-          console.log('✅ 所有必要的表都已创建')
+      // 检查版本号
+      let needsMigration = false
+      if (hasSettingsTable) {
+        try {
+          const versionStmt = this.db!.prepare('SELECT value FROM settings WHERE key = ?')
+          const versionResult = versionStmt.get(DB_VERSION_KEY) as { value: string } | undefined
+          if (!versionResult || parseInt(versionResult.value) !== DB_VERSION) {
+            console.log(`📦 数据库版本不匹配，需要迁移（当前: ${versionResult?.value || '无'}, 需要: ${DB_VERSION}）`)
+            needsMigration = true
+          } else {
+            console.log(`✅ 数据库版本正确（${DB_VERSION}），跳过迁移`)
+          }
+        } catch (e) {
+          console.warn('⚠️  无法读取版本号，需要迁移')
+          needsMigration = true
         }
       } else {
-        console.error(`❌ v1.0.6 迁移脚本未找到: ${v106MigrationPath}`)
-        console.warn('⚠️  尝试查找迁移文件...')
-        // 尝试其他可能的路径
-        const altPath = join(process.cwd(), 'src', 'main', 'database', 'migrations', '007_v106_db_restructure.sql')
-        if (existsSync(altPath)) {
-          console.log(`📦 找到备用路径，执行迁移: ${altPath}`)
-          const sql = readFileSync(altPath, 'utf8')
+        console.log('📦 数据库未初始化，需要迁移')
+        needsMigration = true
+      }
+
+      // 检查表结构是否完整
+      if (!needsMigration && (!hasLocalMusicDirTable || !hasAllMusicTable)) {
+        console.log('📦 数据库表结构不完整，需要迁移')
+        needsMigration = true
+      }
+
+      // 只有在需要时才执行迁移
+      if (needsMigration) {
+        const v106MigrationPath = join(__dirname, 'migrations', '007_v106_db_restructure.sql')
+        console.log(`🔍 检查迁移文件路径: ${v106MigrationPath}`)
+        console.log(`🔍 迁移文件是否存在: ${existsSync(v106MigrationPath)}`)
+
+        if (existsSync(v106MigrationPath)) {
+          console.log('📦 执行 v1.0.6 数据库重构迁移...')
+          const sql = readFileSync(v106MigrationPath, 'utf8')
+          console.log(`📄 迁移脚本大小: ${sql.length} 字符`)
+
+          // 执行迁移脚本
           this.db!.exec(sql)
-          console.log('✅ v1.0.6 数据库重构迁移完成（使用备用路径）')
+          console.log('✅ v1.0.6 数据库重构迁移完成')
+
+          // 验证表是否创建成功
+          const newTables = this.db!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+          console.log(`📊 数据库表列表: ${newTables.map(t => t.name).join(', ')}`)
+
+          // 检查关键表是否存在
+          const requiredTables = ['local_music_dir', 'music_dir', 'all_music', 'settings']
+          const missingTables = requiredTables.filter(table => !newTables.some(t => t.name === table))
+
+          if (missingTables.length > 0) {
+            console.error(`❌ 缺少必要的表: ${missingTables.join(', ')}`)
+            throw new Error(`数据库迁移失败：缺少必要的表 ${missingTables.join(', ')}`)
+          } else {
+            console.log('✅ 所有必要的表都已创建')
+          }
         } else {
-          throw new Error(`无法找到迁移脚本文件: ${v106MigrationPath} 或 ${altPath}`)
+          console.error(`❌ v1.0.6 迁移脚本未找到: ${v106MigrationPath}`)
+          console.warn('⚠️  尝试查找迁移文件...')
+          // 尝试其他可能的路径
+          const altPath = join(process.cwd(), 'src', 'main', 'database', 'migrations', '007_v106_db_restructure.sql')
+          if (existsSync(altPath)) {
+            console.log(`📦 找到备用路径，执行迁移: ${altPath}`)
+            const sql = readFileSync(altPath, 'utf8')
+            this.db!.exec(sql)
+            console.log('✅ v1.0.6 数据库重构迁移完成（使用备用路径）')
+          } else {
+            throw new Error(`无法找到迁移脚本文件: ${v106MigrationPath} 或 ${altPath}`)
+          }
         }
       }
     } catch (error: any) {
