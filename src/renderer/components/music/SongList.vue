@@ -390,7 +390,9 @@ const handleBatchRemove = async () => {
     console.log(`Removed ${result.removed} songs`)
     cancelSelection()
     emit('songs-updated')
+    // 触发事件通知其他组件更新封面和数量
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to batch remove:', error)
   }

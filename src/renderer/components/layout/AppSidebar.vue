@@ -56,7 +56,15 @@
           class="nav-item"
           active-class="active"
         >
-          <ListMusic :size="20" class="nav-icon" />
+          <div class="nav-icon playlist-icon">
+            <img
+              v-if="playlist.firstSongCover"
+              :src="playlist.firstSongCover"
+              class="playlist-cover-img"
+              @error="handleCoverError(playlist)"
+            />
+            <ListMusic v-else :size="20" />
+          </div>
           <span class="nav-label">{{ playlist.name }}</span>
           <span class="nav-count">{{ playlist.songCount }}</span>
         </router-link>
@@ -149,10 +157,35 @@ const refreshRecentPlaysCount = async () => {
 
 const loadPlaylists = async () => {
   try {
-    playlists.value = await window.electronAPI.getPlaylists()
+    const playlistData = await window.electronAPI.getPlaylists()
+    // 为每个歌单加载第一首歌的封面
+    playlists.value = await Promise.all(
+      playlistData.map(async (playlist) => {
+        try {
+          const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
+          // 更新歌曲数量（确保是最新的）
+          playlist.songCount = songs.length
+          // 加载封面
+          if (songs.length > 0 && songs[0].coverPath) {
+            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+          } else {
+            // 如果没有歌曲，清除封面
+            playlist.firstSongCover = null
+          }
+        } catch (error) {
+          console.error(`Failed to load cover for playlist ${playlist.id}:`, error)
+        }
+        return playlist
+      })
+    )
   } catch (error) {
     console.error('Failed to load playlists:', error)
   }
+}
+
+const handleCoverError = (playlist: any) => {
+  // 封面加载失败时移除封面引用
+  playlist.firstSongCover = null
 }
 
 const createPlaylist = () => {
@@ -257,6 +290,19 @@ const createPlaylist = () => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.playlist-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.playlist-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .nav-label {

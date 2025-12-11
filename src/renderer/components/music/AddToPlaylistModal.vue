@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
@@ -89,13 +89,19 @@ const showCreateModal = ref(false)
 const loadPlaylists = async () => {
   try {
     const playlistData = await window.electronAPI.getPlaylists()
-    // 为每个歌单加载第一首歌的封面
+    // 为每个歌单加载第一首歌的封面和更新歌曲数量
     playlists.value = await Promise.all(
       playlistData.map(async (playlist) => {
         try {
           const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
+          // 更新歌曲数量（确保是最新的）
+          playlist.songCount = songs.length
+          // 加载封面
           if (songs.length > 0 && songs[0].coverPath) {
             playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+          } else {
+            // 如果没有歌曲，清除封面
+            playlist.firstSongCover = null
           }
         } catch (error) {
           console.error(`Failed to load cover for playlist ${playlist.id}:`, error)
@@ -117,6 +123,16 @@ watch(() => props.modelValue, (val) => {
   if (val) {
     loadPlaylists()
   }
+})
+
+onMounted(() => {
+  // 监听歌单更新事件，重新加载歌单列表
+  window.addEventListener('playlist-updated', loadPlaylists)
+})
+
+onUnmounted(() => {
+  // 清理事件监听
+  window.removeEventListener('playlist-updated', loadPlaylists)
 })
 
 const close = () => {

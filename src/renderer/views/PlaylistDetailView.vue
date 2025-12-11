@@ -115,6 +115,7 @@ const handleSongAddedToPlaylist = () => {
   currentOffset = 0
   hasMore = true
   loadPlaylist()
+  // 封面会自动更新（因为 playlistCover 是 computed，依赖于 songs.value）
 }
 
 const handleMetadataUpdate = (event: CustomEvent) => {
@@ -173,14 +174,14 @@ const loadPlaylist = async () => {
 
       // 获取总数（每次都重新获取，确保数量是最新的）
       totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
-      
+
       // 如果总数为0，直接返回，不加载歌曲
       if (totalSongs.value === 0) {
         loading.value = false
         hasMore = false
         return
       }
-      
+
       // 重置 loading，准备加载歌曲列表
       loading.value = false
     }
@@ -203,7 +204,7 @@ const loadPlaylist = async () => {
     // 追加到列表
     songs.value = [...songs.value, ...newSongs]
     currentOffset += newSongs.length
-    
+
     console.log(`加载歌单歌曲: offset=${currentOffset - newSongs.length}, limit=${PAGE_SIZE}, 返回=${newSongs.length}, 总数=${totalSongs.value}`)
   } catch (error) {
     console.error('加载歌单失败:', error)
@@ -260,6 +261,8 @@ const removeSong = async (music: MusicItem) => {
   try {
     await window.electronAPI.removeFromPlaylistByPath(playlist.value.id, music.id)
     await loadPlaylist()
+    // 触发事件通知其他组件更新封面
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to remove song:', error)
   }
@@ -280,6 +283,8 @@ const clearPlaylist = async () => {
     currentOffset = 0
     hasMore = true
     await loadPlaylist()
+    // 触发事件通知其他组件更新
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('清空歌单失败:', error)
   }
