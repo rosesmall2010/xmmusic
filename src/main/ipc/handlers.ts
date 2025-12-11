@@ -641,12 +641,24 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       }
 
       if (music) {
-        db.addToPlaylist(playlistId, music.filePath)
+        // 使用新的基于 music_id 的方法
+        db.addToPlaylistByMusicId(playlistId, music.id)
         added += 1
       } else if (song.filePath) {
-        // 即使 music 表中没有，也添加到播放列表（基于文件路径）
-        db.addToPlaylist(playlistId, song.filePath)
-        added += 1
+        // 尝试通过 filePath 查找 music_id
+        const musicByPath = db.getAllMusicByPath(song.filePath)
+        if (musicByPath) {
+          db.addToPlaylistByMusicId(playlistId, musicByPath.id)
+          added += 1
+        } else {
+          // 如果找不到，记录为缺失
+          missing.push({
+            title: song.title,
+            artist: song.artist,
+            filePath: song.filePath,
+            fileHash: song.fileHash
+          })
+        }
       } else {
         missing.push({
           title: song.title,

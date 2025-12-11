@@ -1083,59 +1083,16 @@ export default class MusicDatabase {
     this.addToPlaylistByMusicId(playlistId, music.id, position)
   }
 
+  /**
+   * @deprecated 使用 getPlaylistSongsByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getPlaylistSongs(playlistId: number): MusicItem[] {
-    // 使用 LEFT JOIN 一次性获取所有歌曲信息，避免 N+1 查询问题
-    const stmt = this.db!.prepare(`
-      SELECT
-        m.*,
-        pi.position,
-        pi.added_at as playlist_added_at
-      FROM playlist_item pi
-      LEFT JOIN music m ON pi.file_path = m.file_path
-      WHERE pi.playlist_id = ?
-      ORDER BY pi.position
-    `)
-    const rows = stmt.all(playlistId) as any[]
-
-    return rows.map(row => {
-      // 如果 music 表中有数据（m.id 不为 null），使用完整的 MusicItem
-      if (row.id !== null) {
-        return this.mapRowToMusicItem(row)
-      } else {
-        // 如果 music 表中没有数据，创建临时 MusicItem
-        // 注意：这种情况应该很少发生，因为添加到歌单时应该确保文件在 music 表中
-        const path = require('path')
-        const filePath = row.file_path
-        const fileName = path.basename(filePath)
-        const ext = path.extname(filePath).toLowerCase()
-
-        return {
-          id: -1,
-          title: fileName.replace(ext, ''),
-          artist: '未知艺术家',
-          album: null,
-          year: null,
-          genre: null,
-          filePath: filePath,
-          fileName: fileName,
-          fileSize: 0,
-          fileHash: '',
-          fileExtension: ext,
-          duration: 0,
-          bitrate: 0,
-          sampleRate: 0,
-          channels: 0,
-          coverPath: null,
-          lyricsPath: null,
-          playCount: 0,
-          lastPlayedAt: null,
-          favorite: false,
-          addedAt: row.playlist_added_at || new Date().toISOString(),
-          updatedAt: row.playlist_added_at || new Date().toISOString(),
-          isCorrupted: false,
-          isDuplicate: false
-        }
-      }
+    // 使用新的基于 music_id 的方法
+    const songs = this.getPlaylistSongsByMusicId(playlistId)
+    return songs.map(item => {
+      const { fullPath, position, ...musicItem } = item
+      return musicItem as MusicItem
     })
   }
 
@@ -1193,14 +1150,14 @@ export default class MusicDatabase {
   }
 
   private updatePlaylistStats(playlistId: number): void {
-    // 更新播放列表统计（基于文件路径匹配 music 表）
+    // 更新播放列表统计（v1.0.6 使用 music_id）
     const stmt = this.db!.prepare(`
       UPDATE playlist SET
         song_count = (SELECT COUNT(*) FROM playlist_item WHERE playlist_id = ?),
         total_duration = (
-          SELECT COALESCE(SUM(m.duration), 0)
+          SELECT COALESCE(SUM(am.duration), 0)
           FROM playlist_item pi
-          LEFT JOIN music m ON pi.file_path = m.file_path
+          JOIN all_music am ON pi.music_id = am.id
           WHERE pi.playlist_id = ?
         ),
         updated_at = CURRENT_TIMESTAMP
