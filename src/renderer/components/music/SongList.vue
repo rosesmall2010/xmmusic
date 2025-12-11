@@ -91,7 +91,22 @@
                </template>
             </div>
             <div class="item-info">
-              <div class="item-title" :title="music.title">{{ music.title }}</div>
+              <div class="item-title-wrapper">
+                <div class="item-title" :title="music.title">{{ music.title }}</div>
+                <!-- 状态图标 -->
+                <FileX 
+                  v-if="music.isExists === false" 
+                  :size="14" 
+                  class="status-icon status-icon-missing" 
+                  :title="'文件不存在'"
+                />
+                <AlertCircle 
+                  v-else-if="music.isPlayable === false" 
+                  :size="14" 
+                  class="status-icon status-icon-unplayable" 
+                  :title="music.playErrorReason || '无法播放'"
+                />
+              </div>
               <div class="item-artist" :title="music.artist">{{ music.artist }}</div>
             </div>
           </div>
@@ -200,7 +215,7 @@
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'

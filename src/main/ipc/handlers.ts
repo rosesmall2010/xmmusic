@@ -671,8 +671,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         const musicByPath = db.getAllMusicByPath(song.filePath)
         if (musicByPath) {
           db.addToPlaylistByMusicId(playlistId, musicByPath.id)
-          added += 1
-        } else {
+        added += 1
+      } else {
           // 如果找不到，记录为缺失
           missing.push({
             title: song.title,
@@ -1383,6 +1383,27 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return result
     } catch (error: any) {
       throw new Error(`批量更新元数据失败: ${error.message}`)
+    }
+  })
+
+  // 更新音乐播放状态（标记为不可播放及原因）
+  ipcMain.handle('update-music-play-status', async (_, musicId: number, isPlayable: boolean, errorReason?: string) => {
+    if (!db) {
+      throw new Error('数据库未初始化')
+    }
+
+    try {
+      const updates: any = {
+        is_playable: isPlayable ? 1 : 0,
+        play_error_reason: errorReason || null,
+        is_corrupted: isPlayable ? 0 : 1 // 如果不可播放，标记为损坏
+      }
+
+      db.updateAllMusic(musicId, updates)
+      return { success: true }
+    } catch (error: any) {
+      console.error('更新播放状态失败:', error)
+      throw new Error(`更新播放状态失败: ${error.message}`)
     }
   })
 

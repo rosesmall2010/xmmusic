@@ -205,7 +205,7 @@ export function usePlayer() {
           }
 
           console.error(`跳过损坏文件: ${music.title} - ${errorMsg}`)
-          
+
           // 更新数据库中的播放状态
           try {
             await window.electronAPI.updateMusicPlayStatus(music.id, false, errorMsg)

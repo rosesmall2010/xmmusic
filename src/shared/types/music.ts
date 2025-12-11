@@ -29,6 +29,9 @@ export interface MusicItem {
   isCorrupted: boolean
   isDuplicate: boolean
   duplicateCount?: number
+  isPlayable?: boolean  // 是否可以播放
+  isExists?: boolean    // 文件是否存在
+  playErrorReason?: string | null  // 不能播放的原因
 }
 
 export interface MusicDirectory {

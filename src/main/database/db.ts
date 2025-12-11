@@ -577,6 +577,9 @@ export default class MusicDatabase {
       updatedAt: row.updated_at,
       isCorrupted: row.is_corrupted === 1,
       isDuplicate: row.is_duplicate === 1,
+      isPlayable: row.is_playable !== undefined ? row.is_playable === 1 : true, // 默认为可播放
+      isExists: row.is_exists !== undefined ? row.is_exists === 1 : true, // 默认为存在
+      playErrorReason: row.play_error_reason || null,
       fullPath
     }
   }
