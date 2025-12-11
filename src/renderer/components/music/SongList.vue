@@ -931,12 +931,8 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-xs);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.list-item:hover .col-actions {
   opacity: 1;
+  transition: opacity var(--transition-base);
 }
 
 .action-btn {
