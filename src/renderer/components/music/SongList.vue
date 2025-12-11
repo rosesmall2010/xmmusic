@@ -496,7 +496,8 @@ const queueFiles = ref<Set<string>>(new Set())
 
 const isInQueue = (music: MusicItem) => {
   // 优先使用 music.inQueue（从数据库查询得到）
-  if (music.inQueue !== undefined) {
+  // 如果 music.inQueue 是明确的布尔值，直接返回
+  if (typeof music.inQueue === 'boolean') {
     return music.inQueue
   }
   // 回退到 filePath 查找（兼容旧逻辑）
@@ -506,16 +507,22 @@ const isInQueue = (music: MusicItem) => {
 const updateQueueStatus = () => {
   const queueFilePaths = new Set(playerStore.queue.map(m => m.filePath))
   queueFiles.value = queueFilePaths
-  // 同时更新列表中的 music.inQueue 状态
+  // 同时更新列表中每个 music 对象的 inQueue 状态
+  // 确保每个 music 对象都有明确的 inQueue 值（boolean）
   props.songs.forEach(music => {
     music.inQueue = queueFilePaths.has(music.filePath)
   })
 }
 
 const toggleQueue = async (music: MusicItem) => {
-  if (isInQueue(music)) {
-    // 从队列移除
-    playerStore.removeFromQueue(music)
+  const currentInQueue = isInQueue(music)
+  
+  if (currentInQueue) {
+    // 从队列移除：找到歌曲在队列中的索引
+    const queueIndex = playerStore.queue.findIndex(m => m.id === music.id)
+    if (queueIndex >= 0) {
+      playerStore.removeFromQueue(queueIndex)
+    }
     queueFiles.value.delete(music.filePath)
     music.inQueue = false
   } else {

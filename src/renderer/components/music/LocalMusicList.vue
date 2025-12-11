@@ -425,6 +425,8 @@ const playMusic = async (music: MusicItem) => {
     playerStore.addToQueue(music)
     const newIndex = playerStore.queue.length - 1
     playerStore.setCurrentQueueIndex(newIndex)
+    // 更新 music 对象的 inQueue 状态
+    music.inQueue = true
     await play(music)
   }
 }
