@@ -23,6 +23,7 @@ export interface MusicItem {
   playCount: number
   lastPlayedAt: string | null
   favorite: boolean
+  inQueue?: boolean  // 是否在播放队列中
   addedAt: string
   updatedAt: string
   isCorrupted: boolean

@@ -332,8 +332,8 @@ const handleScan = async () => {
     }
 
     // 4. 直接开始扫描所有启用的目录
-    isScanning.value = true
-    try {
+  isScanning.value = true
+  try {
       await window.electronAPI.scanAllDirectories({
         concurrency: 10,
         fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
@@ -344,11 +344,11 @@ const handleScan = async () => {
       // 扫描完成后刷新列表
       await musicStore.loadMusic(0, 20, true)
       startBackgroundLoading()
-    } catch (error: any) {
-      if (error.message !== '扫描已取消') {
-        alert(`扫描失败: ${error.message}`)
-      }
-    } finally {
+  } catch (error: any) {
+    if (error.message !== '扫描已取消') {
+      alert(`扫描失败: ${error.message}`)
+    }
+  } finally {
       isScanning.value = false
       scanProgress.value = null
     }

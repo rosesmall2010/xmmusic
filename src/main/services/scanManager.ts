@@ -43,8 +43,8 @@ class ScanManager {
   setCancelled(cancelled: boolean): void {
     this.state.isCancelled = cancelled
     if (cancelled) {
-      this.state.isScanning = false
-      this.state.isPaused = false
+    this.state.isScanning = false
+    this.state.isPaused = false
       if (this.currentScanner) {
         this.currentScanner.setCancelled(true)
       }

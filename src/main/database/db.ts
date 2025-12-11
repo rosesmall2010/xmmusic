@@ -199,7 +199,7 @@ export default class MusicDatabase {
       try {
         this.db.close()
         this.db = null
-      } catch (error: any) {
+    } catch (error: any) {
         // 忽略 SQLITE_BUSY 错误
         // 应用退出时这个错误不影响数据完整性，操作系统会自动清理资源
         if (error?.code !== 'SQLITE_BUSY') {
@@ -207,8 +207,8 @@ export default class MusicDatabase {
         }
         this.db = null
       }
+      }
     }
-  }
 
   // ========== all_music 表操作（v1.0.6 新架构） ==========
 
@@ -286,7 +286,7 @@ export default class MusicDatabase {
    */
   getAllMusicById(id: number): (MusicItem & { fullPath: string }) | null {
     const stmt = this.db!.prepare(`
-      SELECT
+            SELECT
         am.*,
         md.path as dir_path
       FROM all_music am
@@ -396,7 +396,7 @@ export default class MusicDatabase {
     if (updates.is_playable !== undefined) {
       fields.push('is_playable = ?')
       values.push(updates.is_playable)
-    }
+      }
     if (updates.play_error_reason !== undefined) {
       fields.push('play_error_reason = ?')
       values.push(updates.play_error_reason)
@@ -739,14 +739,18 @@ export default class MusicDatabase {
     }
 
     try {
-      // 使用 all_music_fts 全文搜索表（v1.0.6 新架构）
+      // 使用 all_music_fts 全文搜索表（v1.0.6 新架构，包含收藏和队列状态）
       const stmt = this.db!.prepare(`
         SELECT
           am.*,
-          md.path as dir_path
+          md.path as dir_path,
+          CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+          CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
         FROM all_music_fts fts
         JOIN all_music am ON am.id = fts.rowid
         JOIN music_dir md ON am.dir_id = md.id
+        LEFT JOIN favorites f ON am.id = f.music_id
+        LEFT JOIN play_queue pq ON am.id = pq.music_id
         WHERE all_music_fts MATCH ?
         ORDER BY rank
         LIMIT ?
@@ -756,7 +760,10 @@ export default class MusicDatabase {
       const rows = stmt.all(searchQuery, limit) as any[]
       return rows.map(row => {
         const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-        return this.mapAllMusicRowToMusicItem(row, fullPath)
+        const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+        musicItem.favorite = row.is_favorite === 1
+        musicItem.inQueue = row.in_queue === 1
+        return musicItem as MusicItem
       })
     } catch (error) {
       console.error('搜索错误:', error)
@@ -764,9 +771,13 @@ export default class MusicDatabase {
       const stmt = this.db!.prepare(`
         SELECT
           am.*,
-          md.path as dir_path
+          md.path as dir_path,
+          CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+          CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
         FROM all_music am
         JOIN music_dir md ON am.dir_id = md.id
+        LEFT JOIN favorites f ON am.id = f.music_id
+        LEFT JOIN play_queue pq ON am.id = pq.music_id
         WHERE am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ?
         LIMIT ?
       `)
@@ -774,7 +785,10 @@ export default class MusicDatabase {
       const rows = stmt.all(likeQuery, likeQuery, likeQuery, limit) as any[]
       return rows.map(row => {
         const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-        return this.mapAllMusicRowToMusicItem(row, fullPath)
+        const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+        musicItem.favorite = row.is_favorite === 1
+        musicItem.inQueue = row.in_queue === 1
+        return musicItem as MusicItem
       })
     }
   }
@@ -855,13 +869,17 @@ export default class MusicDatabase {
     const sortOrder = criteria.sortOrder === 'asc' ? 'ASC' : 'DESC'
     const limit = criteria.limit && criteria.limit > 0 ? criteria.limit : 200
 
-    // 使用 all_music 表和 music_dir 表进行查询
+    // 使用 all_music 表和 music_dir 表进行查询（包含收藏和队列状态）
     const stmt = this.db!.prepare(`
       SELECT
         am.*,
-        md.path as dir_path
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM all_music am
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       WHERE ${conditions.join(' AND ')}
       ORDER BY ${sortField} ${sortOrder}
       LIMIT ?
@@ -869,7 +887,10 @@ export default class MusicDatabase {
     const rows = stmt.all(...params, limit) as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-      return this.mapAllMusicRowToMusicItem(row, fullPath)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
+      return musicItem as MusicItem
     })
   }
 
@@ -981,7 +1002,7 @@ export default class MusicDatabase {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
       return {
         ...this.mapAllMusicRowToMusicItem(row, fullPath),
-        similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
+      similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
       }
     })
   }
@@ -1251,16 +1272,22 @@ export default class MusicDatabase {
     const stmt = this.db!.prepare(`
       SELECT
         am.*,
-        md.path as dir_path
+        md.path as dir_path,
+        1 as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM favorites f
       JOIN all_music am ON f.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       ORDER BY f.added_at DESC
     `)
     const rows = stmt.all() as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-      return this.mapAllMusicRowToMusicItem(row, fullPath)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
+      return { ...musicItem, fullPath } as MusicItem & { fullPath: string }
     })
   }
 
@@ -1292,20 +1319,28 @@ export default class MusicDatabase {
       SELECT
         am.*,
         md.path as dir_path,
-        pi.position
+        pi.position,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM playlist_item pi
       JOIN all_music am ON pi.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       WHERE pi.playlist_id = ?
       ORDER BY pi.position ASC
     `)
     const rows = stmt.all(playlistId) as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
       return {
-        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        ...musicItem,
+        fullPath,
         position: row.position
-      }
+      } as MusicItem & { fullPath: string; position: number }
     })
   }
 
@@ -1333,20 +1368,28 @@ export default class MusicDatabase {
       SELECT
         am.*,
         md.path as dir_path,
-        rp.played_at
+        rp.played_at,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM recent_plays rp
       JOIN all_music am ON rp.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       ORDER BY rp.played_at DESC
       LIMIT ?
     `)
     const rows = stmt.all(limit) as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
       return {
-        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        ...musicItem,
+        fullPath,
         playedAt: row.played_at
-      }
+      } as MusicItem & { fullPath: string; playedAt: string }
     })
   }
 
@@ -1378,19 +1421,26 @@ export default class MusicDatabase {
       SELECT
         am.*,
         md.path as dir_path,
-        pq.position
+        pq.position,
+        1 as in_queue,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite
       FROM play_queue pq
       JOIN all_music am ON pq.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
       ORDER BY pq.position ASC
     `)
     const rows = stmt.all() as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
       return {
-        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        ...musicItem,
+        fullPath,
         position: row.position
-      }
+      } as MusicItem & { fullPath: string; position: number }
     })
   }
 
@@ -1412,20 +1462,28 @@ export default class MusicDatabase {
       SELECT
         am.*,
         md.path as dir_path,
-        dm.discovered_at
+        dm.discovered_at,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM discover_music dm
       JOIN all_music am ON dm.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       ORDER BY dm.discovered_at DESC
       LIMIT ?
     `)
     const rows = stmt.all(limit) as any[]
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
       return {
-        ...this.mapAllMusicRowToMusicItem(row, fullPath),
+        ...musicItem,
+        fullPath,
         discoveredAt: row.discovered_at
-      }
+      } as MusicItem & { fullPath: string; discoveredAt: string }
     })
   }
 
@@ -2466,16 +2524,20 @@ export default class MusicDatabase {
   }
 
   /**
-   * 分页获取本地音乐列表（v1.0.6 使用 music_id）
+   * 分页获取本地音乐列表（v1.0.6 使用 music_id，包含收藏和队列状态）
    */
   getLocalMusicPaginated(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
       SELECT
         am.*,
-        md.path as dir_path
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM local_music lm
       JOIN all_music am ON lm.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
       ORDER BY lm.added_at DESC
       LIMIT ? OFFSET ?
     `)
@@ -2483,6 +2545,9 @@ export default class MusicDatabase {
     return rows.map(row => {
       const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      // 添加收藏和队列状态
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
       return musicItem as MusicItem
     })
   }
@@ -2684,25 +2749,16 @@ export default class MusicDatabase {
   }
 
   /**
-   * 分页获取歌单歌曲列表
+   * 分页获取歌单歌曲列表（v1.0.6 使用 music_id，包含收藏和队列状态）
+   * @deprecated 使用 getPlaylistSongsByMusicId() 替代，此方法保留兼容性
    */
   getPlaylistSongsPaginated(playlistId: number, offset: number, limit: number): MusicItem[] {
-    const stmt = this.db!.prepare(`
-      SELECT
-        pi.id as list_id,
-        pi.file_path,
-        pi.file_path_md5,
-        pi.position,
-        pi.added_at,
-        m.*
-      FROM playlist_item pi
-      LEFT JOIN music m ON pi.file_path = m.file_path
-      WHERE pi.playlist_id = ?
-      ORDER BY pi.position ASC
-      LIMIT ? OFFSET ?
-    `)
-    const rows = stmt.all(playlistId, limit, offset) as any[]
-    return rows.map(row => this.mapRowToMusicItem(row))
+    // 使用新的基于 music_id 的方法，然后分页
+    const allSongs = this.getPlaylistSongsByMusicId(playlistId)
+    return allSongs.slice(offset, offset + limit).map(item => {
+      const { fullPath, position, ...musicItem } = item
+      return musicItem as MusicItem
+    })
   }
 
   /**

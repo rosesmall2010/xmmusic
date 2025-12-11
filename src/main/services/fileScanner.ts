@@ -267,12 +267,12 @@ export default class FileScanner {
     // 确保最后更新一次进度（完成时）
     if (options.onProgress && !this.isCancelled && total > 0) {
       const elapsed = (Date.now() - startTime) / 1000
-      options.onProgress({
-        current,
-        total,
-        currentFile: '',
+          options.onProgress({
+            current,
+            total,
+            currentFile: '',
         speed: elapsed > 0 ? current / elapsed : 0,
-        percentage: 100
+            percentage: 100
       })
     }
 

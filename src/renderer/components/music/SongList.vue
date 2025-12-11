@@ -40,6 +40,7 @@
       <div class="col-title">标题</div>
       <div class="col-album">专辑</div>
       <div class="col-filename">文件名</div>
+      <div class="col-status">状态</div>
       <div class="col-duration">时长</div>
       <div class="col-actions">操作</div>
     </div>
@@ -97,21 +98,53 @@
           </div>
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
+          <div class="col-status">
+            <div class="status-icons">
+              <span 
+                v-if="music.favorite" 
+                class="status-icon favorite" 
+                title="已收藏"
+              >
+                <Heart :size="14" :fill="'currentColor'" />
+              </span>
+              <span 
+                v-else 
+                class="status-icon favorite-empty" 
+                title="未收藏"
+              >
+                <Heart :size="14" />
+              </span>
+              <span 
+                v-if="music.inQueue" 
+                class="status-icon queue" 
+                title="在播放队列中"
+              >
+                <ListMusic :size="14" :fill="'currentColor'" />
+              </span>
+              <span 
+                v-else 
+                class="status-icon queue-empty" 
+                title="不在播放队列"
+              >
+                <ListMusic :size="14" />
+              </span>
+            </div>
+          </div>
           <div class="col-duration">{{ formatDuration(music.duration) }}</div>
           <div class="col-actions">
             <button
               class="action-btn"
-              :class="{ active: isFavorite(music.filePath) }"
+              :class="{ active: isFavorite(music) }"
               @click.stop="toggleFavorite(music)"
-              :title="isFavorite(music.filePath) ? '取消喜欢' : '喜欢'"
+              :title="isFavorite(music) ? '取消喜欢' : '喜欢'"
             >
-              <Heart :size="16" :fill="isFavorite(music.filePath) ? 'currentColor' : 'none'" />
+              <Heart :size="16" :fill="isFavorite(music) ? 'currentColor' : 'none'" />
             </button>
             <button
               class="action-btn"
-              :class="{ active: isInQueue(music.filePath) }"
+              :class="{ active: isInQueue(music) }"
               @click.stop="toggleQueue(music)"
-              :title="isInQueue(music.filePath) ? '从播放队列移除' : '添加到播放队列'"
+              :title="isInQueue(music) ? '从播放队列移除' : '添加到播放队列'"
             >
               <ListMusic :size="16" />
             </button>
@@ -197,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
 import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info } from 'lucide-vue-next'
@@ -431,11 +464,16 @@ const handleRemoveFromPlaylist = (music: MusicItem) => {
   closeContextMenu()
 }
 
-// 收藏状态管理
+// 收藏状态管理（优先使用 music.favorite，如果没有则回退到 filePath 查找）
 const favoriteFiles = ref<Set<string>>(new Set())
 
-const isFavorite = (filePath: string) => {
-  return favoriteFiles.value.has(filePath)
+const isFavorite = (music: MusicItem) => {
+  // 优先使用 music.favorite（从数据库查询得到）
+  if (music.favorite !== undefined) {
+    return music.favorite
+  }
+  // 回退到 filePath 查找（兼容旧逻辑）
+  return favoriteFiles.value.has(music.filePath)
 }
 
 const loadFavoriteStatus = async () => {
@@ -456,6 +494,8 @@ const toggleFavorite = async (music: MusicItem) => {
     } else {
       favoriteFiles.value.add(music.filePath)
     }
+    // 更新 music 对象的状态
+    music.favorite = !music.favorite
     // 触发全局事件
     window.dispatchEvent(new Event('favorites-updated'))
   } catch (e) {
@@ -464,26 +504,37 @@ const toggleFavorite = async (music: MusicItem) => {
   closeContextMenu()
 }
 
-// 播放队列状态管理
+// 播放队列状态管理（优先使用 music.inQueue，如果没有则回退到 filePath 查找）
 const queueFiles = ref<Set<string>>(new Set())
 
-const isInQueue = (filePath: string) => {
-  return queueFiles.value.has(filePath)
+const isInQueue = (music: MusicItem) => {
+  // 优先使用 music.inQueue（从数据库查询得到）
+  if (music.inQueue !== undefined) {
+    return music.inQueue
+  }
+  // 回退到 filePath 查找（兼容旧逻辑）
+  return queueFiles.value.has(music.filePath)
 }
 
 const updateQueueStatus = () => {
   queueFiles.value = new Set(playerStore.queue.map(m => m.filePath))
+  // 同时更新列表中的 music.inQueue 状态
+  props.songs.forEach(music => {
+    music.inQueue = queueFiles.value.has(music.filePath)
+  })
 }
 
 const toggleQueue = async (music: MusicItem) => {
-  if (isInQueue(music.filePath)) {
+  if (isInQueue(music)) {
     // 从队列移除
     playerStore.removeFromQueue(music)
     queueFiles.value.delete(music.filePath)
+    music.inQueue = false
   } else {
     // 添加到队列
     playerStore.addToQueue(music)
     queueFiles.value.add(music.filePath)
+    music.inQueue = true
   }
 }
 
@@ -540,6 +591,11 @@ onMounted(() => {
     emit('songs-updated')
   })
   window.addEventListener('favorites-updated', loadFavoriteStatus)
+  
+  // 监听播放队列变化
+  watch(() => playerStore.queue, () => {
+    updateQueueStatus()
+  }, { deep: true })
 })
 
 onUnmounted(() => {
@@ -550,7 +606,6 @@ onUnmounted(() => {
 })
 
 // 监听播放队列变化
-import { watch } from 'vue'
 watch(() => playerStore.queue, updateQueueStatus, { deep: true })
 </script>
 
@@ -722,6 +777,47 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-right: var(--spacing-md);
+}
+
+.col-status {
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding-right: var(--spacing-md);
+}
+
+.status-icons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.status-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: color var(--transition-base);
+}
+
+.status-icon.favorite {
+  color: var(--color-error);
+}
+
+.status-icon.favorite-empty {
+  color: var(--text-tertiary);
+  opacity: 0.4;
+}
+
+.status-icon.queue {
+  color: var(--color-primary);
+}
+
+.status-icon.queue-empty {
+  color: var(--text-tertiary);
+  opacity: 0.4;
 }
 
 .col-duration {
