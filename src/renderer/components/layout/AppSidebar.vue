@@ -44,7 +44,7 @@
       <!-- 创建的歌单 -->
       <div class="nav-section">
         <div class="section-header">
-          <span class="section-title">创建的歌单</span>
+          <span class="section-title">我的歌单</span>
           <button class="add-btn" @click="createPlaylist" title="创建歌单">
             <span>+</span>
           </button>

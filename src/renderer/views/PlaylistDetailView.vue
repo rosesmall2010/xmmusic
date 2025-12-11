@@ -155,6 +155,7 @@ const loadPlaylist = async () => {
     if (currentOffset === 0) {
       loading.value = true
       songs.value = [] // 清空列表
+      hasMore = true // 重置 hasMore，确保可以加载数据
 
       // 获取歌单详情（每次都重新获取，确保数量是最新的）
       const playlists = await window.electronAPI.getPlaylists()
@@ -166,11 +167,19 @@ const loadPlaylist = async () => {
 
       if (!playlist.value) {
         loading.value = false
+        hasMore = false
         return
       }
 
       // 获取总数（每次都重新获取，确保数量是最新的）
       totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
+      
+      // 如果总数为0，直接返回，不加载歌曲
+      if (totalSongs.value === 0) {
+        loading.value = false
+        hasMore = false
+        return
+      }
     }
 
     // 如果没有更多数据或正在加载，直接返回
@@ -191,6 +200,8 @@ const loadPlaylist = async () => {
     // 追加到列表
     songs.value = [...songs.value, ...newSongs]
     currentOffset += newSongs.length
+    
+    console.log(`加载歌单歌曲: offset=${currentOffset - newSongs.length}, limit=${PAGE_SIZE}, 返回=${newSongs.length}, 总数=${totalSongs.value}`)
   } catch (error) {
     console.error('加载歌单失败:', error)
   } finally {

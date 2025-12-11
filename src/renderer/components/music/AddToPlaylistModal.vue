@@ -17,7 +17,7 @@
             {{ progress.current }} / {{ progress.total }} (成功{{ progress.added }}，跳过{{ progress.skipped }})
           </div>
         </div>
-        
+
         <!-- 单个添加时的加载提示 -->
         <div v-else-if="isProcessing && musicToAd" class="progress-container">
           <div class="progress-text">添加中...</div>
@@ -141,13 +141,18 @@ const selectPlaylist = async (playlist: any) => {
       }
     } else if (props.musicToAd) {
       // 单个添加（v1.0.6 使用 music_id）
+      // 注意：单个添加时不显示进度条，只显示简单的"添加中..."提示
       try {
         await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.id)
         // 重新加载歌单列表以更新数量
         await loadPlaylists()
+        // 先关闭处理状态，再显示提示，避免进度条闪烁
+        isProcessing.value = false
         // 显示成功提示
         alert(`已添加到歌单 "${playlist.name}"`)
       } catch (error: any) {
+        // 关闭处理状态
+        isProcessing.value = false
         // 检查是否是重复添加的错误
         if (error?.message?.includes('UNIQUE constraint') || error?.message?.includes('已存在')) {
           alert(`该歌曲已存在于歌单 "${playlist.name}" 中`)
@@ -162,11 +167,17 @@ const selectPlaylist = async (playlist: any) => {
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
     window.dispatchEvent(new CustomEvent('playlist-updated'))
     emit('added')
+
+    // 只有在批量添加时才需要重置进度（单个添加时已经在 try 块中关闭了）
+    if (props.musicListToAd && props.musicListToAd.length > 0) {
+      progress.value = { current: 0, total: 0, added: 0, skipped: 0 }
+    }
+
     close()
   } catch (error) {
     console.error('添加到歌单失败:', error)
     alert('添加失败，请重试')
-  } finally {
+    // 确保在错误时也关闭处理状态
     isProcessing.value = false
     progress.value = { current: 0, total: 0, added: 0, skipped: 0 }
   }
