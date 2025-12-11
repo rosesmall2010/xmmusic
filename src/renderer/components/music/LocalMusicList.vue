@@ -15,6 +15,9 @@
         <button class="btn-primary" @click="handleScan" :disabled="isScanning">
           {{ isScanning ? '扫描中...' : '扫描音乐' }}
         </button>
+        <button class="btn-secondary" @click="openDirManageDialog">
+          扫描目录管理
+        </button>
       </div>
     </div>
 
@@ -37,11 +40,110 @@
         </template>
       </SongList>
     </div>
+
+    <!-- 扫描目录管理对话框 -->
+    <div v-if="showDirManageDialog" class="dialog-overlay" @click.self="closeDirManageDialog">
+      <div class="dir-manage-dialog">
+        <div class="dialog-header">
+          <h3 class="dialog-title">扫描目录管理</h3>
+          <button class="dialog-close" @click="closeDirManageDialog" title="关闭">×</button>
+        </div>
+        <div class="dialog-body">
+          <div class="dir-manage-actions">
+            <button 
+              class="btn-primary" 
+              @click="showAddDirDialog = true" 
+              :disabled="dirStore.directories.length >= 20"
+            >
+              <Plus :size="16" />
+              添加目录
+            </button>
+            <div class="dir-limit-hint" v-if="dirStore.directories.length >= 20">
+              已达到最大数量限制（20个）
+            </div>
+          </div>
+
+          <div v-if="dirStore.loading" class="dir-loading">加载中...</div>
+          <div v-else-if="dirStore.directories.length === 0" class="dir-empty">
+            暂无扫描目录，请添加音乐目录
+          </div>
+          <div v-else class="dir-list">
+            <div
+              v-for="dir in dirStore.directories"
+              :key="dir.id"
+              class="dir-item"
+              :class="{ disabled: !dir.enabled }"
+            >
+              <div class="dir-content">
+                <div class="dir-path">{{ dir.path }}</div>
+                <div class="dir-meta">
+                  <span class="dir-order">顺序: {{ dir.display_order }}</span>
+                  <span class="dir-status" :class="{ enabled: dir.enabled, disabled: !dir.enabled }">
+                    {{ dir.enabled ? '已启用' : '已禁用' }}
+                  </span>
+                </div>
+              </div>
+              <div class="dir-actions">
+                <button
+                  class="btn-icon"
+                  @click="toggleDirEnabled(dir)"
+                  :title="dir.enabled ? '禁用' : '启用'"
+                >
+                  <Power v-if="dir.enabled" :size="16" />
+                  <PowerOff v-else :size="16" />
+                </button>
+                <button class="btn-icon" @click="editDir(dir)" title="编辑">
+                  <Edit :size="16" />
+                </button>
+                <button class="btn-icon danger" @click="deleteDir(dir)" title="删除">
+                  <Trash2 :size="16" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加/编辑目录对话框 -->
+    <div v-if="showAddDirDialog" class="dialog-overlay" @click.self="closeAddDirDialog">
+      <div class="dialog-content">
+        <h3 class="dialog-title">{{ editingDir ? '编辑目录' : '添加目录' }}</h3>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label class="form-label">目录路径</label>
+            <div class="form-input-group">
+              <input
+                v-model="newDirPath"
+                type="text"
+                class="form-input"
+                placeholder="请输入或选择目录路径"
+                @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
+              />
+              <button
+                class="btn-secondary"
+                @click="selectDirPath"
+                title="选择目录"
+              >
+                浏览
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="closeAddDirDialog">取消</button>
+          <button class="btn-primary" @click="editingDir ? handleSaveEdit() : handleAddDir()">
+            {{ editingDir ? '保存' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -60,6 +162,12 @@ const totalCount = computed(() => musicStore.totalCount)
 // 扫描状态
 const isScanning = ref(false)
 const scanProgress = ref<ScanProgress | null>(null)
+
+// 目录管理对话框状态
+const showDirManageDialog = ref(false)
+const showAddDirDialog = ref(false)
+const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
+const newDirPath = ref('')
 
 onMounted(async () => {
   // Initial load of 20 items
@@ -293,6 +401,145 @@ const playMusic = async (music: MusicItem) => {
   playerStore.setCurrentQueueIndex(index)
   await play(music)
 }
+
+// ========== 目录管理相关函数 ==========
+
+// 打开目录管理对话框
+const openDirManageDialog = async () => {
+  showDirManageDialog.value = true
+  try {
+    await dirStore.loadDirectories({ sortBy: 'display_order', order: 'ASC' })
+  } catch (error) {
+    console.error('加载目录列表失败:', error)
+  }
+}
+
+// 关闭目录管理对话框
+const closeDirManageDialog = () => {
+  showDirManageDialog.value = false
+}
+
+// 添加目录
+const handleAddDir = async () => {
+  if (!newDirPath.value.trim()) {
+    alert('请输入目录路径')
+    return
+  }
+
+  try {
+    // 验证路径
+    const validation = await dirStore.validatePath(newDirPath.value.trim())
+    if (!validation.valid) {
+      alert(validation.error || '路径无效')
+      return
+    }
+
+    // 检查是否已存在
+    const existing = dirStore.directories.find(d => d.path === newDirPath.value.trim())
+    if (existing) {
+      alert('该目录已存在')
+      return
+    }
+
+    // 检查数量限制
+    if (dirStore.directories.length >= 20) {
+      alert('最多只能添加20个扫描目录')
+      return
+    }
+
+    await dirStore.addDirectory(newDirPath.value.trim())
+    newDirPath.value = ''
+    showAddDirDialog.value = false
+    alert('目录添加成功')
+  } catch (error: any) {
+    alert(error.message || '添加目录失败')
+  }
+}
+
+// 编辑目录
+const editDir = (dir: { id: number; path: string; display_order: number; enabled: boolean }) => {
+  editingDir.value = { ...dir }
+  newDirPath.value = dir.path
+  showAddDirDialog.value = true
+}
+
+// 保存编辑
+const handleSaveEdit = async () => {
+  if (!editingDir.value || !newDirPath.value.trim()) {
+    alert('请输入目录路径')
+    return
+  }
+
+  try {
+    const validation = await dirStore.validatePath(newDirPath.value.trim())
+    if (!validation.valid) {
+      alert(validation.error || '路径无效')
+      return
+    }
+
+    // 检查是否与其他目录重复
+    const existing = dirStore.directories.find(
+      d => d.path === newDirPath.value.trim() && d.id !== editingDir.value!.id
+    )
+    if (existing) {
+      alert('该目录已存在')
+      return
+    }
+
+    await dirStore.updateDirectory(editingDir.value.id, {
+      path: newDirPath.value.trim()
+    })
+    newDirPath.value = ''
+    editingDir.value = null
+    showAddDirDialog.value = false
+    alert('目录更新成功')
+  } catch (error: any) {
+    alert(error.message || '更新目录失败')
+  }
+}
+
+// 删除目录
+const deleteDir = async (dir: { id: number; path: string }) => {
+  if (!confirm(`确定要删除目录 "${dir.path}" 吗？\n\n可以选择是否同时删除该目录下已扫描的音乐文件。`)) {
+    return
+  }
+
+  const removeFiles = confirm('是否同时删除该目录下已扫描的音乐文件？')
+  try {
+    await dirStore.deleteDirectory(dir.id, { removeScannedFiles: removeFiles })
+    alert('目录删除成功')
+  } catch (error: any) {
+    alert(error.message || '删除目录失败')
+  }
+}
+
+// 切换启用/禁用
+const toggleDirEnabled = async (dir: { id: number; enabled: boolean }) => {
+  try {
+    await dirStore.updateDirectory(dir.id, { enabled: !dir.enabled })
+  } catch (error: any) {
+    alert(error.message || '更新目录状态失败')
+  }
+}
+
+// 关闭添加/编辑目录对话框
+const closeAddDirDialog = () => {
+  showAddDirDialog.value = false
+  editingDir.value = null
+  newDirPath.value = ''
+}
+
+// 选择目录路径
+const selectDirPath = async () => {
+  try {
+    const paths = await window.electronAPI.selectMusicFolder()
+    if (paths && paths.length > 0) {
+      newDirPath.value = paths[0]
+    }
+  } catch (error) {
+    console.error('选择目录失败:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -421,5 +668,223 @@ const playMusic = async (music: MusicItem) => {
   height: 100%;
   background: var(--color-primary);
   transition: width 0.2s ease;
+}
+
+/* 目录管理对话框样式 */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dir-manage-dialog {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  min-width: 600px;
+  max-width: 800px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dialog-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0;
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-base);
+  transition: all var(--transition-base);
+}
+
+.dialog-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-color);
+}
+
+.dialog-body {
+  padding: var(--spacing-xl);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dir-manage-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.dir-limit-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.dir-loading,
+.dir-empty {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dir-list {
+  margin-top: var(--spacing-md);
+}
+
+.dir-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-base);
+}
+
+.dir-item:hover {
+  border-color: var(--color-primary);
+  background: var(--hover-bg);
+}
+
+.dir-item.disabled {
+  opacity: 0.6;
+}
+
+.dir-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.dir-path {
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  margin-bottom: var(--spacing-xs);
+  word-break: break-all;
+}
+
+.dir-meta {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.dir-status.enabled {
+  color: var(--color-success);
+}
+
+.dir-status.disabled {
+  color: var(--text-secondary);
+}
+
+.dir-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-md);
+}
+
+.btn-icon {
+  padding: var(--spacing-xs);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background: var(--hover-bg);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-icon.danger:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* 添加/编辑目录对话框 */
+.dialog-content {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  min-width: 400px;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.form-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.form-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: var(--spacing-xs);
+}
+
+.form-input-group {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.form-input {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-base);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
 }
 </style>
