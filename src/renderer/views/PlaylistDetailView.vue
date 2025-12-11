@@ -180,6 +180,9 @@ const loadPlaylist = async () => {
         hasMore = false
         return
       }
+      
+      // 重置 loading，准备加载歌曲列表
+      loading.value = false
     }
 
     // 如果没有更多数据或正在加载，直接返回
