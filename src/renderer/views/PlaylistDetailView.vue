@@ -156,7 +156,7 @@ const loadPlaylist = async () => {
       loading.value = true
       songs.value = [] // 清空列表
 
-      // 获取歌单详情
+      // 获取歌单详情（每次都重新获取，确保数量是最新的）
       const playlists = await window.electronAPI.getPlaylists()
 
       // 如果任务已过时，直接返回
@@ -169,7 +169,7 @@ const loadPlaylist = async () => {
         return
       }
 
-      // 获取总数
+      // 获取总数（每次都重新获取，确保数量是最新的）
       totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
     }
 

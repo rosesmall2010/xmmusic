@@ -7,8 +7,8 @@
       </div>
 
       <div class="modal-body">
-        <!-- 进度显示 -->
-        <div v-if="isProcessing" class="progress-container">
+        <!-- 进度显示（只在批量添加时显示） -->
+        <div v-if="isProcessing && musicListToAd && musicListToAd.length > 0" class="progress-container">
           <div class="progress-text">批量添加中...</div>
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
@@ -16,6 +16,11 @@
           <div class="progress-info">
             {{ progress.current }} / {{ progress.total }} (成功{{ progress.added }}，跳过{{ progress.skipped }})
           </div>
+        </div>
+        
+        <!-- 单个添加时的加载提示 -->
+        <div v-else-if="isProcessing && musicToAd" class="progress-container">
+          <div class="progress-text">添加中...</div>
         </div>
 
         <!-- 歌单列表 -->
