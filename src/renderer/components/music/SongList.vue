@@ -411,15 +411,61 @@ const handlePlay = (music: MusicItem) => {
 
 const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   contextMenu.music = music
+  contextMenu.visible = true
+  
+  // 先设置初始位置，然后在 nextTick 中调整边界
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
-  contextMenu.visible = true
 
   try {
     contextMenu.isFavorite = await window.electronAPI.isFileFavorite(music.id)
   } catch (e) {
     console.error('Failed to check favorite status', e)
   }
+  
+  // 在 nextTick 中调整菜单位置，确保不超出屏幕边界
+  await nextTick()
+  adjustContextMenuPosition()
+}
+
+const adjustContextMenuPosition = () => {
+  if (!contextMenu.visible) return
+  
+  // 获取菜单元素
+  const menuElement = document.querySelector('.context-menu') as HTMLElement
+  if (!menuElement) return
+  
+  const menuRect = menuElement.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = menuRect.width || 200 // 默认宽度 200px
+  const menuHeight = menuRect.height || 300 // 默认高度 300px
+  
+  let adjustedX = contextMenu.x
+  let adjustedY = contextMenu.y
+  
+  // 检查右边界
+  if (adjustedX + menuWidth > viewportWidth) {
+    adjustedX = viewportWidth - menuWidth - 10 // 留 10px 边距
+  }
+  
+  // 检查左边界
+  if (adjustedX < 0) {
+    adjustedX = 10 // 留 10px 边距
+  }
+  
+  // 检查下边界
+  if (adjustedY + menuHeight > viewportHeight) {
+    adjustedY = viewportHeight - menuHeight - 10 // 留 10px 边距
+  }
+  
+  // 检查上边界
+  if (adjustedY < 0) {
+    adjustedY = 10 // 留 10px 边距
+  }
+  
+  contextMenu.x = adjustedX
+  contextMenu.y = adjustedY
 }
 
 const closeContextMenu = () => {
