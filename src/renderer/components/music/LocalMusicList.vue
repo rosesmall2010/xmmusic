@@ -176,6 +176,10 @@ const showAddDirDialog = ref(false)
 const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
 const newDirPath = ref('')
 
+// 删除确认对话框状态
+const showDeleteConfirmDialog = ref(false)
+const dirToDelete = ref<{ id: number; path: string } | null>(null)
+
 // 检查目录是否已存在
 const isDirExists = computed(() => {
   if (!newDirPath.value.trim() || editingDir.value) {
