@@ -752,47 +752,6 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
   padding-right: var(--spacing-md);
 }
 
-.col-status {
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding-right: var(--spacing-md);
-}
-
-.status-icons {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.status-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  transition: color var(--transition-base);
-}
-
-.status-icon.favorite {
-  color: var(--color-error);
-}
-
-.status-icon.favorite-empty {
-  color: var(--text-tertiary);
-  opacity: 0.4;
-}
-
-.status-icon.queue {
-  color: var(--color-primary);
-}
-
-.status-icon.queue-empty {
-  color: var(--text-tertiary);
-  opacity: 0.4;
-}
-
 .col-duration {
   width: 60px;
   text-align: right;
