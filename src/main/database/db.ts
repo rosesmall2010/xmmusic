@@ -38,9 +38,15 @@ export default class MusicDatabase {
   initialize(dbPath?: string, skipVersionCheck: boolean = false): void {
     try {
       // 根据环境变量选择数据库文件名
+      // 注意：main.ts 中已经设置了开发模式的 userData 路径（添加了 -dev 后缀）
+      // 所以这里直接使用 app.getPath('userData') 即可
       const isDev = process.env.NODE_ENV !== 'production'
       const dbFileName = isDev ? 'm-dev.db' : 'm.db'
       const path = dbPath || join(app.getPath('userData'), dbFileName)
+      
+      // 调试：输出数据库路径信息
+      console.log(`📂 userData 路径: ${app.getPath('userData')}`)
+      console.log(`📂 数据库文件路径: ${path}`)
 
       console.log(`🌍 运行环境: ${isDev ? '开发环境' : '生产环境'}`)
       console.log(`📂 数据库路径: ${path}`)
@@ -252,9 +258,16 @@ export default class MusicDatabase {
   close(): void {
     if (this.db) {
       try {
+        // 在关闭前执行 WAL checkpoint，确保所有数据都写入主数据库文件
+        try {
+          this.db.pragma('wal_checkpoint(TRUNCATE)')
+          console.log('✅ WAL checkpoint 完成，数据已同步到主数据库文件')
+        } catch (checkpointError: any) {
+          console.warn('⚠️  WAL checkpoint 失败:', checkpointError?.message || checkpointError)
+        }
         this.db.close()
         this.db = null
-    } catch (error: any) {
+      } catch (error: any) {
         // 忽略 SQLITE_BUSY 错误
         // 应用退出时这个错误不影响数据完整性，操作系统会自动清理资源
         if (error?.code !== 'SQLITE_BUSY') {
@@ -262,8 +275,8 @@ export default class MusicDatabase {
         }
         this.db = null
       }
-      }
     }
+  }
 
   // ========== all_music 表操作（v1.0.6 新架构） ==========
 
@@ -332,6 +345,10 @@ export default class MusicDatabase {
       data.is_corrupted || 0,
       data.is_duplicate || 0
     )
+
+    // 批量插入时不需要每次都 checkpoint，但可以定期 checkpoint
+    // better-sqlite3 是同步的，数据应该立即写入 WAL
+    // 如果需要确保数据持久化，可以在批量操作后统一 checkpoint
 
     return Number(result.lastInsertRowid)
   }
@@ -1703,6 +1720,14 @@ export default class MusicDatabase {
       VALUES (?, ?, 1)
     `)
     const result = stmt.run(normalizedPath, displayOrder)
+    
+    // 确保数据立即写入（WAL 模式下可能需要 checkpoint）
+    // better-sqlite3 是同步的，数据应该立即写入，但为了确保，我们可以显式 checkpoint
+    try {
+      this.db!.pragma('wal_checkpoint(PASSIVE)')
+    } catch (e) {
+      // 忽略 checkpoint 错误，不影响主流程
+    }
 
     return this.getLocalMusicDirById(result.lastInsertRowid as number)!
   }

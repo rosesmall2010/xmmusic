@@ -218,6 +218,9 @@ export default class FileScanner {
     }
 
     // 处理文件
+    let processedCount = 0
+    const CHECKPOINT_INTERVAL = 100 // 每处理100个文件执行一次 checkpoint
+    
     const tasks = files.map(file => async () => {
       // 检查是否取消
       if (this.isCancelled) {
@@ -242,6 +245,16 @@ export default class FileScanner {
           result.corrupted++
         } else {
           result.skipped++
+        }
+        
+        processedCount++
+        // 定期执行 checkpoint，确保数据及时持久化
+        if (processedCount % CHECKPOINT_INTERVAL === 0) {
+          try {
+            this.db.getDatabase().pragma('wal_checkpoint(PASSIVE)')
+          } catch (e) {
+            // 忽略 checkpoint 错误，不影响扫描流程
+          }
         }
       } catch (error: any) {
         if (error.message === '扫描已取消') {
