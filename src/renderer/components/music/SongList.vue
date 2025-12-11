@@ -100,30 +100,30 @@
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
           <div class="col-status">
             <div class="status-icons">
-              <span 
-                v-if="music.favorite" 
-                class="status-icon favorite" 
+              <span
+                v-if="music.favorite"
+                class="status-icon favorite"
                 title="已收藏"
               >
                 <Heart :size="14" :fill="'currentColor'" />
               </span>
-              <span 
-                v-else 
-                class="status-icon favorite-empty" 
+              <span
+                v-else
+                class="status-icon favorite-empty"
                 title="未收藏"
               >
                 <Heart :size="14" />
               </span>
-              <span 
-                v-if="music.inQueue" 
-                class="status-icon queue" 
+              <span
+                v-if="music.inQueue"
+                class="status-icon queue"
                 title="在播放队列中"
               >
                 <ListMusic :size="14" :fill="'currentColor'" />
               </span>
-              <span 
-                v-else 
-                class="status-icon queue-empty" 
+              <span
+                v-else
+                class="status-icon queue-empty"
                 title="不在播放队列"
               >
                 <ListMusic :size="14" />
@@ -364,9 +364,12 @@ const handleBatchAddToFavorites = async () => {
     let addedCount = 0
 
     for (const filePath of filePaths) {
+      const music = props.songs.find(s => s.filePath === filePath)
+      if (!music) continue
+      
       // 检查是否已经在我喜欢中
       if (!favoriteFiles.value.has(filePath)) {
-        await window.electronAPI.toggleFavorite(filePath)
+        await window.electronAPI.toggleFavorite(music.id)
         favoriteFiles.value.add(filePath)
         addedCount++
       }
@@ -413,7 +416,10 @@ const handleBatchRemove = async () => {
 
   try {
     const filePaths = Array.from(selectedSongs.value)
-    const result = await window.electronAPI.batchRemoveFromPlaylist(props.playlistId, filePaths)
+    const musicIds = filePaths
+      .map(filePath => props.songs.find(s => s.filePath === filePath)?.id)
+      .filter((id): id is number => id !== undefined)
+    const result = await window.electronAPI.batchRemoveFromPlaylist(props.playlistId, musicIds)
     console.log(`Removed ${result.removed} songs`)
     cancelSelection()
     emit('songs-updated')
@@ -441,7 +447,7 @@ const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   contextMenu.visible = true
 
   try {
-    contextMenu.isFavorite = await window.electronAPI.isFileFavorite(music.filePath)
+    contextMenu.isFavorite = await window.electronAPI.isFileFavorite(music.id)
   } catch (e) {
     console.error('Failed to check favorite status', e)
   }
@@ -487,7 +493,7 @@ const loadFavoriteStatus = async () => {
 
 const toggleFavorite = async (music: MusicItem) => {
   try {
-    await window.electronAPI.toggleFavorite(music.filePath)
+    await window.electronAPI.toggleFavorite(music.id)
     // 更新本地状态
     if (favoriteFiles.value.has(music.filePath)) {
       favoriteFiles.value.delete(music.filePath)
@@ -591,7 +597,7 @@ onMounted(() => {
     emit('songs-updated')
   })
   window.addEventListener('favorites-updated', loadFavoriteStatus)
-  
+
   // 监听播放队列变化
   watch(() => playerStore.queue, () => {
     updateQueueStatus()

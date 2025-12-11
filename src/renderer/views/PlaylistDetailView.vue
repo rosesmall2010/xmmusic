@@ -233,7 +233,7 @@ const handleRename = async (newName: string) => {
 const removeSong = async (music: MusicItem) => {
   if (!playlist.value) return
   try {
-    await window.electronAPI.removeFromPlaylistByPath(playlist.value.id, music.filePath)
+    await window.electronAPI.removeFromPlaylistByPath(playlist.value.id, music.id)
     await loadPlaylist()
   } catch (error) {
     console.error('Failed to remove song:', error)

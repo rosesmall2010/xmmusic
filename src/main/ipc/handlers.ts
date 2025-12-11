@@ -367,9 +367,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getMusicById(id)
   })
 
-  ipcMain.handle('record-play', async (_, filePath: string) => {
+  ipcMain.handle('record-play', async (_, musicId: number) => {
     if (!db) return
-    db.recordPlay(filePath)
+    // 使用新的基于 music_id 的方法
+    db.addToRecentPlaysByMusicId(musicId)
+    // 更新播放统计
+    const music = db.getAllMusicById(musicId)
+    if (music) {
+      db.updateAllMusic(musicId, {
+        play_count: (music.playCount || 0) + 1,
+        last_played_at: new Date().toISOString()
+      })
+    }
   })
 
   ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number, minSimilarity?: number) => {
@@ -403,29 +412,29 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     db.updatePlaylistOrder(playlistIds)
   })
 
-  ipcMain.handle('add-to-playlist', async (_, playlistId: number, filePath: string) => {
+  ipcMain.handle('add-to-playlist', async (_, playlistId: number, musicId: number) => {
     if (!db) return
-    db.addToPlaylist(playlistId, filePath)
+    db.addToPlaylistByMusicId(playlistId, musicId)
   })
 
-  // 批量添加到歌单 - 优化性能
-  ipcMain.handle('batch-add-to-playlist', async (event, playlistId: number, filePaths: string[]) => {
+  // 批量添加到歌单 - 优化性能（v1.0.6 使用 music_id）
+  ipcMain.handle('batch-add-to-playlist', async (event, playlistId: number, musicIds: number[]) => {
     if (!db) return { success: false, added: 0, skipped: 0, total: 0 }
 
-    const total = filePaths.length
+    const total = musicIds.length
     let added = 0
     let skipped = 0
 
     try {
       // 分批处理，每批50个，避免UI卡顿
       const batchSize = 50
-      for (let i = 0; i < filePaths.length; i += batchSize) {
-        const batch = filePaths.slice(i, Math.min(i + batchSize, filePaths.length))
+      for (let i = 0; i < musicIds.length; i += batchSize) {
+        const batch = musicIds.slice(i, Math.min(i + batchSize, musicIds.length))
 
         // 处理当前批次
-        for (const filePath of batch) {
+        for (const musicId of batch) {
           try {
-            db.addToPlaylist(playlistId, filePath)
+            db.addToPlaylistByMusicId(playlistId, musicId)
             added++
           } catch (error) {
             // 跳过已存在的歌曲
@@ -434,7 +443,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         }
 
         // 发送进度更新
-        const current = Math.min(i + batchSize, filePaths.length)
+        const current = Math.min(i + batchSize, musicIds.length)
         setImmediate(() => {
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('batch-add-progress', {
@@ -457,39 +466,54 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
   })
 
-  // 批量从歌单删除
-  ipcMain.handle('batch-remove-from-playlist', async (_, playlistId: number, filePaths: string[]) => {
+  // 批量从歌单删除（v1.0.6 使用 music_id）
+  ipcMain.handle('batch-remove-from-playlist', async (_, playlistId: number, musicIds: number[]) => {
     if (!db) return { success: false, removed: 0 }
     let removed = 0
-    filePaths.forEach(filePath => {
+    musicIds.forEach(musicId => {
       try {
-        db.removeFromPlaylistByPath(playlistId, filePath)
+        db.removeFromPlaylistByMusicId(playlistId, musicId)
         removed++
       } catch (error) {
-        console.error(`Failed to remove: ${filePath}`, error)
+        console.error(`Failed to remove musicId: ${musicId}`, error)
       }
     })
     return { success: true, removed }
   })
 
-  ipcMain.handle('is-file-in-playlist', async (_, filePath: string, playlistId?: number) => {
+  ipcMain.handle('is-file-in-playlist', async (_, musicId: number, playlistId?: number) => {
     if (!db) return false
-    return db.isFileInPlaylist(filePath, playlistId)
+    if (playlistId !== undefined) {
+      const stmt = db['db']!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+      const result = stmt.get(playlistId, musicId) as { count: number }
+      return result.count > 0
+    } else {
+      const stmt = db['db']!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE music_id = ?')
+      const result = stmt.get(musicId) as { count: number }
+      return result.count > 0
+    }
   })
 
-  ipcMain.handle('get-playlists-for-file', async (_, filePath: string) => {
+  ipcMain.handle('get-playlists-for-file', async (_, musicId: number) => {
     if (!db) return []
-    return db.getPlaylistsForFile(filePath)
+    const stmt = db['db']!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE music_id = ?')
+    const rows = stmt.all(musicId) as Array<{ playlist_id: number }>
+    return rows.map(row => row.playlist_id)
   })
 
-  ipcMain.handle('remove-from-playlist-by-path', async (_, playlistId: number, filePath: string) => {
+  ipcMain.handle('remove-from-playlist-by-path', async (_, playlistId: number, musicId: number) => {
     if (!db) return
-    db.removeFromPlaylistByPath(playlistId, filePath)
+    db.removeFromPlaylistByMusicId(playlistId, musicId)
   })
 
   ipcMain.handle('get-playlist-songs', async (_, playlistId: number) => {
     if (!db) return []
-    return db.getPlaylistSongs(playlistId)
+    // 使用新的基于 music_id 的方法
+    const songs = db.getPlaylistSongsByMusicId(playlistId)
+    return songs.map(item => {
+      const { fullPath, position, ...musicItem } = item
+      return musicItem as MusicItem
+    })
   })
 
   // 歌单歌曲（分页）
@@ -640,15 +664,19 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
   })
 
-  // 收藏
-  ipcMain.handle('toggle-favorite', async (_, filePath: string) => {
+  // 收藏（v1.0.6 使用 music_id）
+  ipcMain.handle('toggle-favorite', async (_, musicId: number) => {
     if (!db) return
-    db.toggleFavorite(filePath)
+    if (db.isFavoriteByMusicId(musicId)) {
+      db.removeFromFavoritesByMusicId(musicId)
+    } else {
+      db.addToFavoritesByMusicId(musicId)
+    }
   })
 
-  ipcMain.handle('is-file-favorite', async (_, filePath: string) => {
+  ipcMain.handle('is-file-favorite', async (_, musicId: number) => {
     if (!db) return false
-    return db.isFileFavorite(filePath)
+    return db.isFavoriteByMusicId(musicId)
   })
 
   // 收藏功能（v1.0.6 使用 music_id）

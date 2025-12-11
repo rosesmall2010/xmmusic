@@ -45,9 +45,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearSearchHistory: () => ipcRenderer.invoke('clear-search-history'),
   getSearchSuggestions: (query: string) => ipcRenderer.invoke('get-search-suggestions', query),
   getMusicById: (id: number) => ipcRenderer.invoke('get-music-by-id', id),
-  toggleFavorite: (filePath: string) => ipcRenderer.invoke('toggle-favorite', filePath),
-  isFileFavorite: (filePath: string) => ipcRenderer.invoke('is-file-favorite', filePath),
-  recordPlay: (filePath: string) => ipcRenderer.invoke('record-play', filePath),
+  toggleFavorite: (musicId: number) => ipcRenderer.invoke('toggle-favorite', musicId),
+  isFileFavorite: (musicId: number) => ipcRenderer.invoke('is-file-favorite', musicId),
+  recordPlay: (musicId: number) => ipcRenderer.invoke('record-play', musicId),
 
   // 播放列表
   createPlaylist: (name: string, description?: string) =>
@@ -59,18 +59,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
   updatePlaylistOrder: (playlistIds: number[]) =>
     ipcRenderer.invoke('update-playlist-order', playlistIds),
-  addToPlaylist: (playlistId: number, filePath: string) =>
-    ipcRenderer.invoke('add-to-playlist', playlistId, filePath),
-  batchAddToPlaylist: (playlistId: number, filePaths: string[]) =>
-    ipcRenderer.invoke('batch-add-to-playlist', playlistId, filePaths),
-  batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) =>
-    ipcRenderer.invoke('batch-remove-from-playlist', playlistId, filePaths),
-  isFileInPlaylist: (filePath: string, playlistId?: number) =>
-    ipcRenderer.invoke('is-file-in-playlist', filePath, playlistId),
-  getPlaylistsForFile: (filePath: string) =>
-    ipcRenderer.invoke('get-playlists-for-file', filePath),
-  removeFromPlaylistByPath: (playlistId: number, filePath: string) =>
-    ipcRenderer.invoke('remove-from-playlist-by-path', playlistId, filePath),
+  addToPlaylist: (playlistId: number, musicId: number) =>
+    ipcRenderer.invoke('add-to-playlist', playlistId, musicId),
+  batchAddToPlaylist: (playlistId: number, musicIds: number[]) =>
+    ipcRenderer.invoke('batch-add-to-playlist', playlistId, musicIds),
+  batchRemoveFromPlaylist: (playlistId: number, musicIds: number[]) =>
+    ipcRenderer.invoke('batch-remove-from-playlist', playlistId, musicIds),
+  isFileInPlaylist: (musicId: number, playlistId?: number) =>
+    ipcRenderer.invoke('is-file-in-playlist', musicId, playlistId),
+  getPlaylistsForFile: (musicId: number) =>
+    ipcRenderer.invoke('get-playlists-for-file', musicId),
+  removeFromPlaylistByPath: (playlistId: number, musicId: number) =>
+    ipcRenderer.invoke('remove-from-playlist-by-path', playlistId, musicId),
   getPlaylistSongs: (playlistId: number) =>
     ipcRenderer.invoke('get-playlist-songs', playlistId),
   getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) =>

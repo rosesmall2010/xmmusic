@@ -280,7 +280,7 @@ const toggleMute = () => {
 
 const toggleFavorite = async () => {
   if (currentMusic.value) {
-    await window.electronAPI.toggleFavorite(currentMusic.value.filePath)
+    await window.electronAPI.toggleFavorite(currentMusic.value.id)
     isFavorite.value = !isFavorite.value
 
     // 通知其他组件更新收藏状态
@@ -321,7 +321,7 @@ const formatTime = (seconds: number) => {
 // 监听当前音乐变化
 watch(currentMusic, async (music) => {
   if (music) {
-    isFavorite.value = await window.electronAPI.isFileFavorite(music.filePath)
+    isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
   }
 })
 

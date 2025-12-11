@@ -1068,21 +1068,19 @@ export default class MusicDatabase {
     stmt.run(id)
   }
 
+  /**
+   * @deprecated 使用 addToPlaylistByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   addToPlaylist(playlistId: number, filePath: string, position?: number): void {
-    if (position === undefined) {
-      const stmt = this.db!.prepare('SELECT MAX(position) as max_pos FROM playlist_item WHERE playlist_id = ?')
-      const result = stmt.get(playlistId) as { max_pos: number | null }
-      position = (result.max_pos ?? -1) + 1
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法找到文件: ${filePath}`)
+      return
     }
-
-    const stmt = this.db!.prepare(`
-      INSERT OR IGNORE INTO playlist_item (playlist_id, file_path, position)
-      VALUES (?, ?, ?)
-    `)
-    stmt.run(playlistId, filePath, position)
-
-    // 更新播放列表统计
-    this.updatePlaylistStats(playlistId)
+    // 使用新的基于 music_id 的方法
+    this.addToPlaylistByMusicId(playlistId, music.id, position)
   }
 
   getPlaylistSongs(playlistId: number): MusicItem[] {
@@ -1141,33 +1139,57 @@ export default class MusicDatabase {
     })
   }
 
-  // 检查文件路径是否在播放列表中
+  /**
+   * @deprecated 使用基于 music_id 的方法替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   isFileInPlaylist(filePath: string, playlistId?: number): boolean {
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      return false
+    }
+    // 使用新的基于 music_id 的方法
     if (playlistId !== undefined) {
-      // 检查是否在指定播放列表中
-      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
-      const result = stmt.get(playlistId, filePath) as { count: number }
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
+      const result = stmt.get(playlistId, music.id) as { count: number }
       return result.count > 0
     } else {
-      // 检查是否在任何播放列表中
-      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE file_path = ?')
-      const result = stmt.get(filePath) as { count: number }
+      const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM playlist_item WHERE music_id = ?')
+      const result = stmt.get(music.id) as { count: number }
       return result.count > 0
     }
   }
 
-  // 获取文件路径所在的所有播放列表ID
+  /**
+   * @deprecated 使用基于 music_id 的方法替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   getPlaylistsForFile(filePath: string): number[] {
-    const stmt = this.db!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE file_path = ?')
-    const rows = stmt.all(filePath) as Array<{ playlist_id: number }>
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      return []
+    }
+    // 使用新的基于 music_id 的方法
+    const stmt = this.db!.prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE music_id = ?')
+    const rows = stmt.all(music.id) as Array<{ playlist_id: number }>
     return rows.map(row => row.playlist_id)
   }
 
-  // 从播放列表中移除文件（通过文件路径）
+  /**
+   * @deprecated 使用 removeFromPlaylistByMusicId() 替代（v1.0.6 新架构）
+   * 保留此方法以兼容旧代码
+   */
   removeFromPlaylistByPath(playlistId: number, filePath: string): void {
-    const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND file_path = ?')
-    stmt.run(playlistId, filePath)
-    this.updatePlaylistStats(playlistId)
+    // 先根据 file_path 查找 music_id
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) {
+      console.warn(`无法找到文件: ${filePath}`)
+      return
+    }
+    // 使用新的基于 music_id 的方法
+    this.removeFromPlaylistByMusicId(playlistId, music.id)
   }
 
   private updatePlaylistStats(playlistId: number): void {
@@ -1307,11 +1329,15 @@ export default class MusicDatabase {
       VALUES (?, ?, ?)
     `)
     stmt.run(playlistId, musicId, position)
+    // 更新播放列表统计
+    this.updatePlaylistStats(playlistId)
   }
 
   removeFromPlaylistByMusicId(playlistId: number, musicId: number): void {
     const stmt = this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ? AND music_id = ?')
     stmt.run(playlistId, musicId)
+    // 更新播放列表统计
+    this.updatePlaylistStats(playlistId)
   }
 
   getPlaylistSongsByMusicId(playlistId: number): Array<MusicItem & { fullPath: string; position: number }> {

@@ -108,9 +108,9 @@ const selectPlaylist = async (playlist: any) => {
     isProcessing.value = true
 
     if (props.musicListToAd && props.musicListToAd.length > 0) {
-      // 批量添加 - 显示进度
-      const filePaths = props.musicListToAd.map(m => m.filePath)
-      progress.value = { current: 0, total: filePaths.length, added: 0, skipped: 0 }
+      // 批量添加 - 显示进度（v1.0.6 使用 music_id）
+      const musicIds = props.musicListToAd.map(m => m.id).filter((id): id is number => id !== undefined)
+      progress.value = { current: 0, total: musicIds.length, added: 0, skipped: 0 }
 
       // 监听进度更新
       const handleProgress = (_event: any, data: any) => {
@@ -118,7 +118,7 @@ const selectPlaylist = async (playlist: any) => {
       }
       window.electronAPI.onBatchAddProgress(handleProgress)
 
-      const result = await window.electronAPI.batchAddToPlaylist(playlist.id, filePaths)
+      const result = await window.electronAPI.batchAddToPlaylist(playlist.id, musicIds)
 
       // 移除进度监听
       window.electronAPI.offBatchAddProgress(handleProgress)
@@ -135,8 +135,8 @@ const selectPlaylist = async (playlist: any) => {
         alert(`所有歌曲已存在于该歌单中`)
       }
     } else if (props.musicToAd) {
-      // 单个添加
-      await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.filePath)
+      // 单个添加（v1.0.6 使用 music_id）
+      await window.electronAPI.addToPlaylist(playlist.id, props.musicToAd.id)
     }
 
     // 触发全局事件通知歌单更新

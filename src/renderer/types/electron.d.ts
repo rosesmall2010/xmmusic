@@ -30,9 +30,9 @@ export interface ElectronAPI {
   clearSearchHistory: () => Promise<void>
   getSearchSuggestions: (query: string) => Promise<string[]>
   getMusicById: (id: number) => Promise<any>
-  toggleFavorite: (filePath: string) => Promise<void>
-  isFileFavorite: (filePath: string) => Promise<boolean>
-  recordPlay: (filePath: string) => Promise<void>
+  toggleFavorite: (musicId: number) => Promise<void>
+  isFileFavorite: (musicId: number) => Promise<boolean>
+  recordPlay: (musicId: number) => Promise<void>
 
   // 播放列表
   createPlaylist: (name: string, description?: string) => Promise<number>
@@ -40,12 +40,12 @@ export interface ElectronAPI {
   deletePlaylist: (id: number) => Promise<void>
   getPlaylists: () => Promise<any[]>
   updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
-  addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
-  batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
-  batchRemoveFromPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; removed: number }>
-  isFileInPlaylist: (filePath: string, playlistId?: number) => Promise<boolean>
-  getPlaylistsForFile: (filePath: string) => Promise<number[]>
-  removeFromPlaylistByPath: (playlistId: number, filePath: string) => Promise<void>
+  addToPlaylist: (playlistId: number, musicId: number) => Promise<void>
+  batchAddToPlaylist: (playlistId: number, musicIds: number[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
+  batchRemoveFromPlaylist: (playlistId: number, musicIds: number[]) => Promise<{ success: boolean; removed: number }>
+  isFileInPlaylist: (musicId: number, playlistId?: number) => Promise<boolean>
+  getPlaylistsForFile: (musicId: number) => Promise<number[]>
+  removeFromPlaylistByPath: (playlistId: number, musicId: number) => Promise<void>
   getPlaylistSongs: (playlistId: number) => Promise<any[]>
   exportPlaylistJSON: (playlistId: number) => Promise<string | null>
   importPlaylistJSON: () => Promise<any>
