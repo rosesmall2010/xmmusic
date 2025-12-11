@@ -31,7 +31,15 @@
             class="playlist-item"
             @click="selectPlaylist(playlist)"
           >
-            <div class="playlist-icon"><ListMusic :size="20" /></div>
+            <div class="playlist-icon">
+              <img
+                v-if="playlist.firstSongCover"
+                :src="playlist.firstSongCover"
+                class="playlist-cover-image"
+                @error="handleCoverError(playlist)"
+              />
+              <ListMusic v-else :size="20" />
+            </div>
             <div class="playlist-info">
               <div class="playlist-name">{{ playlist.name }}</div>
               <div class="playlist-count">{{ playlist.songCount }} 首歌曲</div>
