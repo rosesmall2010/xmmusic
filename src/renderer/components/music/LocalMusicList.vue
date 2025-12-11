@@ -116,9 +116,14 @@
               v-model="newDirPath"
               type="text"
               class="form-input form-input-full"
+              :class="{ 'form-input-error': isDirExists }"
               placeholder="请输入或选择目录路径"
               @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
+              @input="checkDirExists"
             />
+            <div v-if="isDirExists && !editingDir" class="form-error-hint">
+              该目录已存在，请选择其他目录
+            </div>
             <button
               class="btn-secondary form-input-btn"
               @click="selectDirPath"
@@ -130,7 +135,11 @@
         </div>
         <div class="dialog-actions">
           <button class="btn-secondary" @click="closeAddDirDialog">取消</button>
-          <button class="btn-primary" @click="editingDir ? handleSaveEdit() : handleAddDir()">
+          <button 
+            class="btn-primary" 
+            @click="editingDir ? handleSaveEdit() : handleAddDir()"
+            :disabled="isDirExists || !newDirPath.trim()"
+          >
             {{ editingDir ? '保存' : '添加' }}
           </button>
         </div>
@@ -166,6 +175,15 @@ const showDirManageDialog = ref(false)
 const showAddDirDialog = ref(false)
 const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
 const newDirPath = ref('')
+
+// 检查目录是否已存在
+const isDirExists = computed(() => {
+  if (!newDirPath.value.trim() || editingDir.value) {
+    return false // 编辑模式或空路径时不检查
+  }
+  const trimmedPath = newDirPath.value.trim()
+  return dirStore.directories.some(d => d.path === trimmedPath)
+})
 
 onMounted(async () => {
   // Initial load of 20 items
@@ -405,6 +423,12 @@ const handleAddDir = async () => {
     return
   }
 
+  // 如果目录已存在，不应该执行到这里（按钮已禁用），但为了安全还是检查一下
+  if (isDirExists.value) {
+    alert('该目录已存在，请选择其他目录')
+    return
+  }
+
   try {
     // 验证路径
     const validation = await dirStore.validatePath(newDirPath.value.trim())
@@ -413,7 +437,7 @@ const handleAddDir = async () => {
       return
     }
 
-    // 检查是否已存在
+    // 再次检查是否已存在（防止并发问题）
     const existing = dirStore.directories.find(d => d.path === newDirPath.value.trim())
     if (existing) {
       alert('该目录已存在')
@@ -508,12 +532,19 @@ const closeAddDirDialog = () => {
   newDirPath.value = ''
 }
 
+// 检查目录是否存在（用于实时检查）
+const checkDirExists = () => {
+  // 通过 computed 自动检查，这里可以添加额外逻辑
+}
+
 // 选择目录路径
 const selectDirPath = async () => {
   try {
     const paths = await window.electronAPI.selectMusicFolder()
     if (paths && paths.length > 0) {
       newDirPath.value = paths[0]
+      // 选择后自动检查是否存在
+      // computed 会自动更新
     }
   } catch (error) {
     console.error('选择目录失败:', error)
@@ -867,6 +898,21 @@ const selectDirPath = async () => {
 
 .form-input:focus {
   border-color: var(--color-primary);
+}
+
+.form-input-error {
+  border-color: var(--color-danger);
+}
+
+.form-input-error:focus {
+  border-color: var(--color-danger);
+}
+
+.form-error-hint {
+  color: var(--color-danger);
+  font-size: var(--font-size-xs);
+  margin-top: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
 }
 
 .dialog-actions {
