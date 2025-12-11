@@ -88,10 +88,29 @@ const showCreateModal = ref(false)
 
 const loadPlaylists = async () => {
   try {
-    playlists.value = await window.electronAPI.getPlaylists()
+    const playlistData = await window.electronAPI.getPlaylists()
+    // 为每个歌单加载第一首歌的封面
+    playlists.value = await Promise.all(
+      playlistData.map(async (playlist) => {
+        try {
+          const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
+          if (songs.length > 0 && songs[0].coverPath) {
+            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+          }
+        } catch (error) {
+          console.error(`Failed to load cover for playlist ${playlist.id}:`, error)
+        }
+        return playlist
+      })
+    )
   } catch (error) {
     console.error('Failed to load playlists:', error)
   }
+}
+
+const handleCoverError = (playlist: any) => {
+  // 封面加载失败时移除封面引用
+  playlist.firstSongCover = null
 }
 
 watch(() => props.modelValue, (val) => {
@@ -291,6 +310,14 @@ const handleCreatePlaylist = async (name: string) => {
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.playlist-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .playlist-info {
