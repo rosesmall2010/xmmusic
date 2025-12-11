@@ -105,6 +105,25 @@
       </div>
     </div>
 
+    <!-- 删除确认对话框 -->
+    <div v-if="showDeleteConfirmDialog" class="dialog-overlay" @click.self="cancelDelete">
+      <div class="dialog-content delete-confirm-dialog">
+        <h3 class="dialog-title">确认删除</h3>
+        <div class="dialog-body">
+          <p class="delete-confirm-text">
+            确定要从扫描目录列表中删除 "<strong>{{ dirToDelete?.path }}</strong>" 吗？
+          </p>
+          <p class="delete-confirm-hint">
+            注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。
+          </p>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="cancelDelete">取消</button>
+          <button class="btn-primary btn-danger" @click="confirmDelete">确定删除</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 添加/编辑目录对话框 -->
     <div v-if="showAddDirDialog" class="dialog-overlay" @click.self="closeAddDirDialog">
       <div class="dialog-content">
@@ -135,8 +154,8 @@
         </div>
         <div class="dialog-actions">
           <button class="btn-secondary" @click="closeAddDirDialog">取消</button>
-          <button 
-            class="btn-primary" 
+          <button
+            class="btn-primary"
             @click="editingDir ? handleSaveEdit() : handleAddDir()"
             :disabled="isDirExists || !newDirPath.trim()"
           >
@@ -506,18 +525,29 @@ const handleSaveEdit = async () => {
 }
 
 // 删除目录
-const deleteDir = async (dir: { id: number; path: string }) => {
-  if (!confirm(`确定要从扫描目录列表中删除 "${dir.path}" 吗？\n\n注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。`)) {
-    return
-  }
+const deleteDir = (dir: { id: number; path: string }) => {
+  dirToDelete.value = dir
+  showDeleteConfirmDialog.value = true
+}
+
+// 确认删除
+const confirmDelete = async () => {
+  if (!dirToDelete.value) return
 
   try {
     // 只删除目录配置，不删除已扫描的音乐文件
-    await dirStore.deleteDirectory(dir.id, { removeScannedFiles: false })
+    await dirStore.deleteDirectory(dirToDelete.value.id, { removeScannedFiles: false })
     alert('目录删除成功')
+    cancelDelete()
   } catch (error: any) {
     alert(error.message || '删除目录失败')
   }
+}
+
+// 取消删除
+const cancelDelete = () => {
+  showDeleteConfirmDialog.value = false
+  dirToDelete.value = null
 }
 
 // 切换启用/禁用
@@ -861,6 +891,41 @@ const selectDirPath = async () => {
   min-width: 500px;
   max-width: 700px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* 删除确认对话框 */
+.delete-confirm-dialog {
+  min-width: 450px;
+  max-width: 600px;
+}
+
+.delete-confirm-text {
+  font-size: var(--font-size-base);
+  color: var(--text-color);
+  margin-bottom: var(--spacing-md);
+  line-height: 1.6;
+}
+
+.delete-confirm-text strong {
+  color: var(--text-color);
+  word-break: break-all;
+}
+
+.delete-confirm-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.btn-danger {
+  background: var(--color-primary);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: var(--color-primary-light);
+  opacity: 0.9;
 }
 
 .form-group {
