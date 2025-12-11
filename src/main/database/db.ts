@@ -43,7 +43,7 @@ export default class MusicDatabase {
       const isDev = process.env.NODE_ENV !== 'production'
       const dbFileName = isDev ? 'm-dev.db' : 'm.db'
       const path = dbPath || join(app.getPath('userData'), dbFileName)
-      
+
       // 调试：输出数据库路径信息
       console.log(`📂 userData 路径: ${app.getPath('userData')}`)
       console.log(`📂 数据库文件路径: ${path}`)
@@ -1720,7 +1720,7 @@ export default class MusicDatabase {
       VALUES (?, ?, 1)
     `)
     const result = stmt.run(normalizedPath, displayOrder)
-    
+
     // 确保数据立即写入（WAL 模式下可能需要 checkpoint）
     // better-sqlite3 是同步的，数据应该立即写入，但为了确保，我们可以显式 checkpoint
     try {

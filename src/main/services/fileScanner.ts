@@ -277,6 +277,14 @@ export default class FileScanner {
       }
     }
 
+    // 扫描完成后，执行 WAL checkpoint 确保数据持久化
+    try {
+      this.db.getDatabase().pragma('wal_checkpoint(TRUNCATE)')
+      console.log('✅ 目录扫描完成，WAL checkpoint 已执行，数据已同步到主数据库文件')
+    } catch (checkpointError: any) {
+      console.warn('⚠️  扫描完成后的 WAL checkpoint 失败:', checkpointError?.message || checkpointError)
+    }
+
     // 确保最后更新一次进度（完成时）
     if (options.onProgress && !this.isCancelled && total > 0) {
       const elapsed = (Date.now() - startTime) / 1000
