@@ -45,11 +45,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
+import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
 
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
+const dirStore = useLocalMusicDirStore()
 const { play } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
@@ -62,6 +64,13 @@ const scanProgress = ref<ScanProgress | null>(null)
 onMounted(async () => {
   // Initial load of 20 items
   await musicStore.loadMusic(0, 20)
+
+  // 加载目录列表
+  try {
+    await dirStore.loadDirectories()
+  } catch (error) {
+    console.error('加载目录列表失败:', error)
+  }
 
   // Start background loading
   startBackgroundLoading()
@@ -162,21 +171,62 @@ const loadMore = async () => {
 }
 
 const handleScan = async () => {
-  const folders = await window.electronAPI.selectMusicFolder()
-  if (folders.length === 0) return
-
-  isScanning.value = true
   try {
+    // 1. 选择目录
+    const folders = await window.electronAPI.selectMusicFolder()
+    if (folders.length === 0) return
+
+    // 2. 将选择的目录添加到 local_music_dir（如果不存在），并确保启用
     for (const folder of folders) {
-      await window.electronAPI.scanMusicFolder(folder)
+      try {
+        // 检查是否已存在
+        const existing = dirStore.directories.find(d => d.path === folder)
+        if (!existing) {
+          // 验证路径
+          const validation = await dirStore.validatePath(folder)
+          if (validation.valid) {
+            await dirStore.addDirectory(folder)
+          } else {
+            console.warn(`目录无效，跳过: ${folder}`, validation.error)
+            continue
+          }
+        } else if (!existing.enabled) {
+          // 如果已存在但被禁用，则启用它
+          await dirStore.updateDirectory(existing.id, { enabled: true })
+        }
+      } catch (error: any) {
+        console.error(`添加目录失败: ${folder}`, error)
+        // 继续处理其他目录
+      }
     }
-    await musicStore.loadMusic(0, 20, true) // Force refresh initial batch
-    startBackgroundLoading() // Restart background loading
+
+    // 重新加载目录列表以确保状态同步
+    await dirStore.loadDirectories()
+
+    // 3. 使用新的扫描方法扫描所有启用的目录
+    isScanning.value = true
+    try {
+      await window.electronAPI.scanAllDirectories({
+        concurrency: 10,
+        fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
+        excludePaths: [],
+        forceRescan: false
+      })
+      
+      // 扫描完成后刷新列表
+      await musicStore.loadMusic(0, 20, true)
+      startBackgroundLoading()
+    } catch (error: any) {
+      if (error.message !== '扫描已取消') {
+        alert(`扫描失败: ${error.message}`)
+      }
+    } finally {
+      isScanning.value = false
+      scanProgress.value = null
+    }
   } catch (error: any) {
-    if (error.message !== '扫描已取消') {
-      alert(`扫描失败: ${error.message}`)
-    }
-  } finally {
+    console.error('扫描过程出错:', error)
+    alert(`操作失败: ${error.message || '未知错误'}`)
     isScanning.value = false
     scanProgress.value = null
   }
