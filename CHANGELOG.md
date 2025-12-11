@@ -49,6 +49,66 @@
   - 目录输入栏独立成一行，浏览按钮独立成一行
   - 搜索框最大宽度从 500px 缩小到 333px（缩小三分之一）
 
+### 修复
+- **修复数据库启动时被重置的问题**
+  - 修改 migrate() 方法，只在数据库未初始化或版本不匹配时执行迁移
+  - 检查数据库版本和表结构，避免不必要的迁移
+  - 防止迁移脚本中的 DROP TABLE 语句删除已有数据
+- **修复点击爱心图标后列表图标不同步的问题**
+  - 优化 toggleFavorite 函数，确保 music.favorite 状态立即更新
+  - 改进 isFavorite 函数，使用 typeof 检查确保正确处理布尔值
+  - 确保 loadFavoriteStatus 为每个 music 对象设置明确的 favorite 值
+- **修复播放队列状态不同步的问题**
+  - 改进 isInQueue 函数，使用 typeof 检查确保正确处理布尔值
+  - 修复 toggleQueue 函数，正确使用 removeFromQueue（需要传入索引而不是 music 对象）
+  - 在 playMusic 中添加歌曲到队列时，同步更新 music.inQueue 状态
+- **修复双击音乐时将所有本地音乐加入播放队列的问题**
+  - 修改 playMusic 函数，只将当前双击的歌曲加入播放队列
+  - 如果歌曲已在队列中，直接切换到该歌曲并播放
+  - 如果歌曲不在队列中，只添加这一首歌曲到队列并播放
+- **修复添加到歌单功能的错误处理和提示**
+  - 在 add-to-playlist IPC handler 中添加完整的错误检查
+  - 检查歌单和音乐是否存在
+  - 检查歌曲是否已在歌单中，避免重复添加
+  - 在 AddToPlaylistModal 中添加成功和重复添加的提示
+- **修复添加歌曲到歌单后的更新问题**
+  - 修复 AppSidebar 中事件监听器名称拼写错误（song if-added-to-playlist -> song-added-to-playlist）
+  - 在 AddToPlaylistModal 中添加歌曲后重新加载歌单列表，更新数量显示
+  - 添加歌曲后触发 playlist-updated 事件，通知侧边栏更新
+  - 在 PlaylistDetailView 中监听 song-added-to-playlist 事件，自动刷新歌单列表
+- **修复歌单详情页列表为空的问题**
+  - 在首次加载时重置 hasMore 为 true，确保可以加载数据
+  - 在获取歌单详情和总数后，重置 loading 状态，确保后续可以加载歌曲列表
+  - 修复首次加载时 loading.value 一直为 true 导致后续加载被跳过的问题
+- **修复清空歌单后对话框数量不更新的问题**
+  - 在 clearPlaylist 函数中触发 playlist-updated 事件
+  - 在 AddToPlaylistModal 组件中监听 playlist-updated 事件，自动重新加载歌单列表
+  - 在 loadPlaylists 中更新歌曲数量，确保显示最新的数量
+- **修复单个添加歌曲时错误显示批量添加进度的问题**
+  - 修改进度显示条件，只在批量添加时显示进度条
+  - 单个添加时显示简单的"添加中..."提示
+  - 优化单个添加的流程，在显示成功提示前关闭处理状态
+
+### 新增
+- **在添加到歌单对话框中显示歌单封面**
+  - 修改 loadPlaylists 函数，为每个歌单加载第一首歌的封面
+  - 更新模板，显示封面图片而不是默认图标
+  - 添加封面加载失败的处理函数
+- **实现歌单封面变化时的同步更新**
+  - 在 AppSidebar 中添加歌单封面显示和加载逻辑
+  - 在 removeSong 和 handleBatchRemove 中触发 playlist-updated 事件
+  - 在 AddToPlaylistModal 中已监听 playlist-updated 事件，会自动更新封面
+  - PlaylistDetailView 中的封面使用 computed，会自动响应 songs 变化
+
+### 改进
+- **扫描流程优化**
+  - 在扫描开始时打印要扫描的目录列表，方便调试和查看
+  - 优化扫描目录的日志输出格式，更清晰易读
+- **代码优化**
+  - 修复 transaction 方法的类型定义，支持返回值
+  - 清理不必要的调试日志，保持代码整洁
+  - 优化数据库操作，添加 WAL checkpoint 确保数据持久化
+
 ### 文档
 - 更新 README.md、SystemArchitecture.md、CROSS_PLATFORM_BUILD.md 中的数据库相关说明
 
