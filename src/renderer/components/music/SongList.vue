@@ -457,6 +457,7 @@ const loadFavoriteStatus = async () => {
     favoriteFiles.value = favoriteFilePaths
 
     // 同步更新列表中每个 music 对象的 favorite 状态
+    // 确保每个 music 对象都有明确的 favorite 值（boolean）
     props.songs.forEach(music => {
       music.favorite = favoriteFilePaths.has(music.filePath)
     })
@@ -468,18 +469,18 @@ const loadFavoriteStatus = async () => {
 const toggleFavorite = async (music: MusicItem) => {
   try {
     await window.electronAPI.toggleFavorite(music.id)
-    
+
     // 先更新 music 对象的状态（确保立即反映在UI上）
     const newFavoriteStatus = !music.favorite
     music.favorite = newFavoriteStatus
-    
+
     // 同步更新 favoriteFiles Set
     if (newFavoriteStatus) {
       favoriteFiles.value.add(music.filePath)
     } else {
       favoriteFiles.value.delete(music.filePath)
     }
-    
+
     // 触发全局事件，通知其他组件更新
     window.dispatchEvent(new Event('favorites-updated'))
   } catch (e) {

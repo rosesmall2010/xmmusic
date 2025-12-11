@@ -413,19 +413,20 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 }
 
 const playMusic = async (music: MusicItem) => {
-  // 如果播放列表不同，替换播放列表
-  // 这里简化处理：如果当前队列不包含该歌曲，或者我们想把整个列表作为上下文
-  // 简单起见，我们把当前列表作为播放队列
-
-  // 检查是否需要更新队列（例如当前队列不是本地音乐列表）
-  // 这里我们简单地把点击的歌曲加入队列并播放，或者替换整个队列
-  // 为了体验更好，通常是替换整个队列为当前列表，并从点击的歌曲开始播放
-
-  const newQueue = [...musicList.value]
-  playerStore.queue = newQueue
-  const index = newQueue.findIndex(m => m.id === music.id)
-  playerStore.setCurrentQueueIndex(index)
-  await play(music)
+  // 检查歌曲是否已在队列中
+  const existingIndex = playerStore.queue.findIndex(m => m.id === music.id)
+  
+  if (existingIndex >= 0) {
+    // 如果已在队列中，直接切换到该歌曲并播放
+    playerStore.setCurrentQueueIndex(existingIndex)
+    await play(music)
+  } else {
+    // 如果不在队列中，只添加这一首歌曲到队列并播放
+    playerStore.addToQueue(music)
+    const newIndex = playerStore.queue.length - 1
+    playerStore.setCurrentQueueIndex(newIndex)
+    await play(music)
+  }
 }
 
 // ========== 目录管理相关函数 ==========
