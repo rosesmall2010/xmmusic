@@ -5,8 +5,6 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.0.6] - 2025-12-10
-
 ## [1.0.7] - 2025-12-12
 
 ### 新增
@@ -42,6 +40,7 @@
   - 简化架构：移除 deasync 同步 hack，使用 better-sqlite3 原生同步 API
   - sqlite3-sync.ts 包装层从 218 行精简至 ~80 行
 
+## [1.0.6] - 2025-12-10
 ### 新增
 - **扫描目录管理功能**
   - 在本地音乐页面添加"扫描目录管理"按钮，可直接管理扫描目录
