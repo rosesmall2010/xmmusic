@@ -14,9 +14,9 @@ import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types
 // 暴露安全的 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
   // 窗口控制
-  minimizeWindow: () => ipcRenderer.send('window-minimize'),
-  maximizeWindow: () => ipcRenderer.send('window-maximize'),
-  closeWindow: () => ipcRenderer.send('window-close'),
+  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window-close'),
   setMiniMode: (enabled: boolean) => ipcRenderer.invoke('set-mini-mode', enabled),
   setWindowTheme: (theme: 'light' | 'dark' | 'system') => ipcRenderer.invoke('set-window-theme', theme),
   toggleDesktopLyrics: () => ipcRenderer.invoke('toggle-desktop-lyrics'),
