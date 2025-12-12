@@ -375,7 +375,7 @@ watch(
 .player-center {
   flex: 2;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: calc(var(--spacing-sm) * 2 / 3);
   max-width: 800px;
   justify-content: center;
   padding-top: calc(var(--spacing-xs) + 3px);
