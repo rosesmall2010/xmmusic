@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch, toRaw } from 'vue'
 
 // 10段均衡器的频率点（Hz）
 const EQUALIZER_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -88,12 +88,22 @@ const saveSettings = () => {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = window.setTimeout(async () => {
     try {
+      // ⚠️ ipcRenderer.invoke 会进行 structured clone
+      // Vue 的响应式对象/Proxy 无法被 clone，会报 “An object could not be cloned.”
+      // 所以这里必须把要保存的数据转换为“纯 JSON”结构
+      const plainEqualizer = {
+        enabled: !!toRaw(enabled.value),
+        gains: Array.isArray(gains.value) ? [...toRaw(gains.value)] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        customPresets: Array.isArray(customPresets.value)
+          ? toRaw(customPresets.value).map((p: any) => ({
+              name: String(p?.name ?? ''),
+              gains: Array.isArray(p?.gains) ? [...p.gains] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            }))
+          : []
+      }
+
       await window.electronAPI.saveSettings({
-        equalizer: {
-          enabled: enabled.value,
-          gains: gains.value,
-          customPresets: customPresets.value
-        }
+        equalizer: plainEqualizer
       })
       console.log('✅ 均衡器设置已保存')
     } catch (error) {
