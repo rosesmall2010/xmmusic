@@ -4,9 +4,9 @@
     <div class="player-left">
       <div class="music-info" @click="openNowPlaying">
         <div class="music-cover">
-          <DefaultCover v-if="!currentMusic?.coverPath" size="small" />
+          <DefaultCover v-if="!currentMusic?.coverPath" size="small" mode="fill" />
           <template v-else>
-            <DefaultCover class="fallback-cover" size="small" />
+            <DefaultCover class="fallback-cover" size="small" mode="fill" />
             <img
               :src="getCoverUrl(currentMusic.coverPath)"
               alt="封面"
@@ -19,15 +19,6 @@
           <div class="music-artist">{{ currentMusic?.artist || '未知艺术家' }}</div>
         </div>
       </div>
-
-      <button
-        class="control-icon-btn"
-        @click="toggleFavorite"
-        :class="{ active: isFavorite }"
-        title="喜欢"
-      >
-        <Heart :size="16" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
-      </button>
     </div>
 
     <!-- 中间：播放控制 -->
@@ -88,6 +79,15 @@
 
     <!-- 右侧：音量控制和其他按钮 -->
     <div class="player-right">
+      <button
+        class="control-icon-btn"
+        @click="toggleFavorite"
+        :class="{ active: isFavorite }"
+        title="喜欢"
+      >
+        <Heart :size="18" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
+      </button>
+
       <div class="equalizer-wrapper">
         <button class="control-icon-btn" @click="toggleEqualizer" title="音效">
           <Sliders :size="18" />
