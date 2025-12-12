@@ -127,10 +127,10 @@ onUnmounted(() => {
 
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail
-  const index = playerStore.queue.findIndex(m => m.id === updatedMusic.id)
-  if (index !== -1) {
-    playerStore.queue[index] = { ...playerStore.queue[index], ...updatedMusic }
-  }
+  if (!updatedMusic || !updatedMusic.id) return
+
+  // 这个更新逻辑已经在 playerStore 中处理了，这里不需要重复处理
+  // 但如果需要，也可以在这里处理，不过为了避免重复更新，最好只在 store 中处理
 }
 </script>
 
