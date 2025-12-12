@@ -157,30 +157,34 @@
             <component :is="PlayModeIcon" :size="20" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
-            <Sliders :size="20" />
-          </button>
+          <div class="equalizer-control">
+            <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
+              <Sliders :size="20" />
+            </button>
+            <!-- 音效面板 -->
+            <EqualizerPanel v-model="showEqualizer" />
+          </div>
 
           <div class="volume-control">
             <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? '取消静音' : '静音'">
               <component :is="VolumeIcon" :size="20" />
             </button>
-            <div class="volume-slider">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                v-model="volumeValue"
-                @change="handleVolumeSave"
-              />
+            <div class="volume-slider-wrapper">
+              <div class="volume-slider">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  v-model="volumeValue"
+                  @change="handleVolumeSave"
+                />
+              </div>
+              <span class="volume-value">{{ volumeValue }}%</span>
             </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- 音效面板 -->
-    <EqualizerPanel v-model="showEqualizer" />
   </div>
 </template>
 
@@ -958,6 +962,10 @@ watch(
   flex-wrap: wrap;
 }
 
+.equalizer-control {
+  position: relative;
+}
+
 .volume-control {
   display: flex;
   align-items: center;
@@ -965,16 +973,23 @@ watch(
   margin-left: var(--spacing-md);
 }
 
+.volume-slider-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .volume-slider {
   width: 100px;
   height: 4px;
   position: relative;
-  opacity: 0;
-  transition: opacity var(--transition-base);
 }
 
-.volume-control:hover .volume-slider {
-  opacity: 1;
+.volume-value {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 35px;
+  text-align: right;
 }
 
 .volume-slider input[type="range"] {
@@ -987,34 +1002,47 @@ watch(
   -webkit-appearance: none;
 }
 
+.volume-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
 .volume-slider input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: white;
   border-radius: 50%;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--transition-base);
+  margin-top: -5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform var(--transition-base);
 }
 
-.volume-slider:hover input[type="range"]::-webkit-slider-thumb {
-  opacity: 1;
+.volume-slider input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+.volume-slider input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
 }
 
 .volume-slider input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: white;
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--transition-base);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform var(--transition-base);
 }
 
-.volume-slider:hover input[type="range"]::-moz-range-thumb {
-  opacity: 1;
+.volume-slider input[type="range"]:hover::-moz-range-thumb {
+  transform: scale(1.2);
 }
 
 .btn-control {

@@ -144,9 +144,8 @@ watch(gains, () => {
 <style scoped>
 .equalizer-panel {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 12px);
   right: 0;
-  margin-bottom: 12px;
   width: 540px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
