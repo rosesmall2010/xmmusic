@@ -165,17 +165,14 @@
             <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? '取消静音' : '静音'">
               <component :is="VolumeIcon" :size="20" />
             </button>
-            <div class="volume-slider-wrapper">
-              <div class="volume-slider">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  v-model="volumeValue"
-                  @change="handleVolumeSave"
-                />
-              </div>
-              <span class="volume-value">{{ volumeValue }}%</span>
+            <div class="volume-slider">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                v-model="volumeValue"
+                @change="handleVolumeSave"
+              />
             </div>
           </div>
         </div>
@@ -969,23 +966,12 @@ watch(
   height: 56px; /* 与播放按钮高度一致，确保垂直居中 */
 }
 
-.volume-slider-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 .volume-slider {
   width: 100px;
   height: 4px;
   position: relative;
-}
-
-.volume-value {
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.7);
-  min-width: 35px;
-  text-align: right;
+  display: flex;
+  align-items: center;
 }
 
 .volume-slider input[type="range"] {
