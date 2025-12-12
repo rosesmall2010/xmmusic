@@ -1362,17 +1362,17 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       // 更新文件中的 ID3 标签
       await metadataEditor.updateMetadata(music.filePath, updates)
 
-      // 更新数据库
+      // 更新数据库（使用 all_music 表）
       const dbUpdates: any = {}
       if (updates.title !== undefined) dbUpdates.title = updates.title
       if (updates.artist !== undefined) dbUpdates.artist = updates.artist
       if (updates.album !== undefined) dbUpdates.album = updates.album
       if (updates.year !== undefined) dbUpdates.year = updates.year
       if (updates.genre !== undefined) dbUpdates.genre = updates.genre
-      if (updates.coverPath !== undefined) dbUpdates.coverPath = updates.coverPath
+      if (updates.coverPath !== undefined) dbUpdates.cover_path = updates.coverPath
 
       if (Object.keys(dbUpdates).length > 0) {
-        db.updateMusic(musicId, dbUpdates)
+        db.updateAllMusic(musicId, dbUpdates)
       }
 
       return true
