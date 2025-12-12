@@ -317,10 +317,18 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  -webkit-app-region: no-drag; /* 确保按钮和搜索框可点击 */
+  /* 移除 no-drag，让空白区域可以拖动 */
 }
 
 .search-wrapper {
+  -webkit-app-region: no-drag;
+}
+
+.search-box {
+  -webkit-app-region: no-drag;
+}
+
+.nav-buttons {
   -webkit-app-region: no-drag;
 }
 
