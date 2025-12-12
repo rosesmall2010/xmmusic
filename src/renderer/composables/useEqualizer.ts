@@ -80,17 +80,25 @@ const loadSettings = async () => {
 
 // 保存设置
 const saveSettings = () => {
-  if (typeof window === 'undefined' || !window.electronAPI) return
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    console.warn('⚠️ 无法保存均衡器设置：window.electronAPI 不可用')
+    return
+  }
 
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = window.setTimeout(() => {
-    window.electronAPI.saveSettings({
-      equalizer: {
-        enabled: enabled.value,
-        gains: gains.value,
-        customPresets: customPresets.value
-      }
-    })
+  saveTimer = window.setTimeout(async () => {
+    try {
+      await window.electronAPI.saveSettings({
+        equalizer: {
+          enabled: enabled.value,
+          gains: gains.value,
+          customPresets: customPresets.value
+        }
+      })
+      console.log('✅ 均衡器设置已保存')
+    } catch (error) {
+      console.error('❌ 保存均衡器设置失败:', error)
+    }
   }, 1000) // 1秒防抖
 }
 

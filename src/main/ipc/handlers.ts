@@ -891,12 +891,19 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('save-settings', async (_, settings: any) => {
-    if (db) {
-      for (const [key, value] of Object.entries(settings)) {
-        db.setSetting(key, value)
+    try {
+      if (db) {
+        for (const [key, value] of Object.entries(settings)) {
+          db.setSetting(key, value)
+        }
+        console.log('✅ 设置已保存到数据库:', Object.keys(settings).join(', '))
+      } else {
+        saveSettingsToFile(settings)
+        console.log('✅ 设置已保存到文件:', Object.keys(settings).join(', '))
       }
-    } else {
-      saveSettingsToFile(settings)
+    } catch (error: any) {
+      console.error('❌ 保存设置失败:', error?.message || error)
+      throw error
     }
   })
 
