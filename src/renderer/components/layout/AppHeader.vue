@@ -301,28 +301,14 @@ onMounted(async () => {
   flex-shrink: 0;
   position: relative;
   z-index: 100;
+  -webkit-app-region: drag; /* 整个header作为拖拽区域，空白区域可拖动 */
 }
 
-/* 空白区域可拖动 */
-.app-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  -webkit-app-region: drag;
-  pointer-events: none;
-  z-index: -1;
-}
-
-/* 确保所有按钮都可以点击 */
+/* 确保所有按钮和搜索框都可以点击 */
 .header-btn,
 .nav-btn,
 .win-btn {
   -webkit-app-region: no-drag;
-  position: relative;
-  z-index: 1;
 }
 
 .header-left,
@@ -331,15 +317,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  -webkit-app-region: no-drag; /* 确保按钮可点击 */
-  position: relative;
-  z-index: 1;
+  -webkit-app-region: no-drag; /* 确保按钮和搜索框可点击 */
 }
 
 .search-wrapper {
   -webkit-app-region: no-drag;
-  position: relative;
-  z-index: 1;
 }
 
 /* macOS红绿灯按钮避让 */
