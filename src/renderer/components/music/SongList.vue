@@ -94,16 +94,16 @@
               <div class="item-title-wrapper">
                 <div class="item-title" :title="music.title">{{ music.title }}</div>
                 <!-- 状态图标 -->
-                <FileX 
-                  v-if="music.isExists === false" 
-                  :size="14" 
-                  class="status-icon status-icon-missing" 
+                <FileX
+                  v-if="music.isExists === false"
+                  :size="14"
+                  class="status-icon status-icon-missing"
                   :title="'文件不存在'"
                 />
-                <AlertCircle 
-                  v-else-if="music.isPlayable === false" 
-                  :size="14" 
-                  class="status-icon status-icon-unplayable" 
+                <AlertCircle
+                  v-else-if="music.isPlayable === false"
+                  :size="14"
+                  class="status-icon status-icon-unplayable"
                   :title="music.playErrorReason || '无法播放'"
                 />
               </div>
@@ -910,13 +910,38 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
   justify-content: center;
 }
 
+.item-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: 2px;
+}
+
 .item-title {
   color: var(--text-color);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 2px;
+  flex: 1;
+}
+
+.status-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.status-icon:hover {
+  opacity: 1;
+}
+
+.status-icon-missing {
+  color: var(--color-error, #ef4444);
+}
+
+.status-icon-unplayable {
+  color: var(--color-warning, #f59e0b);
 }
 
 .item-artist {
