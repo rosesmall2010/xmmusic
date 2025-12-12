@@ -120,9 +120,14 @@ const handleSongAddedToPlaylist = () => {
 
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail as MusicItem
+  if (!updatedMusic || !updatedMusic.id) return
+
   const index = songs.value.findIndex(m => m.id === updatedMusic.id)
   if (index !== -1) {
-    songs.value[index] = { ...songs.value[index], ...updatedMusic }
+    // 重新赋值整个数组以触发响应式更新
+    const updatedList = [...songs.value]
+    updatedList[index] = { ...updatedList[index], ...updatedMusic }
+    songs.value = updatedList
   }
 }
 
