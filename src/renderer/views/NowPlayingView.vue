@@ -157,13 +157,9 @@
             <component :is="PlayModeIcon" :size="20" />
           </button>
 
-          <div class="equalizer-control">
-            <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
-              <Sliders :size="20" />
-            </button>
-            <!-- 音效面板 -->
-            <EqualizerPanel v-model="showEqualizer" />
-          </div>
+          <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
+            <Sliders :size="20" />
+          </button>
 
           <div class="volume-control">
             <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? '取消静音' : '静音'">
@@ -185,6 +181,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 音效面板 - 全屏居中显示 -->
+    <EqualizerPanel v-model="showEqualizer" />
   </div>
 </template>
 
@@ -962,15 +961,12 @@ watch(
   flex-wrap: wrap;
 }
 
-.equalizer-control {
-  position: relative;
-}
-
 .volume-control {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   margin-left: var(--spacing-md);
+  height: 56px; /* 与播放按钮高度一致，确保垂直居中 */
 }
 
 .volume-slider-wrapper {

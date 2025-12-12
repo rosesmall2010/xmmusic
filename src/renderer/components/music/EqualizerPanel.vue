@@ -143,9 +143,10 @@ watch(gains, () => {
 
 <style scoped>
 .equalizer-panel {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 0;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 540px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -159,11 +160,11 @@ watch(gains, () => {
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translate(-50%, calc(-50% + 10px));
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, -50%);
   }
 }
 
