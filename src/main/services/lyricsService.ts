@@ -24,12 +24,24 @@ export default class LyricsService {
    */
   findLyricsFile(musicFilePath: string): string | null {
     try {
+      if (!musicFilePath) {
+        console.warn('⚠️ 查找歌词文件：音乐文件路径为空')
+        return null
+      }
+
       const dir = dirname(musicFilePath)
       const ext = extname(musicFilePath)
-      // 获取不带扩展名的文件名
-      const baseName = musicFilePath.slice(0, -ext.length).split(/[/\\]/).pop() || ''
+      
+      // 获取不带扩展名的文件名（使用 basename 更可靠）
+      const { basename: pathBasename } = require('path')
+      const baseName = pathBasename(musicFilePath, ext)
 
-      if (!baseName) return null
+      if (!baseName) {
+        console.warn('⚠️ 查找歌词文件：无法提取文件名', musicFilePath)
+        return null
+      }
+
+      console.log(`🔍 查找歌词文件：目录=${dir}, 文件名=${baseName}`)
 
       // 1. 精确匹配（尝试常见扩展名）
       const extensions = ['.lrc', '.LRC', '.txt', '.TXT']
@@ -37,6 +49,7 @@ export default class LyricsService {
         // 重新构建路径，确保路径分隔符正确
         const path = join(dir, baseName + lrcExt)
         if (existsSync(path)) {
+          console.log(`✅ 找到歌词文件（精确匹配）: ${path}`)
           return path
         }
       }
@@ -45,8 +58,16 @@ export default class LyricsService {
       const { readdirSync } = require('fs')
       const { basename } = require('path')
 
-      const files = readdirSync(dir)
+      let files: string[] = []
+      try {
+        files = readdirSync(dir)
+      } catch (error: any) {
+        console.error('❌ 读取目录失败:', dir, error?.message || error)
+        return null
+      }
+
       const targetName = baseName.toLowerCase().normalize('NFC')
+      console.log(`🔍 模糊匹配：目标文件名=${targetName}, 目录文件数=${files.length}`)
 
       for (const file of files) {
         const fileExt = extname(file).toLowerCase()
@@ -57,11 +78,15 @@ export default class LyricsService {
 
         // 比较文件名（忽略大小写和 Unicode 规范化差异）
         if (normalizedFileName === targetName) {
-          return join(dir, file)
+          const foundPath = join(dir, file)
+          console.log(`✅ 找到歌词文件（模糊匹配）: ${foundPath}`)
+          return foundPath
         }
       }
+
+      console.log(`⚠️ 未找到歌词文件：目录=${dir}, 目标文件名=${baseName}`)
     } catch (error) {
-      console.error('查找歌词文件出错:', error)
+      console.error('❌ 查找歌词文件出错:', error)
     }
 
     return null

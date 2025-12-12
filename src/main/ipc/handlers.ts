@@ -965,30 +965,52 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   // ========== 歌词功能 ==========
 
   ipcMain.handle('load-lyrics', async (_, musicId: number) => {
-    if (!db) return null
+    if (!db) {
+      console.warn('⚠️ 加载歌词失败：数据库未初始化')
+      return null
+    }
+    
     const music = db.getMusicById(musicId)
-    if (!music) return null
+    if (!music) {
+      console.warn(`⚠️ 加载歌词失败：音乐记录不存在 (id=${musicId})`)
+      return null
+    }
+
+    console.log(`🔍 加载歌词：音乐ID=${musicId}, 文件路径=${music.filePath}`)
 
     // 1. 如果数据库中有歌词路径，直接使用
     if (music.lyricsPath && existsSync(music.lyricsPath)) {
+      console.log(`✅ 使用数据库中的歌词路径: ${music.lyricsPath}`)
       try {
         return lyricsService.parseLyrics(music.lyricsPath)
       } catch (error) {
-        console.error('解析歌词文件失败:', error)
+        console.error('❌ 解析歌词文件失败:', error)
+        // 如果解析失败，继续尝试自动查找
       }
     }
 
     // 2. 自动查找同目录下的歌词文件
+    if (!music.filePath) {
+      console.warn('⚠️ 音乐文件路径为空，无法查找歌词')
+      return null
+    }
+
+    console.log(`🔍 自动查找歌词文件：${music.filePath}`)
     const lyricsPath = lyricsService.findLyricsFile(music.filePath)
     if (lyricsPath) {
       try {
+        console.log(`✅ 找到歌词文件，开始解析: ${lyricsPath}`)
         const lyrics = lyricsService.parseLyrics(lyricsPath)
-        // 保存歌词路径到数据库
-        db.updateMusic(musicId, { lyricsPath })
+        
+        // 保存歌词路径到数据库（使用 updateAllMusic 因为这是新架构）
+        db.updateAllMusic(musicId, { lyrics_path: lyricsPath })
+        console.log(`✅ 歌词已解析并保存到数据库，共 ${lyrics.lines?.length || 0} 行`)
         return lyrics
-      } catch (error) {
-        console.error('解析歌词文件失败:', error)
+      } catch (error: any) {
+        console.error('❌ 解析歌词文件失败:', error?.message || error)
       }
+    } else {
+      console.log(`⚠️ 未找到歌词文件：${music.filePath}`)
     }
 
     return null
