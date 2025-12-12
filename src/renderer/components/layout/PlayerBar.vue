@@ -378,7 +378,7 @@ watch(
   gap: var(--spacing-sm);
   max-width: 800px;
   justify-content: center;
-  padding-top: var(--spacing-xs);
+  padding-top: calc(var(--spacing-xs) + 3px);
 }
 
 .player-right {
