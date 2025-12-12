@@ -402,13 +402,15 @@ const handleSongsUpdated = () => {
 // 监听元数据更新事件，只更新被修改的歌曲
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail
-  if (!updatedMusic) return
+  if (!updatedMusic || !updatedMusic.id) return
 
   // 在当前列表中查找并更新这首歌
   const index = musicStore.musicList.findIndex(m => m.id === updatedMusic.id)
   if (index !== -1) {
-    // 直接更新列表中的这首歌
-    musicStore.musicList[index] = { ...musicStore.musicList[index], ...updatedMusic }
+    // 更新列表中的这首歌（shallowRef需要重新赋值整个数组才能触发响应式更新）
+    const updatedList = [...musicStore.musicList]
+    updatedList[index] = { ...updatedList[index], ...updatedMusic }
+    musicStore.musicList = updatedList
   }
 }
 

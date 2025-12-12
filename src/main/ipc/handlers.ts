@@ -975,7 +975,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       console.warn('⚠️ 加载歌词失败：数据库未初始化')
       return null
     }
-    
+
     const music = db.getMusicById(musicId)
     if (!music) {
       console.warn(`⚠️ 加载歌词失败：音乐记录不存在 (id=${musicId})`)
@@ -1007,7 +1007,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       try {
         console.log(`✅ 找到歌词文件，开始解析: ${lyricsPath}`)
         const lyrics = lyricsService.parseLyrics(lyricsPath)
-        
+
         // 保存歌词路径到数据库（使用 updateAllMusic 因为这是新架构）
         db.updateAllMusic(musicId, { lyrics_path: lyricsPath })
         console.log(`✅ 歌词已解析并保存到数据库，共 ${lyrics.lines?.length || 0} 行`)
@@ -1400,18 +1400,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       // 批量更新文件中的 ID3 标签
       const result = await metadataEditor.batchUpdateMetadata(filePaths, updates, onProgress)
 
-      // 更新数据库
+      // 更新数据库（使用 all_music 表）
       const dbUpdates: any = {}
       if (updates.title !== undefined) dbUpdates.title = updates.title
       if (updates.artist !== undefined) dbUpdates.artist = updates.artist
       if (updates.album !== undefined) dbUpdates.album = updates.album
       if (updates.year !== undefined) dbUpdates.year = updates.year
       if (updates.genre !== undefined) dbUpdates.genre = updates.genre
-      if (updates.coverPath !== undefined) dbUpdates.coverPath = updates.coverPath
+      if (updates.coverPath !== undefined) dbUpdates.cover_path = updates.coverPath
 
       if (Object.keys(dbUpdates).length > 0) {
         for (const id of musicIds) {
-          db.updateMusic(id, dbUpdates)
+          db.updateAllMusic(id, dbUpdates)
         }
       }
 
