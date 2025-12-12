@@ -171,14 +171,27 @@ export default class FileScanner {
     // 1. 规范化根目录路径
     const normalizedRoot = normalizePath(path, process.platform)
 
-    // 1.1 预先获取：本次根目录下已存在的 music_dir（用于扫描后对比，标记缺失文件）
-    // 说明：只对“已存在于数据库”的目录做缺失标记，避免为纯空目录创建无意义的 music_dir 记录
+    // 1.1 预先确定“需要做存在性同步”的 dir_id 列表
+    // - 递归扫描：根目录 + 子目录（path LIKE root/%）
+    // - 非递归扫描：仅根目录本身（不含子目录），并且在扫描开始前先把该目录下记录标记为不存在
     const sqlite = this.db.getDatabase()
-    const rootLike = `${normalizedRoot}/%`
-    const scannedDirIds = (sqlite.prepare(`
-      SELECT id FROM music_dir
-      WHERE path = ? OR path LIKE ?
-    `).all(normalizedRoot, rootLike) as Array<{ id: number }>).map(r => r.id)
+    let scannedDirIds: number[] = []
+    let rootDirId: number | undefined
+    if (options.recursive) {
+      // 说明：只对“已存在于数据库”的目录做缺失标记，避免为纯空目录创建无意义的 music_dir 记录
+      const rootLike = `${normalizedRoot}/%`
+      scannedDirIds = (sqlite.prepare(`
+        SELECT id FROM music_dir
+        WHERE path = ? OR path LIKE ?
+      `).all(normalizedRoot, rootLike) as Array<{ id: number }>).map(r => r.id)
+    } else {
+      // 非递归：需要精确到该目录本身（即使该目录本次没有音乐文件，也要能把历史记录标记为不存在）
+      const map = batchGetOrCreateMusicDir(sqlite, [normalizedRoot], process.platform)
+      rootDirId = map[normalizedRoot]
+      if (rootDirId) {
+        scannedDirIds = [rootDirId]
+      }
+    }
 
     // 2. 收集所有音乐文件（递归）
     const files = await this.collectFiles(normalizedRoot, options)
@@ -217,6 +230,20 @@ export default class FileScanner {
         foundFileNamesByDirId.set(dirId, set)
       }
       set.add(fileName)
+    }
+
+    // 3.1.1 非递归扫描：扫描开始前，先把该目录下历史记录全部标记为不存在
+    // 这样可以保证“本次扫描没扫到的文件”立即变为不存在（而不是等到扫描结束后再统一处理）
+    if (!options.recursive && rootDirId && !this.isCancelled) {
+      try {
+        sqlite.prepare(`
+          UPDATE all_music
+          SET is_exists = 0, updated_at = CURRENT_TIMESTAMP
+          WHERE dir_id = ? AND is_exists != 0
+        `).run(rootDirId)
+      } catch (e: any) {
+        console.warn('⚠️ 预标记目录文件为不存在失败:', e?.message || e)
+      }
     }
     // 进度更新函数（节流）
     const updateProgress = (file: string, force: boolean = false) => {
@@ -301,6 +328,40 @@ export default class FileScanner {
       await this.executeWithConcurrency(tasks)
     } catch (error: any) {
       if (error.message === '扫描已取消') {
+        // 非递归扫描：如果中途取消，尽量把“仍存在的文件”置回 is_exists=1，避免全部变成不存在
+        if (!options.recursive && rootDirId) {
+          const found = foundFileNamesByDirId.get(rootDirId)
+          if (found && found.size > 0) {
+            try {
+              const names = Array.from(found)
+              const CHUNK_SIZE = 800
+              const stmtCache = new Map<number, any>()
+              const getMarkExistsStmt = (n: number) => {
+                const cached = stmtCache.get(n)
+                if (cached) return cached
+                const placeholders = Array.from({ length: n }).map(() => '?').join(', ')
+                const stmt = sqlite.prepare(`
+                  UPDATE all_music
+                  SET is_exists = 1, updated_at = CURRENT_TIMESTAMP
+                  WHERE dir_id = ? AND file_name IN (${placeholders})
+                `)
+                stmtCache.set(n, stmt)
+                return stmt
+              }
+
+              const tx = sqlite.transaction(() => {
+                for (let i = 0; i < names.length; i += CHUNK_SIZE) {
+                  const chunk = names.slice(i, i + CHUNK_SIZE)
+                  const stmt = getMarkExistsStmt(chunk.length)
+                  stmt.run(rootDirId, ...chunk)
+                }
+              })
+              tx()
+            } catch (e: any) {
+              console.warn('⚠️ 取消扫描后恢复 is_exists 失败:', e?.message || e)
+            }
+          }
+        }
         throw error
       }
     }
@@ -311,12 +372,6 @@ export default class FileScanner {
     // - 再把本次扫描仍存在的文件（foundFileNamesByDirId）置回 is_exists=1
     if (!this.isCancelled && scannedDirIds.length > 0) {
       try {
-        const markMissingStmt = sqlite.prepare(`
-          UPDATE all_music
-          SET is_exists = 0, updated_at = CURRENT_TIMESTAMP
-          WHERE dir_id = ? AND is_exists != 0
-        `)
-
         const stmtCache = new Map<number, any>()
         const getMarkExistsStmt = (n: number) => {
           const cached = stmtCache.get(n)
@@ -335,7 +390,15 @@ export default class FileScanner {
 
         const tx = sqlite.transaction(() => {
           for (const dirId of scannedDirIds) {
-            markMissingStmt.run(dirId)
+            // 递归扫描：这里统一做“先置 0，再置 1”
+            // 非递归扫描：已经在扫描开始前置 0，这里只需要把存在的置回 1（减少不必要的抖动）
+            if (options.recursive) {
+              sqlite.prepare(`
+                UPDATE all_music
+                SET is_exists = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE dir_id = ? AND is_exists != 0
+              `).run(dirId)
+            }
 
             const found = foundFileNamesByDirId.get(dirId)
             if (!found || found.size === 0) {
