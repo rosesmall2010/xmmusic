@@ -109,7 +109,6 @@
             min="0"
             max="100"
             v-model="volumeValue"
-            @input="handleVolumeChange"
             @change="handleVolumeSave"
           />
         </div>
@@ -133,7 +132,15 @@ const router = useRouter()
 const playerStore = usePlayerStore()
 const { play, pause, resume, seek, setVolume } = usePlayer()
 
-const volumeValue = ref(80)
+// 音量：直接绑定到 playerStore.volume，避免初始化时子组件先挂载导致显示/保存不同步
+const volumeValue = computed<number>({
+  get: () => playerStore.volume,
+  set: (v) => {
+    const next = Math.max(0, Math.min(100, Number(v)))
+    playerStore.volume = next
+    setVolume(next)
+  }
+})
 const isFavorite = ref(false)
 const showEqualizer = ref(false)
 
@@ -259,14 +266,9 @@ const x = e.clientX - rect.left
   seek(time)
 }
 
-const handleVolumeChange = () => {
-  setVolume(volumeValue.value)
-  playerStore.volume = volumeValue.value
-}
-
-const handleVolumeSave = () => {
+const handleVolumeSave = async () => {
   // 强制保存状态（包括音量）
-  playerStore.saveState()
+  await playerStore.saveState()
 }
 
 const toggleMute = () => {
@@ -275,7 +277,6 @@ const toggleMute = () => {
   } else {
     volumeValue.value = 80
   }
-  handleVolumeChange()
 }
 
 const toggleFavorite = async () => {
@@ -337,7 +338,14 @@ watch(isPlaying, (playing) => {
 }, { immediate: true })
 
 // 初始化音量
-volumeValue.value = playerStore.volume
+watch(
+  () => playerStore.volume,
+  (v) => {
+    // 当初始化恢复/快捷键调整音量时，确保播放器实际音量同步
+    setVolume(v)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
