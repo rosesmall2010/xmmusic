@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import MusicDatabase, { calculateFilePathMD5 } from '../database/db'
 import FileScanner from '../services/fileScanner'
@@ -35,6 +35,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   ipcMain.handle('window-close', () => {
     mainWindow.close()
+  })
+
+  // 应用信息
+  ipcMain.handle('get-app-version', () => {
+    // Electron 的 app.getVersion() 来源于 package.json 的 version
+    return app.getVersion()
   })
 
   // 设置窗口外观模式(用于macOS红绿灯颜色)

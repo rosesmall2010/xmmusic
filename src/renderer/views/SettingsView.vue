@@ -179,7 +179,7 @@
           </div>
           <div class="app-info">
             <h3 class="app-name">XM Music</h3>
-            <p class="app-version">Version 1.0.3</p>
+            <p class="app-version">Version {{ appVersion }}</p>
             <p class="app-desc">一个基于 Electron + Vue 3 的高颜值本地音乐播放器</p>
           </div>
           <div class="app-links">
@@ -237,6 +237,7 @@ const settingsStore = useSettingsStore()
 const dirStore = useLocalMusicDirStore()
 const isClearing = ref(false)
 const isRescanning = ref(false)
+const appVersion = ref('1.0.7')
 const showAddDirDialog = ref(false)
 const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
 const newDirPath = ref('')
@@ -247,6 +248,12 @@ onMounted(async () => {
     await dirStore.loadDirectories({ sortBy: 'display_order', order: 'ASC' })
   } catch (error) {
     console.error('加载目录列表失败:', error)
+  }
+
+  try {
+    appVersion.value = await window.electronAPI.getAppVersion()
+  } catch (error) {
+    console.error('获取应用版本号失败:', error)
   }
 })
 

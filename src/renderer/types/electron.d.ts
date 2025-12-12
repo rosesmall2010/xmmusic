@@ -68,6 +68,7 @@ export interface ElectronAPI {
   getSettings: () => Promise<any>
   saveSettings: (settings: any) => Promise<void>
   clearCache: () => Promise<boolean>
+  getAppVersion: () => Promise<string>
 
   // ID3标签修复
   detectID3Encoding: (filePath: string) => Promise<any[]>

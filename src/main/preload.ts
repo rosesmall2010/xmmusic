@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // ID3标签修复
   detectID3Encoding: (filePath: string) =>
