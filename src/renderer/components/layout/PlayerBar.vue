@@ -377,6 +377,8 @@ watch(
   flex-direction: column;
   gap: var(--spacing-sm);
   max-width: 800px;
+  justify-content: center;
+  padding-top: var(--spacing-xs);
 }
 
 .player-right {
