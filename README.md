@@ -23,7 +23,11 @@
 -  **极致性能** - 虚拟滚动+分批加载,轻松应对万级曲库
 - 🖥️ **跨平台** - 支持 macOS、Windows、Linux
 
-## 🎯 最新版本 v1.0.7
+## 🎯 最新版本 v1.0.8
+
+### v1.0.8 更新内容
+- **全界面播放UI增强** - 添加音量控制和音效设置按钮
+- **播放队列自动定位** - 播放队列自动滚动到当前播放的歌曲
 
 ### v1.0.7 更新内容
 - **不可播放文件标记** - Howler加载失败时自动标记文件状态和原因
@@ -104,10 +108,10 @@
 从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
 
 - **macOS**:
-  - Intel: `xmmusic-1.0.7.dmg`
-  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.7-arm64.dmg`
-- **Windows**: `xmmusic-Setup-1.0.7.exe`
-- **Linux**: `xmmusic-1.0.7.AppImage`
+  - Intel: `xmmusic-1.0.8.dmg`
+  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.8-arm64.dmg`
+- **Windows**: `xmmusic-Setup-1.0.8.exe`
+- **Linux**: `xmmusic-1.0.8.AppImage`
 
 ### 从源码构建
 
