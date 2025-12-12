@@ -124,9 +124,14 @@ onUnmounted(() => {
 
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail as MusicItem
+  if (!updatedMusic || !updatedMusic.id) return
+
   const index = recentlyAdded.value.findIndex(m => m.id === updatedMusic.id)
   if (index !== -1) {
-    recentlyAdded.value[index] = { ...recentlyAdded.value[index], ...updatedMusic }
+    // 重新赋值整个数组以触发响应式更新
+    const updatedList = [...recentlyAdded.value]
+    updatedList[index] = { ...updatedList[index], ...updatedMusic }
+    recentlyAdded.value = updatedList
   }
 }
 

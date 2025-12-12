@@ -275,11 +275,15 @@ export const usePlayerStore = defineStore('player', () => {
     window.addEventListener('music-metadata-updated', (event: Event) => {
       const customEvent = event as CustomEvent
       const updatedMusic = customEvent.detail
+      if (!updatedMusic || !updatedMusic.id) return
 
       // 更新队列中的歌曲
       const queueIndex = queue.value.findIndex(m => m.id === updatedMusic.id)
       if (queueIndex !== -1) {
-        queue.value[queueIndex] = { ...queue.value[queueIndex], ...updatedMusic }
+        // 重新赋值整个数组以触发响应式更新
+        const updatedQueue = [...queue.value]
+        updatedQueue[queueIndex] = { ...updatedQueue[queueIndex], ...updatedMusic }
+        queue.value = updatedQueue
       }
 
       // 更新当前播放的歌曲
