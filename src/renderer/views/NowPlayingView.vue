@@ -156,9 +156,31 @@
           <button class="btn-control btn-secondary" @click="togglePlayMode" :title="playModeText">
             <component :is="PlayModeIcon" :size="20" />
           </button>
+
+          <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
+            <Sliders :size="20" />
+          </button>
+
+          <div class="volume-control">
+            <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? '取消静音' : '静音'">
+              <component :is="VolumeIcon" :size="20" />
+            </button>
+            <div class="volume-slider">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                v-model="volumeValue"
+                @change="handleVolumeSave"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- 音效面板 -->
+    <EqualizerPanel v-model="showEqualizer" />
   </div>
 </template>
 
@@ -170,11 +192,14 @@ import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2 } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
+import { useEqualizer } from '@/composables/useEqualizer'
+import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
-const { play, pause, resume, seek } = usePlayer()
+const { play, pause, resume, seek, setVolume } = usePlayer()
+const equalizer = useEqualizer()
 
 const backgroundColor = ref('#1a1a1a')
 const lyrics = ref<LyricLine[]>([])
@@ -182,6 +207,15 @@ const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
 const rightPanelMode = ref<'lyrics' | 'queue'>('lyrics') // 右侧面板模式
+const showEqualizer = ref(false)
+const volumeValue = computed<number>({
+  get: () => playerStore.volume,
+  set: (v) => {
+    const next = Math.max(0, Math.min(100, Number(v)))
+    playerStore.volume = next
+    setVolume(next)
+  }
+})
 
 // 计算属性
 const currentMusic = computed(() => playerStore.currentMusic)
@@ -212,6 +246,10 @@ const playModeText = computed(() => {
     single: '单曲循环',
   }
   return texts[playMode.value]
+})
+
+const VolumeIcon = computed(() => {
+  return volumeValue.value === 0 ? VolumeX : Volume2
 })
 
 const backgroundStyle = computed(() => {
@@ -298,6 +336,31 @@ const toggleDesktopLyrics = async () => {
   await window.electronAPI.toggleDesktopLyrics()
 }
 
+const toggleEqualizer = () => {
+  showEqualizer.value = !showEqualizer.value
+}
+
+const toggleMute = () => {
+  if (volumeValue.value > 0) {
+    volumeValue.value = 0
+  } else {
+    volumeValue.value = 80
+  }
+}
+
+const handleVolumeSave = async () => {
+  await playerStore.saveState()
+}
+
+const scrollToCurrentQueueItem = () => {
+  if (!queueListRef.value || currentQueueIndex.value < 0) return
+
+  const activeItem = queueListRef.value.children[currentQueueIndex.value] as HTMLElement
+  if (activeItem) {
+    activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
 
 
 const handleSeek = (e: MouseEvent) => {
@@ -379,6 +442,34 @@ watch(currentTime, (time) => {
     scrollToCurrentLyric()
   }
 })
+
+// 监听当前队列索引变化，自动滚动到当前播放的歌曲
+watch(currentQueueIndex, () => {
+  if (rightPanelMode.value === 'queue') {
+    // 延迟一下确保 DOM 已更新
+    setTimeout(() => {
+      scrollToCurrentQueueItem()
+    }, 100)
+  }
+})
+
+// 监听右侧面板切换，切换到队列时滚动到当前歌曲
+watch(rightPanelMode, (mode) => {
+  if (mode === 'queue') {
+    setTimeout(() => {
+      scrollToCurrentQueueItem()
+    }, 100)
+  }
+})
+
+// 监听播放器音量变化，同步到实际播放器
+watch(
+  () => playerStore.volume,
+  (v) => {
+    setVolume(v)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -864,6 +955,66 @@ watch(currentTime, (time) => {
   align-items: center;
   gap: var(--spacing-lg);
   justify-content: center;
+  flex-wrap: wrap;
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-left: var(--spacing-md);
+}
+
+.volume-slider {
+  width: 100px;
+  height: 4px;
+  position: relative;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.volume-control:hover .volume-slider {
+  opacity: 1;
+}
+
+.volume-slider input[type="range"] {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.volume-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.volume-slider:hover input[type="range"]::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.volume-slider input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.volume-slider:hover input[type="range"]::-moz-range-thumb {
+  opacity: 1;
 }
 
 .btn-control {
