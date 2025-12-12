@@ -379,7 +379,7 @@ watch(
   max-width: 800px;
   justify-content: center;
   padding-top: calc(var(--spacing-xs) + 3px);
-  padding-bottom: calc(var(--spacing-xs) + 3px);
+  padding-bottom: calc((var(--spacing-xs) + 3px) * 1.5);
 }
 
 .player-right {
