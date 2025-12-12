@@ -480,8 +480,9 @@ watch(
 }
 
 .control-btn:hover:not(:disabled) {
-  background: var(--hover-bg);
-  transform: scale(1.1);
+  background: transparent; /* 移除圆形背景 */
+  transform: scale(1.15); /* 图标放大 */
+  color: var(--color-primary); /* 亮色状态 */
 }
 
 .control-btn:disabled {
@@ -491,10 +492,11 @@ watch(
 
 .play-btn {
   width: 56px;
-  height: 56px;
+  height: 36px;
   background: var(--color-primary);
   color: white;
-  font-size: 2rem;
+  font-size: 1.5rem;
+  border-radius: 18px; /* 胶囊形状：高度的一半 */
   box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.3);
 }
 
