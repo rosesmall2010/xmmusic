@@ -391,7 +391,7 @@ const handleBatchAddToQueue = () => {
     const songsToAdd = props.songs.filter(s => filePaths.includes(s.filePath))
 
     for (const song of songsToAdd) {
-      if (!isInQueue(song.filePath)) {
+      if (!isInQueue(song)) {
         playerStore.addToQueue(song)
         queueFiles.value.add(song.filePath)
       }
@@ -580,16 +580,12 @@ const toggleFavorite = async (music: MusicItem) => {
   closeContextMenu()
 }
 
-// 播放队列状态管理（优先使用 music.inQueue，如果没有则回退到 filePath 查找）
+// 播放队列状态管理（以响应式 Set 为准，确保 UI 立即刷新）
 const queueFiles = ref<Set<string>>(new Set())
 
 const isInQueue = (music: MusicItem) => {
-  // 优先使用 music.inQueue（从数据库查询得到）
-  // 如果 music.inQueue 是明确的布尔值，直接返回
-  if (typeof music.inQueue === 'boolean') {
-    return music.inQueue
-  }
-  // 回退到 filePath 查找（兼容旧逻辑）
+  // 不优先依赖 music.inQueue：列表数据很多来自 shallowRef，直接改字段不会触发 UI
+  // 统一以 queueFiles（ref）为准，保证点击后图标立即切换
   return queueFiles.value.has(music.filePath)
 }
 
