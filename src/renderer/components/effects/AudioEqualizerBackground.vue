@@ -53,6 +53,7 @@ const parseColorToRgb = (color: string): RGB | null => {
 }
 
 const rgba = (c: RGB, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`
+const hsla = (h: number, s: number, l: number, a: number) => `hsla(${h}, ${s}%, ${l}%, ${a})`
 
 const ensureAudioNodes = () => {
   const el = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
@@ -117,8 +118,8 @@ const tick = (ts: number) => {
   // 没有频谱数据时，回退轻微动态，避免静止
   const fallback = 0.25 + 0.2 * Math.sin(time * 2.1) + 0.12 * Math.sin(time * 5.3)
 
-  // 柱子数量（越多越像图中那种“密集均衡器”）
-  const bars = Math.max(48, Math.min(120, Math.floor(width / 12)))
+  // 柱子数量（减少数量让柱子更粗、更有“块感”）
+  const bars = Math.max(32, Math.min(72, Math.floor(width / 22)))
   if (smoothed.length !== bars) smoothed = Array.from({ length: bars }).map(() => 0)
 
   // 频谱映射到 bars（偏向中低频，让变化更明显）
@@ -129,26 +130,19 @@ const tick = (ts: number) => {
   // 布局：底部中央为主的“舞台感”
   const paddingX = Math.max(18, width * 0.08)
   const usableW = Math.max(1, width - paddingX * 2)
-  const gap = 3
+  const gap = 4
   const barW = Math.max(3, Math.floor((usableW - gap * (bars - 1)) / bars))
   const baselineY = height * 0.85
   const maxH = height * 0.55
 
-  // 光色渐变（向上更亮）
-  const grad = ctx.createLinearGradient(0, baselineY - maxH, 0, baselineY)
-  grad.addColorStop(0, rgba({ r: 255, g: 255, b: 255 }, 0.88))
-  grad.addColorStop(0.35, rgba(baseRgb, 0.72))
-  grad.addColorStop(1, rgba(baseRgb, 0.22))
-
   // 底部柔光（像图里的光晕）
   const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.55)
-  glow.addColorStop(0, rgba(baseRgb, (0.16 + 0.22 * (data ? 1 : 0)) * activeFactor))
+  glow.addColorStop(0, rgba(baseRgb, (0.10 + 0.18 * (data ? 1 : 0)) * activeFactor))
   glow.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, width, height)
 
   ctx.globalCompositeOperation = 'lighter'
-  ctx.fillStyle = grad
 
   // 透视微缩放：两侧略短（更接近示例图的“中心聚焦”）
   for (let i = 0; i < bars; i++) {
@@ -175,9 +169,23 @@ const tick = (ts: number) => {
     const wobble = Math.sin(time * 0.9 + i * 0.22) * (props.active ? 0.6 : 0.25)
     const xx = x + wobble
 
-    // 发光阴影
-    ctx.shadowColor = rgba(baseRgb, 0.55 * smooth)
-    ctx.shadowBlur = 14 + smooth * 26
+    // 多彩霓虹：每根柱子一个 hue（随时间微漂移），不使用白色
+    const hue = (i / Math.max(1, bars - 1)) * 320 + time * 10
+    const alpha = (0.10 + smooth * 0.55) * (props.active ? 1 : 0.7)
+    const top = hsla(hue, 92, 58, alpha)
+    const mid = hsla(hue, 92, 40, alpha * 0.75)
+    const bottom = hsla(hue, 92, 22, alpha * 0.45)
+
+    // 每根柱子的纵向渐变
+    const grad = ctx.createLinearGradient(0, y, 0, y + h)
+    grad.addColorStop(0, top)
+    grad.addColorStop(0.55, mid)
+    grad.addColorStop(1, bottom)
+
+    // 发光阴影（同色系）
+    ctx.shadowColor = hsla(hue, 92, 56, 0.55 * smooth)
+    ctx.shadowBlur = 18 + smooth * 32
+    ctx.fillStyle = grad
 
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
@@ -185,7 +193,7 @@ const tick = (ts: number) => {
     // 顶部高光线
     if (smooth > 0.08) {
       ctx.shadowBlur = 0
-      ctx.strokeStyle = rgba({ r: 255, g: 255, b: 255 }, 0.10 + smooth * 0.22)
+      ctx.strokeStyle = hsla(hue, 92, 66, 0.14 + smooth * 0.22)
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(xx + 1, y + 1)
@@ -238,4 +246,3 @@ watch(() => props.active, (v) => {
   pointer-events: none;
 }
 </style>
-
