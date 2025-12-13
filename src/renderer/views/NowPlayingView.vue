@@ -1,8 +1,8 @@
 <template>
   <div class="now-playing-view" :style="backgroundStyle">
-    <!-- 背景特效：火焰随音乐变化 -->
+    <!-- 背景特效：方块颗粒随音乐变化 -->
     <div class="background-effects" aria-hidden="true">
-      <FlameBackground :base-color="backgroundColor" :active="isPlaying" />
+      <AudioBlocksBackground :base-color="backgroundColor" :active="isPlaying" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
@@ -194,7 +194,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
-import FlameBackground from '@/components/effects/FlameBackground.vue'
+import AudioBlocksBackground from '@/components/effects/AudioBlocksBackground.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
