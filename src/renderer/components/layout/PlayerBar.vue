@@ -282,7 +282,8 @@ const toggleMute = () => {
 const toggleFavorite = async () => {
   if (currentMusic.value) {
     await window.electronAPI.toggleFavorite(currentMusic.value.id)
-    isFavorite.value = !isFavorite.value
+    // 以数据库结果为准，避免本地状态与真实状态不一致
+    isFavorite.value = await window.electronAPI.isFileFavorite(currentMusic.value.id)
 
     // 通知其他组件更新收藏状态
     window.dispatchEvent(new Event('favorites-updated'))
@@ -323,8 +324,10 @@ const formatTime = (seconds: number) => {
 watch(currentMusic, async (music) => {
   if (music) {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
+  } else {
+    isFavorite.value = false
   }
-})
+}, { immediate: true })
 
 // 监听播放状态，初始化均衡器音频上下文
 watch(isPlaying, (playing) => {

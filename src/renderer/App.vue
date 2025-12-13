@@ -141,7 +141,7 @@ function handleShortcutAction(action: string) {
       break
     case 'toggle-favorite':
       if (playerStore.currentMusic) {
-        window.electronAPI.toggleFavorite(playerStore.currentMusic.filePath)
+        window.electronAPI.toggleFavorite(playerStore.currentMusic.id)
       }
       break
   }

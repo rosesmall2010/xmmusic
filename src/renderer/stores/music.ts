@@ -83,10 +83,10 @@ export const useMusicStore = defineStore('music', () => {
     advancedCriteria.value = null
   }
 
-  async function toggleFavorite(filePath: string) {
-    await window.electronAPI.toggleFavorite(filePath)
-    // 更新本地状态
-    const item = musicList.value.find(m => m.filePath === filePath)
+  async function toggleFavorite(musicId: number) {
+    await window.electronAPI.toggleFavorite(musicId)
+    // 更新本地状态（musicList 为 shallowRef，需要 triggerRef）
+    const item = musicList.value.find(m => m.id === musicId)
     if (item) {
       item.favorite = !item.favorite
       triggerRef(musicList) // Trigger update since we modified deep property of shallowRef

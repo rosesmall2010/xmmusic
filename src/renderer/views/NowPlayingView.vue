@@ -306,8 +306,11 @@ const togglePlayMode = () => {
 
 const toggleFavorite = async () => {
   if (currentMusic.value) {
-    await window.electronAPI.toggleFavorite(currentMusic.value.filePath)
-    isFavorite.value = !isFavorite.value
+    await window.electronAPI.toggleFavorite(currentMusic.value.id)
+    // 以数据库结果为准，避免本地状态与真实状态不一致
+    isFavorite.value = await window.electronAPI.isFileFavorite(currentMusic.value.id)
+    // 通知其他组件更新收藏状态
+    window.dispatchEvent(new Event('favorites-updated'))
   }
 }
 
@@ -417,8 +420,10 @@ const scrollToCurrentLyric = () => {
 // 监听当前音乐变化
 watch(currentMusic, async (music) => {
   if (music) {
-    isFavorite.value = await window.electronAPI.isFileFavorite(music.filePath)
+    isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
     await loadLyrics()
+  } else {
+    isFavorite.value = false
   }
 }, { immediate: true })
 
