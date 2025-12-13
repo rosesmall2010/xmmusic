@@ -363,14 +363,19 @@ const handleBatchAddToFavorites = async () => {
 
       // 检查是否已经在我喜欢中
       if (!favoriteFiles.value.has(filePath)) {
-        await window.electronAPI.toggleFavorite(music.id)
-        favoriteFiles.value.add(filePath)
-        addedCount++
+        const latest = await window.electronAPI.toggleFavorite(music.id)
+        if (latest) {
+          favoriteFiles.value.add(filePath)
+          addedCount++
+        } else {
+          favoriteFiles.value.delete(filePath)
+        }
       }
     }
 
     console.log(`Added ${addedCount} songs to favorites`)
     cancelSelection()
+    favoriteFiles.value = new Set(favoriteFiles.value)
     window.dispatchEvent(new Event('favorites-updated'))
   } catch (error) {
     console.error('Failed to batch add to favorites:', error)
@@ -512,16 +517,12 @@ const handleRemoveFromPlaylist = (music: MusicItem) => {
   closeContextMenu()
 }
 
-// 收藏状态管理（优先使用 music.favorite，如果没有则回退到 filePath 查找）
+// 收藏状态管理（以响应式 Set 为准，确保 UI 立即刷新）
 const favoriteFiles = ref<Set<string>>(new Set())
 
 const isFavorite = (music: MusicItem) => {
-  // 优先使用 music.favorite（从数据库查询得到）
-  // 如果 music.favorite 是明确的布尔值，直接返回
-  if (typeof music.favorite === 'boolean') {
-    return music.favorite
-  }
-  // 回退到 filePath 查找（兼容旧逻辑）
+  // 不依赖 music.favorite：列表数据很多来自 shallowRef，直接改字段不会触发渲染
+  // 统一以 favoriteFiles（ref）为准，保证点击后空心/实心立即切换
   return favoriteFiles.value.has(music.filePath)
 }
 
@@ -530,12 +531,6 @@ const loadFavoriteStatus = async () => {
     const favorites = await window.electronAPI.getFavorites()
     const favoriteFilePaths = new Set(favorites.map((m: MusicItem) => m.filePath))
     favoriteFiles.value = favoriteFilePaths
-
-    // 同步更新列表中每个 music 对象的 favorite 状态
-    // 确保每个 music 对象都有明确的 favorite 值（boolean）
-    props.songs.forEach(music => {
-      music.favorite = favoriteFilePaths.has(music.filePath)
-    })
   } catch (e) {
     console.error('Failed to load favorites', e)
   }
@@ -669,17 +664,21 @@ const showMusicDetails = (music: MusicItem) => {
   closeContextMenu()
 }
 
+const handleFavoritesUpdated = () => {
+  void loadFavoriteStatus()
+}
+
+const handleMetadataUpdated = () => {
+  emit('songs-updated')
+}
+
 // Listen for metadata updates from other parts of the app
 onMounted(() => {
   loadFavoriteStatus()
   updateQueueStatus()
 
-  window.addEventListener('music-metadata-updated', () => {
-    emit('songs-updated')
-  })
-  window.addEventListener('favorites-updated', () => {
-    loadFavoriteStatus()
-  })
+  window.addEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
+  window.addEventListener('favorites-updated', handleFavoritesUpdated)
 
   // 监听播放队列变化
   watch(() => playerStore.queue, () => {
@@ -688,10 +687,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('music-metadata-updated', () => {
-    emit('songs-updated')
-  })
-  window.removeEventListener('favorites-updated', loadFavoriteStatus)
+  window.removeEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
+  window.removeEventListener('favorites-updated', handleFavoritesUpdated)
 })
 
 // 监听播放队列变化
