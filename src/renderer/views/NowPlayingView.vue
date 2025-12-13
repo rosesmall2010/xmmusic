@@ -145,8 +145,8 @@
           </button>
 
           <button class="btn-control btn-primary" @click="togglePlay" title="播放/暂停">
-            <Play v-if="!isPlaying" :size="28" />
-            <Pause v-else :size="28" />
+            <Play v-if="!isPlaying" :size="22" :style="{ marginLeft: '2px' }" />
+            <Pause v-else :size="22" />
           </button>
 
           <button class="btn-control btn-secondary" @click="next" title="下一首">
@@ -969,7 +969,7 @@ watch(
   align-items: center;
   gap: var(--spacing-sm);
   margin-left: var(--spacing-md);
-  height: 56px; /* 与播放按钮高度一致，确保垂直居中 */
+  height: 44px; /* 与播放按钮高度一致，确保垂直居中 */
 }
 
 .volume-slider {
@@ -1054,22 +1054,34 @@ watch(
 
 .btn-secondary {
   font-size: 1.2rem;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .btn-primary {
-  font-size: 2rem;
-  width: 56px;
-  height: 56px;
-  background: white;
-  color: black;
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
+  width: 72px;
+  height: 44px;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 22px; /* 胶囊：高度的一半 */
+  box-shadow: 0 6px 16px rgba(var(--color-primary-rgb), 0.35);
+  transition: all var(--transition-base) var(--transition-timing);
 }
 
 .btn-primary:hover {
-  background: #f0f0f0;
+  background: var(--color-primary-light);
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.45);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
 }
 
 /* Animations */

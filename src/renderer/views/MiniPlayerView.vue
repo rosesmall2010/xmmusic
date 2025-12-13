@@ -42,14 +42,14 @@
       <!-- 控制栏 -->
       <div class="controls-section">
         <button class="control-btn" @click="previous">
-          <SkipBack :size="20" />
+          <SkipBack :size="18" />
         </button>
         <button class="control-btn play-btn" @click="togglePlay">
-          <Play v-if="!isPlaying" :size="24" />
-          <Pause v-else :size="24" />
+          <Play v-if="!isPlaying" :size="20" :style="{ marginLeft: '2px' }" />
+          <Pause v-else :size="20" />
         </button>
         <button class="control-btn" @click="next">
-          <SkipForward :size="20" />
+          <SkipForward :size="18" />
         </button>
       </div>
     </div>
@@ -295,7 +295,7 @@ const handleSeek = (e: MouseEvent) => {
 .controls-section {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   margin-top: auto;
   margin-bottom: 20px;
 }
@@ -305,21 +305,23 @@ const handleSeek = (e: MouseEvent) => {
 }
 
 .play-btn {
-  font-size: 40px;
-  width: 56px;
-  height: 56px;
-  background: white;
-  color: #667eea;
-  border-radius: 50%;
+  width: 64px;
+  height: 34px;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 17px; /* 胶囊：高度的一半 */
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 16px rgba(var(--color-primary-rgb), 0.35);
+  transition: all var(--transition-base) var(--transition-timing);
 }
 
 .play-btn:hover {
+  background: var(--color-primary-light);
   transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.45);
 }
 
 .control-btn:active {
