@@ -281,9 +281,10 @@ const toggleMute = () => {
 
 const toggleFavorite = async () => {
   if (currentMusic.value) {
-    await window.electronAPI.toggleFavorite(currentMusic.value.id)
-    // 以数据库结果为准，避免本地状态与真实状态不一致
-    isFavorite.value = await window.electronAPI.isFileFavorite(currentMusic.value.id)
+    // 先本地立即切换，提升响应速度
+    isFavorite.value = !isFavorite.value
+    // 再以数据库结果为准回填（toggleFavorite 直接返回最新状态，避免二次查询）
+    isFavorite.value = await window.electronAPI.toggleFavorite(currentMusic.value.id)
 
     // 通知其他组件更新收藏状态
     window.dispatchEvent(new Event('favorites-updated'))

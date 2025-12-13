@@ -30,7 +30,7 @@ export interface ElectronAPI {
   clearSearchHistory: () => Promise<void>
   getSearchSuggestions: (query: string) => Promise<string[]>
   getMusicById: (id: number) => Promise<any>
-  toggleFavorite: (musicId: number) => Promise<void>
+  toggleFavorite: (musicId: number) => Promise<boolean>
   isFileFavorite: (musicId: number) => Promise<boolean>
   recordPlay: (musicId: number) => Promise<void>
 

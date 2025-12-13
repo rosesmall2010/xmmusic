@@ -542,35 +542,39 @@ const loadFavoriteStatus = async () => {
 }
 
 const toggleFavorite = async (music: MusicItem) => {
+  // 先本地立即切换，提升响应速度（避免等待 IPC 才变化）
+  const currentFavoriteStatus = isFavorite(music)
+  const optimisticNext = !currentFavoriteStatus
+
+  // 同步更新 favoriteFiles Set（这个 Set 的变化会触发 isFavorite 的重新计算）
+  if (optimisticNext) {
+    favoriteFiles.value.add(music.filePath)
+  } else {
+    favoriteFiles.value.delete(music.filePath)
+  }
+  // 强制触发响应式更新：重新创建 Set 对象，确保 Vue 检测到变化
+  favoriteFiles.value = new Set(favoriteFiles.value)
+  // 同步更新 music 对象的状态（仅用于兜底）
+  music.favorite = optimisticNext
+
   try {
-    // 先获取当前状态（使用 isFavorite 函数确保获取准确的状态）
-    const currentFavoriteStatus = isFavorite(music)
-    const newFavoriteStatus = !currentFavoriteStatus
-
-    await window.electronAPI.toggleFavorite(music.id)
-
-    // 更新 music 对象的状态（确保立即反映在UI上）
-    // 直接赋值，Vue 3 应该能检测到对象属性的变化
-    music.favorite = newFavoriteStatus
-
-    // 同步更新 favoriteFiles Set（这个 Set 的变化会触发 isFavorite 的重新计算）
-    if (newFavoriteStatus) {
+    // toggleFavorite 直接返回最新状态，避免二次查询
+    const latest = await window.electronAPI.toggleFavorite(music.id)
+    music.favorite = latest
+    // 以数据库结果为准回填 Set，避免本地与数据库不一致
+    if (latest) {
       favoriteFiles.value.add(music.filePath)
     } else {
       favoriteFiles.value.delete(music.filePath)
     }
-
-    // 强制触发响应式更新：重新创建 Set 对象，确保 Vue 检测到变化
     favoriteFiles.value = new Set(favoriteFiles.value)
 
     // 触发全局事件，通知其他组件更新
     window.dispatchEvent(new Event('favorites-updated'))
-
-    // 使用 nextTick 确保 DOM 更新完成
     await nextTick()
   } catch (e) {
     console.error('Failed to toggle favorite', e)
-    // 如果失败，重新加载状态
+    // 如果失败，重新加载状态并纠正 UI
     await loadFavoriteStatus()
   }
   closeContextMenu()

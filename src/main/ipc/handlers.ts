@@ -706,12 +706,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   // 收藏（v1.0.6 使用 music_id）
   ipcMain.handle('toggle-favorite', async (_, musicId: number) => {
-    if (!db) return
+    if (!db) return false
     if (db.isFavoriteByMusicId(musicId)) {
       db.removeFromFavoritesByMusicId(musicId)
     } else {
       db.addToFavoritesByMusicId(musicId)
     }
+    // 返回最新状态，减少渲染层二次查询导致的延迟
+    return db.isFavoriteByMusicId(musicId)
   })
 
   ipcMain.handle('is-file-favorite', async (_, musicId: number) => {
