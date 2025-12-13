@@ -44,6 +44,44 @@ export interface EqualizerPreset {
   gains: number[]
 }
 
+/**
+ * ⚠️ 重要：HTMLMediaElement 只能创建一次 MediaElementSourceNode
+ * 在开发模式（HMR 热更新）或多处重复初始化时，如果重新执行 createMediaElementSource，
+ * 会抛出：InvalidStateError: HTMLMediaElement already connected previously...
+ *
+ * 这里把音频上下文与节点缓存到 window 上，保证热更新后也能复用同一个 SourceNode。
+ */
+type EqualizerRuntime = {
+  audioContext: AudioContext | null
+  sourceNode: MediaElementAudioSourceNode | null
+  gainNode: GainNode | null
+  filters: BiquadFilterNode[]
+  analyserNode: AnalyserNode | null
+  timeAnalyserNode: AnalyserNode | null
+  audioElement: HTMLAudioElement | null
+  isInitialized: boolean
+}
+
+const getRuntime = (): EqualizerRuntime | null => {
+  if (typeof window === 'undefined') return null
+  const w = window as any
+  if (!w.__XMMUSIC_EQUALIZER_RUNTIME__) {
+    w.__XMMUSIC_EQUALIZER_RUNTIME__ = {
+      audioContext: null,
+      sourceNode: null,
+      gainNode: null,
+      filters: [],
+      analyserNode: null,
+      timeAnalyserNode: null,
+      audioElement: null,
+      isInitialized: false
+    } satisfies EqualizerRuntime
+  }
+  return w.__XMMUSIC_EQUALIZER_RUNTIME__ as EqualizerRuntime
+}
+
+const runtime = getRuntime()
+
 let audioContext: AudioContext | null = null
 let sourceNode: MediaElementAudioSourceNode | null = null
 let gainNode: GainNode | null = null
@@ -52,6 +90,30 @@ let analyserNode: AnalyserNode | null = null
 let timeAnalyserNode: AnalyserNode | null = null
 let audioElement: HTMLAudioElement | null = null
 let isInitialized = false
+
+// 从全局缓存恢复（开发模式热更新友好）
+if (runtime) {
+  audioContext = runtime.audioContext
+  sourceNode = runtime.sourceNode
+  gainNode = runtime.gainNode
+  filters = runtime.filters
+  analyserNode = runtime.analyserNode
+  timeAnalyserNode = runtime.timeAnalyserNode
+  audioElement = runtime.audioElement
+  isInitialized = runtime.isInitialized
+}
+
+const syncRuntime = () => {
+  if (!runtime) return
+  runtime.audioContext = audioContext
+  runtime.sourceNode = sourceNode
+  runtime.gainNode = gainNode
+  runtime.filters = filters
+  runtime.analyserNode = analyserNode
+  runtime.timeAnalyserNode = timeAnalyserNode
+  runtime.audioElement = audioElement
+  runtime.isInitialized = isInitialized
+}
 
 // 全局状态（单例模式）
 const enabled = ref(false)
@@ -165,6 +227,7 @@ export function useEqualizer() {
         }
       }
       isInitialized = false
+      syncRuntime()
     }
 
     if (isInitialized) {
@@ -182,6 +245,8 @@ export function useEqualizer() {
         audioContext.resume()
       }
 
+      // ⚠️ 同一个 element 只能 createMediaElementSource 一次
+      // 如果开发模式热更新导致状态丢失，这里会抛 InvalidStateError
       sourceNode = audioContext.createMediaElementSource(element)
       gainNode = audioContext.createGain()
 
@@ -230,9 +295,11 @@ export function useEqualizer() {
 
       // 初始化完成后应用当前的增益设置
       applyGains()
+      syncRuntime()
     } catch (error) {
       console.error('❌ 均衡器初始化失败:', error)
       isInitialized = false
+      syncRuntime()
     }
   }
 

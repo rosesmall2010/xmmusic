@@ -26,16 +26,17 @@ export function usePlayer() {
     let hasStartedPlaying = false
     let loadTimeout: NodeJS.Timeout | null = null
 
-    // 创建新的 Audio 元素
+    // 复用 DOM 中固定的 Audio 元素（均衡器依赖它）
     if (!audioElement) {
-      audioElement = new Audio()
-      // 设置固定 ID 供均衡器使用
-      audioElement.id = 'xmmusic-audio-player'
-      // 隐藏元素（均衡器需要它在 DOM 中）
-      audioElement.style.display = 'none'
-
-      // 添加到 DOM（如果还没有）
-      if (!document.getElementById('xmmusic-audio-player')) {
+      const existing = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
+      if (existing) {
+        audioElement = existing
+      } else {
+        audioElement = new Audio()
+        // 设置固定 ID 供均衡器使用
+        audioElement.id = 'xmmusic-audio-player'
+        // 隐藏元素（均衡器需要它在 DOM 中）
+        audioElement.style.display = 'none'
         document.body.appendChild(audioElement)
         console.log('✅ 音频元素已添加到 DOM，供均衡器使用')
       }
@@ -133,7 +134,7 @@ export function usePlayer() {
       if (audioElement) {
         audioElement.pause()
         audioElement.src = ''
-        audioElement = null
+        // 不置空也不移除：均衡器需要它保持在 DOM 中
       }
       stopProgressUpdate()
       playerStore.isPlaying = false
