@@ -1,7 +1,9 @@
 <template>
   <div class="now-playing-view" :style="backgroundStyle">
     <!-- 背景特效：火焰随音乐变化 -->
-    <FlameBackground :base-color="backgroundColor" :active="isPlaying" />
+    <div class="background-effects" aria-hidden="true">
+      <FlameBackground :base-color="backgroundColor" :active="isPlaying" />
+    </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
       <button class="btn-back" @click="goBack">
@@ -551,6 +553,14 @@ watch(
   color: white;
   overflow-y: auto;
   width: 100%;
+  isolation: isolate; /* 确保背景层不会影响内部堆叠 */
+}
+
+.background-effects {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .top-bar {
@@ -560,6 +570,8 @@ watch(
   margin-bottom: var(--spacing-xl);
   padding: 0 var(--spacing-xl);
   -webkit-app-region: drag;
+  position: relative;
+  z-index: 1;
 }
 
 .btn-back {
@@ -650,6 +662,8 @@ watch(
   padding: 0 var(--spacing-xl);
   min-height: 0;
   gap: var(--spacing-2xl);
+  position: relative;
+  z-index: 1;
 }
 
 /* 上半部分 - 左右分栏 */
