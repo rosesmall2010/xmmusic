@@ -1,5 +1,7 @@
 <template>
   <div class="now-playing-view" :style="backgroundStyle">
+    <!-- 背景特效：火焰随音乐变化 -->
+    <FlameBackground :base-color="backgroundColor" :active="isPlaying" />
     <!-- 返回按钮 -->
     <div class="top-bar">
       <button class="btn-back" @click="goBack">
@@ -190,6 +192,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import FlameBackground from '@/components/effects/FlameBackground.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
@@ -386,6 +389,53 @@ const formatTime = (seconds: number) => {
 
 
 
+/**
+ * 根据封面图提取平均色，用于背景与特效随歌曲变化
+ * - 取 32x32 缩略图计算，成本低
+ * - 失败时返回 null
+ */
+const extractAverageColor = async (src: string): Promise<string | null> => {
+  try {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('封面加载失败'))
+      img.src = src
+    })
+
+    const canvas = document.createElement('canvas')
+    const size = 32
+    canvas.width = size
+    canvas.height = size
+    const c = canvas.getContext('2d', { willReadFrequently: true })
+    if (!c) return null
+    c.drawImage(img, 0, 0, size, size)
+    const { data } = c.getImageData(0, 0, size, size)
+
+    let r = 0
+    let g = 0
+    let b = 0
+    let count = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3]
+      // 忽略透明像素
+      if (a < 16) continue
+      r += data[i]
+      g += data[i + 1]
+      b += data[i + 2]
+      count++
+    }
+    if (count === 0) return null
+    r = Math.round(r / count)
+    g = Math.round(g / count)
+    b = Math.round(b / count)
+    return `rgb(${r}, ${g}, ${b})`
+  } catch {
+    return null
+  }
+}
+
 // 歌词逻辑
 const loadLyrics = async () => {
   lyrics.value = []
@@ -423,8 +473,17 @@ watch(currentMusic, async (music) => {
   if (music) {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
     await loadLyrics()
+    // 背景颜色随封面变化（无封面则保持默认）
+    if (music.coverPath) {
+      const coverUrl = getCoverUrl(music.coverPath)
+      const color = await extractAverageColor(coverUrl)
+      if (color) backgroundColor.value = color
+    } else {
+      backgroundColor.value = '#1a1a1a'
+    }
   } else {
     isFavorite.value = false
+    backgroundColor.value = '#1a1a1a'
   }
 }, { immediate: true })
 

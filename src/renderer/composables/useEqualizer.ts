@@ -48,6 +48,7 @@ let audioContext: AudioContext | null = null
 let sourceNode: MediaElementAudioSourceNode | null = null
 let gainNode: GainNode | null = null
 let filters: BiquadFilterNode[] = []
+let analyserNode: AnalyserNode | null = null
 let audioElement: HTMLAudioElement | null = null
 let isInitialized = false
 
@@ -148,6 +149,13 @@ export function useEqualizer() {
           // 忽略断开错误
         }
       }
+      if (analyserNode) {
+        try {
+          analyserNode.disconnect()
+        } catch (e) {
+          // 忽略断开错误
+        }
+      }
       isInitialized = false
     }
 
@@ -187,6 +195,16 @@ export function useEqualizer() {
       })
       currentNode.connect(gainNode)
       gainNode.connect(audioContext.destination)
+
+      // 频谱分析：从最终输出（含均衡器增益）并联到 AnalyserNode
+      analyserNode = audioContext.createAnalyser()
+      analyserNode.fftSize = 512
+      analyserNode.smoothingTimeConstant = 0.8
+      try {
+        gainNode.connect(analyserNode)
+      } catch (e) {
+        // 忽略重复连接等异常
+      }
 
       audioElement = element
       isInitialized = true
@@ -276,6 +294,19 @@ export function useEqualizer() {
     applyGains()
   })
 
+  /**
+   * 获取频谱数据（0-255），用于可视化特效
+   * - 传入 buffer 可复用数组，减少 GC
+   * - 返回值为实际使用的 Uint8Array（可能与传入 buffer 不同）
+   */
+  const getFrequencyData = (buffer?: Uint8Array): Uint8Array | null => {
+    if (!analyserNode) return null
+    const size = analyserNode.frequencyBinCount
+    const target = buffer && buffer.length === size ? buffer : new Uint8Array(size)
+    analyserNode.getByteFrequencyData(target)
+    return target
+  }
+
   return {
     enabled,
     gains,
@@ -283,6 +314,7 @@ export function useEqualizer() {
     EQUALIZER_FREQUENCIES,
     EQUALIZER_PRESETS,
     initAudioContext,
+    getFrequencyData,
     setGain,
     applyPreset,
     reset,
