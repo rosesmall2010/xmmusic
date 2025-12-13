@@ -105,9 +105,21 @@ export const usePlayerStore = defineStore('player', () => {
       // 单曲循环：返回当前歌曲
       return currentMusic.value
     } else if (playMode.value === 'random') {
-      // 列表随机：随机选择一首
-      const randomIndex = Math.floor(Math.random() * queue.value.length)
-      return queue.value[randomIndex]
+      // 列表随机：当队列大于 1 时，下一首一定不是刚刚播放的那一首
+      const len = queue.value.length
+      if (len === 1) return queue.value[0]
+
+      const currentIndex = currentQueueIndex.value
+      // 如果当前索引无效，直接随机
+      if (currentIndex < 0 || currentIndex >= len) {
+        const randomIndex = Math.floor(Math.random() * len)
+        return queue.value[randomIndex]
+      }
+
+      // 生成 [0, len-2]，再映射到跳过 currentIndex 的实际索引
+      const r = Math.floor(Math.random() * (len - 1))
+      const nextIndex = r >= currentIndex ? r + 1 : r
+      return queue.value[nextIndex]
     } else if (playMode.value === 'repeat') {
       // 列表循环：播放完最后一首后回到第一首
       const nextIndex = currentQueueIndex.value + 1
