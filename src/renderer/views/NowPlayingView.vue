@@ -273,13 +273,42 @@ const goBack = () => {
   router.back()
 }
 
-const togglePlay = () => {
+const togglePlay = async () => {
   if (isPlaying.value) {
     pause()
-  } else {
-    if (currentMusic.value) {
+    return
+  }
+
+  if (currentMusic.value) {
+    // 启动后首次播放：可能还没有创建/绑定音频实例，此时 resume() 不会生效
+    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
+    const hasValidAudioInstance = !!(
+      audioElement &&
+      audioElement.parentElement && // 确保在 DOM 中
+      audioElement.src &&
+      audioElement.src.length > 0
+    )
+
+    if (hasValidAudioInstance) {
       resume()
+      return
     }
+
+    await play(currentMusic.value)
+
+    // 如果有保存的恢复位置，跳转到该位置
+    if (playerStore.resumePosition > 0) {
+      setTimeout(() => {
+        seek(playerStore.resumePosition)
+        playerStore.resumePosition = 0 // 清除恢复位置，避免重复跳转
+      }, 300)
+    }
+    return
+  }
+
+  // 没有 currentMusic，但队列存在时尝试从队列当前索引播放
+  if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
+    await play(playerStore.queue[playerStore.currentQueueIndex])
   }
 }
 

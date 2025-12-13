@@ -96,13 +96,33 @@ const exitMiniMode = async () => {
   }
 }
 
-const togglePlay = () => {
+const togglePlay = async () => {
   if (isPlaying.value) {
     pause()
-  } else {
-    if (currentMusic.value) {
+    return
+  }
+
+  if (currentMusic.value) {
+    // 启动后首次播放：可能还没有创建/绑定音频实例，此时 resume() 不会生效
+    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
+    const hasValidAudioInstance = !!(
+      audioElement &&
+      audioElement.parentElement && // 确保在 DOM 中
+      audioElement.src &&
+      audioElement.src.length > 0
+    )
+
+    if (hasValidAudioInstance) {
       resume()
+      return
     }
+
+    await play(currentMusic.value)
+    return
+  }
+
+  if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
+    await play(playerStore.queue[playerStore.currentQueueIndex])
   }
 }
 
