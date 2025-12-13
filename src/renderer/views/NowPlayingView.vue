@@ -203,7 +203,7 @@ import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
-const { play, pause, resume, seek, setVolume } = usePlayer()
+const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
 const backgroundColor = ref('#1a1a1a')
@@ -487,6 +487,13 @@ watch(currentMusic, async (music) => {
     isFavorite.value = false
     backgroundColor.value = '#1a1a1a'
   }
+}, { immediate: true })
+
+// 确保可视化特效能拿到频谱：播放时绑定到当前 audio 元素
+watch(isPlaying, (playing) => {
+  if (!playing) return
+  const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+  if (el) equalizer.initAudioContext(el)
 }, { immediate: true })
 
 // 监听播放进度更新歌词

@@ -334,7 +334,7 @@ watch(currentMusic, async (music) => {
 watch(isPlaying, (playing) => {
   if (playing) {
     // 获取音频元素并初始化均衡器
-    const audioElement = document.getElementById('hidden-audio') as HTMLAudioElement
+    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement
     if (audioElement) {
       equalizer.initAudioContext(audioElement)
     }

@@ -43,6 +43,7 @@ let time = 0
 
 // 频谱缓存（避免每帧创建新数组）
 let spectrum: Uint8Array | null = null
+let waveform: Uint8Array | null = null
 
 // 调色板
 let baseRgb: RGB = { r: 255, g: 106, b: 0 }
@@ -101,23 +102,62 @@ const resize = () => {
   if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 
-const computeEnergy = (): number => {
-  // 如果频谱可用，取低频能量作为“火焰强度”
+const computeAudioFeatures = () => {
+  // 返回：强度（0-1）、近似音调（0-1，频谱重心）、振幅（0-1，RMS）
+  let energy = -1
+  let centroid01 = 0
+  let rms01 = 0
+
+  // 频谱：用低频能量 + 频谱重心（让“音调变化”更可见）
   if (equalizer.getFrequencyData) {
-    spectrum = spectrum ?? new Uint8Array(256)
-    const data = equalizer.getFrequencyData(spectrum)
+    const data = equalizer.getFrequencyData(spectrum ?? undefined)
     if (data) {
+      spectrum = data
       const len = data.length
-      const lowEnd = Math.max(8, Math.floor(len * 0.18))
-      let sum = 0
-      for (let i = 0; i < lowEnd; i++) sum += data[i]
-      const avg = sum / (lowEnd * 255)
-      return clamp01(avg * 1.6)
+      const lowEnd = Math.max(8, Math.floor(len * 0.22))
+      let lowSum = 0
+      for (let i = 0; i < lowEnd; i++) lowSum += data[i]
+      const lowAvg = lowSum / (lowEnd * 255)
+
+      let wSum = 0
+      let iwSum = 0
+      for (let i = 0; i < len; i++) {
+        const v = data[i] / 255
+        wSum += v
+        iwSum += v * i
+      }
+      const centroid = wSum > 0 ? (iwSum / wSum) / Math.max(1, (len - 1)) : 0
+      centroid01 = clamp01(centroid)
+
+      energy = clamp01(lowAvg * 2.2)
     }
   }
 
-  // 回退：无法拿到音频频谱时，用时间做“呼吸”效果，保证随播放进度变化
-  return clamp01(0.25 + 0.25 * Math.sin(time * 2.2) + 0.15 * Math.sin(time * 5.1))
+  // 波形：RMS（振幅），用于更明显的“跟着节奏跳”
+  if (equalizer.getTimeDomainData) {
+    const data = equalizer.getTimeDomainData(waveform ?? undefined)
+    if (data) {
+      waveform = data
+      let sumSq = 0
+      for (let i = 0; i < data.length; i++) {
+        const x = (data[i] - 128) / 128
+        sumSq += x * x
+      }
+      const rms = Math.sqrt(sumSq / data.length)
+      rms01 = clamp01(rms * 2.6)
+      if (energy < 0) energy = rms01
+      else energy = clamp01(energy * 0.65 + rms01 * 0.35)
+    }
+  }
+
+  // 回退：无法拿到音频数据时，用时间做“呼吸”效果
+  if (energy < 0) {
+    energy = clamp01(0.25 + 0.25 * Math.sin(time * 2.2) + 0.15 * Math.sin(time * 5.1))
+    centroid01 = clamp01(0.5 + 0.5 * Math.sin(time * 0.9))
+    rms01 = clamp01(0.35 + 0.25 * Math.sin(time * 2.7))
+  }
+
+  return { energy, centroid01, rms01 }
 }
 
 const spawnParticle = (energy: number) => {
@@ -149,34 +189,38 @@ const tick = (ts: number) => {
   lastTs = ts
   time += dt
 
-  // 暂停时降低强度和刷新频率（但仍保持轻微动态）
-  const activeFactor = props.active ? 1 : 0.35
-  const energy = computeEnergy() * activeFactor
+  // 暂停时降低强度（但仍保持轻微动态）
+  const activeFactor = props.active ? 1 : 0.25
+  const { energy: rawEnergy, centroid01, rms01 } = computeAudioFeatures()
+  // 给强度加一点“脉冲”，让变化更明显
+  const pulse = clamp01(rawEnergy + rms01 * 0.35)
+  const energy = pulse * activeFactor
 
   // 背景轻微叠影，形成“火焰拖尾”
   ctx.globalCompositeOperation = 'source-over'
   ctx.fillStyle = 'rgba(0, 0, 0, 0.18)'
   ctx.fillRect(0, 0, width, height)
 
-  // 底部柔光基底
-  const base = mixRgb(baseRgb, { r: 255, g: 90, b: 0 }, 0.35)
+  // 底部柔光基底：随“音调(频谱重心)”略微偏色
+  const tint = mixRgb(baseRgb, hotRgb, centroid01 * 0.35)
+  const base = mixRgb(tint, { r: 255, g: 90, b: 0 }, 0.25)
   const glow = ctx.createRadialGradient(width * 0.5, height * 1.05, 0, width * 0.5, height * 1.05, height * 0.7)
-  glow.addColorStop(0, rgba(base, 0.28 + energy * 0.25))
+  glow.addColorStop(0, rgba(base, 0.24 + energy * 0.35))
   glow.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, width, height)
 
   // 按能量决定喷发粒子数量
-  const spawnCount = Math.floor(2 + energy * 10)
+  const spawnCount = Math.floor(3 + energy * 18)
   for (let i = 0; i < spawnCount; i++) spawnParticle(energy)
 
   // 更新粒子
-  const wind = Math.sin(time * 0.8) * (12 + energy * 26)
+  const wind = Math.sin(time * 0.8 + centroid01 * 2.0) * (18 + energy * 60)
   particles = particles.filter(p => {
     p.life += dt
     if (p.life >= p.maxLife) return false
     const t = p.life / p.maxLife
-    const buoyancy = (1 - t) * (40 + energy * 120)
+    const buoyancy = (1 - t) * (55 + energy * 220)
     p.vx += (wind - p.vx) * dt * 0.6
     p.vy -= buoyancy * dt
     p.x += p.vx * dt

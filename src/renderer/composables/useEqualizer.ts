@@ -49,6 +49,7 @@ let sourceNode: MediaElementAudioSourceNode | null = null
 let gainNode: GainNode | null = null
 let filters: BiquadFilterNode[] = []
 let analyserNode: AnalyserNode | null = null
+let timeAnalyserNode: AnalyserNode | null = null
 let audioElement: HTMLAudioElement | null = null
 let isInitialized = false
 
@@ -156,6 +157,13 @@ export function useEqualizer() {
           // 忽略断开错误
         }
       }
+      if (timeAnalyserNode) {
+        try {
+          timeAnalyserNode.disconnect()
+        } catch (e) {
+          // 忽略断开错误
+        }
+      }
       isInitialized = false
     }
 
@@ -202,6 +210,16 @@ export function useEqualizer() {
       analyserNode.smoothingTimeConstant = 0.8
       try {
         gainNode.connect(analyserNode)
+      } catch (e) {
+        // 忽略重复连接等异常
+      }
+
+      // 波形分析：给“振幅/RMS”使用，单独节点便于不同参数调优
+      timeAnalyserNode = audioContext.createAnalyser()
+      timeAnalyserNode.fftSize = 1024
+      timeAnalyserNode.smoothingTimeConstant = 0.6
+      try {
+        gainNode.connect(timeAnalyserNode)
       } catch (e) {
         // 忽略重复连接等异常
       }
@@ -307,6 +325,19 @@ export function useEqualizer() {
     return target
   }
 
+  /**
+   * 获取波形数据（0-255），用于计算音量振幅/RMS 等
+   * - 传入 buffer 可复用数组，减少 GC
+   * - 返回值为实际使用的 Uint8Array（可能与传入 buffer 不同）
+   */
+  const getTimeDomainData = (buffer?: Uint8Array): Uint8Array | null => {
+    if (!timeAnalyserNode) return null
+    const size = timeAnalyserNode.fftSize
+    const target = buffer && buffer.length === size ? buffer : new Uint8Array(size)
+    timeAnalyserNode.getByteTimeDomainData(target)
+    return target
+  }
+
   return {
     enabled,
     gains,
@@ -315,6 +346,7 @@ export function useEqualizer() {
     EQUALIZER_PRESETS,
     initAudioContext,
     getFrequencyData,
+    getTimeDomainData,
     setGain,
     applyPreset,
     reset,
