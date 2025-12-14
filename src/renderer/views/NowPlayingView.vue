@@ -189,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
@@ -208,11 +208,30 @@ const settingsStore = useSettingsStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
+// 检测当前实际应用的主题（通过检查 DOM 类）
+const checkIsDarkTheme = () => {
+  const appElement = document.getElementById('app')
+  if (!appElement) {
+    // 如果找不到 app 元素，使用 settingsStore 的值
+    return settingsStore.theme === 'dark' || 
+      (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  }
+  // 检查 DOM 上的实际类
+  return appElement.classList.contains('dark') || 
+    (!appElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+}
+
+// 使用 ref 存储主题状态，确保响应式更新
+const isDarkTheme = ref(checkIsDarkTheme())
+
+// 更新主题状态
+const updateTheme = () => {
+  isDarkTheme.value = checkIsDarkTheme()
+}
+
 // 根据主题获取默认背景颜色
 const getDefaultBackgroundColor = () => {
-  const isDark = settingsStore.theme === 'dark' || 
-    (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  return isDark ? '#1a1a1a' : '#f5f5f5'
+  return isDarkTheme.value ? '#1a1a1a' : '#f5f5f5'
 }
 
 const backgroundColor = ref(getDefaultBackgroundColor())
@@ -268,12 +287,9 @@ const VolumeIcon = computed(() => {
 
 // 根据主题计算背景样式
 const backgroundStyle = computed(() => {
-  const isDark = settingsStore.theme === 'dark' || 
-    (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  
   // 深色主题：使用封面颜色到深色背景的渐变
   // 浅色主题：使用封面颜色到浅色背景的渐变
-  const endColor = isDark ? '#0a0a0a' : '#f5f5f5'
+  const endColor = isDarkTheme.value ? '#0a0a0a' : '#f5f5f5'
   
   return {
     background: `linear-gradient(135deg, ${backgroundColor.value} 0%, ${endColor} 100%)`,
@@ -536,10 +552,60 @@ watch(currentMusic, async (music) => {
 }, { immediate: true })
 
 // 监听主题变化，更新默认背景颜色
-watch(() => settingsStore.theme, () => {
+watch(isDarkTheme, () => {
   // 如果没有从封面提取的颜色，则使用默认背景色
   if (!currentMusic.value?.coverPath) {
     backgroundColor.value = getDefaultBackgroundColor()
+  }
+}, { immediate: false })
+
+// 监听主题变化事件
+const handleThemeChange = () => {
+  // 更新主题状态
+  updateTheme()
+  
+  // 如果没有从封面提取的颜色，则使用默认背景色
+  if (!currentMusic.value?.coverPath) {
+    backgroundColor.value = getDefaultBackgroundColor()
+  }
+}
+
+onMounted(() => {
+  // 初始化时确保主题状态正确
+  updateTheme()
+  
+  // 初始化时确保背景颜色正确
+  if (!currentMusic.value?.coverPath) {
+    backgroundColor.value = getDefaultBackgroundColor()
+  }
+  
+  // 监听主题变化事件
+  window.addEventListener('theme-changed', handleThemeChange)
+  
+  // 使用 MutationObserver 监听 DOM 类变化（作为备用方案）
+  const appElement = document.getElementById('app')
+  if (appElement) {
+    const observer = new MutationObserver(() => {
+      handleThemeChange()
+    })
+    observer.observe(appElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+    
+    // 保存 observer 以便清理
+    ;(window as any).__nowPlayingThemeObserver = observer
+  }
+})
+
+onBeforeUnmount(() => {
+  // 清理事件监听
+  window.removeEventListener('theme-changed', handleThemeChange)
+  
+  // 清理 MutationObserver
+  if ((window as any).__nowPlayingThemeObserver) {
+    (window as any).__nowPlayingThemeObserver.disconnect()
+    delete (window as any).__nowPlayingThemeObserver
   }
 })
 
