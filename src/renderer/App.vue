@@ -18,8 +18,8 @@
     <template v-else>
       <router-view v-slot="{ Component, route }">
         <keep-alive include="MiniPlayer">
-          <transition 
-            :name="getTransitionName(route)" 
+          <transition
+            :name="getTransitionName(route)"
             mode="out-in"
             :duration="getTransitionDuration(route)"
           >
@@ -58,23 +58,23 @@ const toggleQueue = () => {
 // 根据路由决定过渡动画名称和时长
 const getTransitionName = (currentRoute: any) => {
   const currentName = currentRoute.name
-  
+
   // 切换到 mini 窗口时，禁用过渡动画，避免变灰白
   if (currentName === 'MiniPlayer') {
     return 'instant'
   }
-  
+
   return 'fade'
 }
 
 const getTransitionDuration = (currentRoute: any) => {
   const currentName = currentRoute.name
-  
+
   // 切换到 mini 窗口时，禁用过渡动画
   if (currentName === 'MiniPlayer') {
     return { enter: 0, leave: 0 }
   }
-  
+
   return undefined
 }
 

@@ -60,6 +60,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
 import { SkipBack, Play, Pause, SkipForward, Maximize2 } from 'lucide-vue-next'
@@ -72,7 +73,19 @@ defineOptions({
 
 const router = useRouter()
 const playerStore = usePlayerStore()
+const settingsStore = useSettingsStore()
 const { play, pause, resume, seek } = usePlayer()
+
+// 检测当前主题
+const isDarkTheme = computed(() => {
+  const appElement = document.getElementById('app')
+  if (!appElement) {
+    return settingsStore.theme === 'dark' || 
+      (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  }
+  return appElement.classList.contains('dark') || 
+    (!appElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+})
 
 const currentMusic = computed(() => playerStore.currentMusic)
 const isPlaying = computed(() => playerStore.isPlaying)
@@ -167,11 +180,11 @@ const handleSeek = (e: MouseEvent) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  color: white;
-  /* 使用简洁的渐变背景替代模糊效果,性能更好 */
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: var(--text-color);
+  /* 使用主题背景色，深色主题使用深色渐变，浅色主题使用浅色渐变 */
+  background: var(--bg-color);
   user-select: none;
-  transition: background 0.3s ease;
+  transition: background-color var(--transition-slow), color var(--transition-slow);
 }
 
 .mini-header {
@@ -200,18 +213,17 @@ const handleSeek = (e: MouseEvent) => {
 .control-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-color);
   cursor: pointer;
   padding: 4px;
   font-size: 14px;
   transition: all var(--transition-fast);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  border-radius: 4px; /* 添加圆角 */
+  border-radius: var(--radius-base);
 }
 
 .control-btn:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1); /* 添加hover背景 */
+  color: var(--text-color);
+  background: var(--hover-bg);
 }
 
 .mini-content {
@@ -258,12 +270,12 @@ const handleSeek = (e: MouseEvent) => {
 .default-cover {
   width: 100%;
   height: 100%;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 48px;
-  color: white;
+  color: var(--text-tertiary);
 }
 
 .info-section {
@@ -278,11 +290,12 @@ const handleSeek = (e: MouseEvent) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-color);
 }
 
 .music-artist {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -291,7 +304,7 @@ const handleSeek = (e: MouseEvent) => {
 .progress-section {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
