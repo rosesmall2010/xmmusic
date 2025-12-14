@@ -192,7 +192,6 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
@@ -204,27 +203,10 @@ import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
-const settingsStore = useSettingsStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
-// 检测当前主题
-const isDarkTheme = computed(() => {
-  const appElement = document.getElementById('app')
-  if (!appElement) {
-    return settingsStore.theme === 'dark' || 
-      (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  }
-  return appElement.classList.contains('dark') || 
-    (!appElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches)
-})
-
-// 根据主题获取默认背景颜色
-const getDefaultBackgroundColor = () => {
-  return isDarkTheme.value ? '#1a1a1a' : '#f5f5f5'
-}
-
-const backgroundColor = ref(getDefaultBackgroundColor())
+const backgroundColor = ref('#1a1a1a')
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
@@ -276,10 +258,8 @@ const VolumeIcon = computed(() => {
 })
 
 const backgroundStyle = computed(() => {
-  // 根据主题调整渐变终点色
-  const endColor = isDarkTheme.value ? '#0a0a0a' : '#f5f5f5'
   return {
-    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, ${endColor} 100%)`,
+    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
   }
 })
 
@@ -530,20 +510,13 @@ watch(currentMusic, async (music) => {
       const color = await extractAverageColor(coverUrl)
       if (color) backgroundColor.value = color
     } else {
-      backgroundColor.value = getDefaultBackgroundColor()
+      backgroundColor.value = '#1a1a1a'
     }
   } else {
     isFavorite.value = false
-    backgroundColor.value = getDefaultBackgroundColor()
+    backgroundColor.value = '#1a1a1a'
   }
 }, { immediate: true })
-
-// 监听主题变化，更新默认背景颜色
-watch(isDarkTheme, () => {
-  if (!currentMusic.value?.coverPath) {
-    backgroundColor.value = getDefaultBackgroundColor()
-  }
-})
 
 // 确保可视化特效能拿到频谱：播放时绑定到当前 audio 元素
 watch(isPlaying, (playing) => {

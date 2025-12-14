@@ -32,11 +32,11 @@ export function usePlayer() {
       if (existing) {
         audioElement = existing
       } else {
-        audioElement = new Audio()
-        // 设置固定 ID 供均衡器使用
-        audioElement.id = 'xmmusic-audio-player'
-        // 隐藏元素（均衡器需要它在 DOM 中）
-        audioElement.style.display = 'none'
+      audioElement = new Audio()
+      // 设置固定 ID 供均衡器使用
+      audioElement.id = 'xmmusic-audio-player'
+      // 隐藏元素（均衡器需要它在 DOM 中）
+      audioElement.style.display = 'none'
         document.body.appendChild(audioElement)
         console.log('✅ 音频元素已添加到 DOM，供均衡器使用')
       }

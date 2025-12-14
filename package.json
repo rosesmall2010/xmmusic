@@ -1,7 +1,7 @@
 {
   "name": "xmmusic",
   "productName": "xmmusic",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "音乐播放器",
   "main": "dist/electron/main/main.js",
   "scripts": {
