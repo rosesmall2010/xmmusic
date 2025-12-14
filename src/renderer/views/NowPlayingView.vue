@@ -192,6 +192,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
@@ -203,10 +204,18 @@ import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
 const router = useRouter()
 const playerStore = usePlayerStore()
+const settingsStore = useSettingsStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
-const backgroundColor = ref('#1a1a1a')
+// 根据主题获取默认背景颜色
+const getDefaultBackgroundColor = () => {
+  const isDark = settingsStore.theme === 'dark' || 
+    (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  return isDark ? '#1a1a1a' : '#f5f5f5'
+}
+
+const backgroundColor = ref(getDefaultBackgroundColor())
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
@@ -257,9 +266,17 @@ const VolumeIcon = computed(() => {
   return volumeValue.value === 0 ? VolumeX : Volume2
 })
 
+// 根据主题计算背景样式
 const backgroundStyle = computed(() => {
+  const isDark = settingsStore.theme === 'dark' || 
+    (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  
+  // 深色主题：使用封面颜色到深色背景的渐变
+  // 浅色主题：使用封面颜色到浅色背景的渐变
+  const endColor = isDark ? '#0a0a0a' : '#f5f5f5'
+  
   return {
-    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
+    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, ${endColor} 100%)`,
   }
 })
 
@@ -510,13 +527,21 @@ watch(currentMusic, async (music) => {
       const color = await extractAverageColor(coverUrl)
       if (color) backgroundColor.value = color
     } else {
-      backgroundColor.value = '#1a1a1a'
+      backgroundColor.value = getDefaultBackgroundColor()
     }
   } else {
     isFavorite.value = false
-    backgroundColor.value = '#1a1a1a'
+    backgroundColor.value = getDefaultBackgroundColor()
   }
 }, { immediate: true })
+
+// 监听主题变化，更新默认背景颜色
+watch(() => settingsStore.theme, () => {
+  // 如果没有从封面提取的颜色，则使用默认背景色
+  if (!currentMusic.value?.coverPath) {
+    backgroundColor.value = getDefaultBackgroundColor()
+  }
+})
 
 // 确保可视化特效能拿到频谱：播放时绑定到当前 audio 元素
 watch(isPlaying, (playing) => {
@@ -586,7 +611,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding: var(--spacing-xl) 0;
-  color: white;
+  color: var(--text-color);
   overflow-y: auto;
   width: 100%;
   isolation: isolate; /* 确保背景层不会影响内部堆叠 */
@@ -616,7 +641,7 @@ watch(
   gap: var(--spacing-sm);
   background: none;
   border: none;
-  color: white;
+  color: var(--text-color);
   font-size: var(--font-size-lg);
   cursor: pointer;
   padding: var(--spacing-sm);
@@ -626,7 +651,7 @@ watch(
 }
 
 .btn-back:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg);
 }
 
 .actions {
@@ -638,7 +663,7 @@ watch(
 .btn-action {
   background: none;
   border: none;
-  color: white;
+  color: var(--text-color);
   font-size: var(--font-size-xl);
   cursor: pointer;
   padding: var(--spacing-sm);
@@ -652,7 +677,7 @@ watch(
 }
 
 .btn-action:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg);
 }
 
 /* 自定义tooltip */
@@ -661,8 +686,8 @@ watch(
   bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
+  background: var(--card-bg);
+  color: var(--text-color);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
@@ -671,6 +696,7 @@ watch(
   opacity: 0;
   transition: opacity 0.2s ease 2s; /* 2秒延迟后才显示 */
   z-index: 1000;
+  box-shadow: var(--card-shadow);
 }
 
 .btn-action:hover .btn-tooltip {
@@ -685,7 +711,7 @@ watch(
   left: 50%;
   transform: translateX(-50%);
   border: 4px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.9);
+  border-top-color: var(--card-bg);
 }
 
 .content {
@@ -765,13 +791,13 @@ watch(
 
 .song-artist {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   margin-bottom: var(--spacing-xs);
 }
 
 .song-album {
   font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
 }
 
 /* 右侧面板 - 歌词/队列 */
@@ -788,13 +814,13 @@ watch(
   display: flex;
   gap: var(--spacing-sm);
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .panel-tab {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
   font-size: var(--font-size-base);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
@@ -803,13 +829,13 @@ watch(
 }
 
 .panel-tab:hover {
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  background: var(--hover-bg);
 }
 
 .panel-tab.active {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-color);
+  background: var(--active-bg);
   font-weight: 600;
 }
 
@@ -836,7 +862,7 @@ watch(
 
 .lyrics-line {
   font-size: var(--font-size-xl);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   margin: var(--spacing-xl) 0;
   transition: all var(--transition-base);
   cursor: pointer;
@@ -845,18 +871,18 @@ watch(
 }
 
 .lyrics-line:hover {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .lyrics-line.active {
   font-size: var(--font-size-3xl);
-  color: white;
+  color: var(--text-color);
   font-weight: 700;
   transform: scale(1.05);
 }
 
 .lyrics-line.empty {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-disabled);
 }
 
 /* 队列面板 */
@@ -869,7 +895,7 @@ watch(
   height: 100%;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .queue-list::-webkit-scrollbar {
@@ -881,12 +907,12 @@ watch(
 }
 
 .queue-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 3px;
 }
 
 .queue-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--text-tertiary);
 }
 
 .queue-item {
@@ -900,27 +926,27 @@ watch(
 }
 
 .queue-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
 }
 
 .queue-item.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--active-bg);
 }
 
 .queue-item .item-index {
   width: 24px;
   text-align: center;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
 .queue-item.active .item-index {
-  color: white;
+  color: var(--text-color);
 }
 
 .queue-item .playing-icon {
-  color: white;
+  color: var(--text-color);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -936,7 +962,7 @@ watch(
 
 .queue-item .item-title {
   font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -944,7 +970,7 @@ watch(
 }
 
 .queue-item.active .item-title {
-  color: white;
+  color: var(--text-color);
   font-weight: 600;
 }
 
@@ -953,7 +979,7 @@ watch(
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   overflow: hidden;
 }
 
@@ -978,7 +1004,7 @@ watch(
 
 .queue-item .item-duration {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -986,7 +1012,7 @@ watch(
   opacity: 0;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-tertiary);
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
@@ -1000,7 +1026,7 @@ watch(
 }
 
 .queue-item .item-remove:hover {
-  color: white;
+  color: var(--text-color);
 }
 
 .queue-empty {
@@ -1008,7 +1034,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-disabled);
   font-size: var(--font-size-base);
 }
 
@@ -1018,7 +1044,7 @@ watch(
   flex-direction: column;
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border-color);
 }
 
 .progress-section {
@@ -1027,7 +1053,7 @@ watch(
 
 .progress-bar {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
@@ -1036,7 +1062,7 @@ watch(
 
 .progress-fill {
   height: 100%;
-  background: white;
+  background: var(--color-primary);
   border-radius: 2px;
   position: relative;
 }
@@ -1048,7 +1074,7 @@ watch(
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
-  background: white;
+  background: var(--color-primary);
   border-radius: 50%;
   opacity: 0;
   transition: opacity var(--transition-base);
@@ -1062,7 +1088,7 @@ watch(
   display: flex;
   justify-content: space-between;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-tertiary);
 }
 
 .controls {
@@ -1092,7 +1118,7 @@ watch(
 .volume-slider input[type="range"] {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -1101,7 +1127,7 @@ watch(
 
 .volume-slider input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 2px;
 }
 
@@ -1109,7 +1135,7 @@ watch(
   -webkit-appearance: none;
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--color-primary);
   border-radius: 50%;
   cursor: pointer;
   margin-top: -5px;
@@ -1123,14 +1149,14 @@ watch(
 
 .volume-slider input[type="range"]::-moz-range-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 2px;
 }
 
 .volume-slider input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--color-primary);
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -1145,7 +1171,7 @@ watch(
 .btn-control {
   background: none;
   border: none;
-  color: white;
+  color: var(--text-color);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1166,11 +1192,11 @@ watch(
   width: 44px;
   height: 44px;
   border-radius: 22px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-color);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--hover-bg);
 }
 
 .btn-primary {
