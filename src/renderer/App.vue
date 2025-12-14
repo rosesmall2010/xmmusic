@@ -16,9 +16,13 @@
     </template>
 
     <template v-else>
-      <router-view v-slot="{ Component }">
+      <router-view v-slot="{ Component, route }">
         <keep-alive include="MiniPlayer">
-          <transition name="fade" mode="out-in">
+          <transition 
+            :name="getTransitionName(route)" 
+            mode="out-in"
+            :duration="getTransitionDuration(route)"
+          >
             <component :is="Component" />
           </transition>
         </keep-alive>
@@ -49,6 +53,29 @@ const isBlankLayout = computed(() => route.meta.layout === 'blank')
 
 const toggleQueue = () => {
   showQueue.value = !showQueue.value
+}
+
+// 根据路由决定过渡动画名称和时长
+const getTransitionName = (currentRoute: any) => {
+  const currentName = currentRoute.name
+  
+  // 切换到 mini 窗口时，禁用过渡动画，避免变灰白
+  if (currentName === 'MiniPlayer') {
+    return 'instant'
+  }
+  
+  return 'fade'
+}
+
+const getTransitionDuration = (currentRoute: any) => {
+  const currentName = currentRoute.name
+  
+  // 切换到 mini 窗口时，禁用过渡动画
+  if (currentName === 'MiniPlayer') {
+    return { enter: 0, leave: 0 }
+  }
+  
+  return undefined
 }
 
 onMounted(async () => {
@@ -240,6 +267,17 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 无动画过渡（用于正在播放到 mini 窗口的切换） */
+.instant-enter-active,
+.instant-leave-active {
+  transition: none;
+}
+
+.instant-enter-from,
+.instant-leave-to {
+  opacity: 1;
 }
 
 /* 滚动条样式 */

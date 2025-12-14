@@ -763,7 +763,7 @@ watch(
   margin-bottom: var(--spacing-xs);
   color: white;
   /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow: 
+  text-shadow:
     -1px -1px 0 rgba(0, 0, 0, 0.8),
     1px -1px 0 rgba(0, 0, 0, 0.8),
     -1px 1px 0 rgba(0, 0, 0, 0.8),
@@ -780,7 +780,7 @@ watch(
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: var(--spacing-xs);
   /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow: 
+  text-shadow:
     -1px -1px 0 rgba(0, 0, 0, 0.8),
     1px -1px 0 rgba(0, 0, 0, 0.8),
     -1px 1px 0 rgba(0, 0, 0, 0.8),
@@ -796,7 +796,7 @@ watch(
   font-size: var(--font-size-sm);
   color: rgba(255, 255, 255, 0.6);
   /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow: 
+  text-shadow:
     -1px -1px 0 rgba(0, 0, 0, 0.8),
     1px -1px 0 rgba(0, 0, 0, 0.8),
     -1px 1px 0 rgba(0, 0, 0, 0.8),
