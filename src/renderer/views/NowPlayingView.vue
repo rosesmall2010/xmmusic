@@ -779,11 +779,33 @@ watch(
   font-size: var(--font-size-base);
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: var(--spacing-xs);
+  /* 黑色描边效果，提升在背景特效下的可读性 */
+  text-shadow: 
+    -1px -1px 0 rgba(0, 0, 0, 0.8),
+    1px -1px 0 rgba(0, 0, 0, 0.8),
+    -1px 1px 0 rgba(0, 0, 0, 0.8),
+    1px 1px 0 rgba(0, 0, 0, 0.8),
+    0 -1px 0 rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(0, 0, 0, 0.8),
+    -1px 0 0 rgba(0, 0, 0, 0.8),
+    1px 0 0 rgba(0, 0, 0, 0.8),
+    0 0 3px rgba(0, 0, 0, 0.6);
 }
 
 .song-album {
   font-size: var(--font-size-sm);
   color: rgba(255, 255, 255, 0.6);
+  /* 黑色描边效果，提升在背景特效下的可读性 */
+  text-shadow: 
+    -1px -1px 0 rgba(0, 0, 0, 0.8),
+    1px -1px 0 rgba(0, 0, 0, 0.8),
+    -1px 1px 0 rgba(0, 0, 0, 0.8),
+    1px 1px 0 rgba(0, 0, 0, 0.8),
+    0 -1px 0 rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(0, 0, 0, 0.8),
+    -1px 0 0 rgba(0, 0, 0, 0.8),
+    1px 0 0 rgba(0, 0, 0, 0.8),
+    0 0 3px rgba(0, 0, 0, 0.6);
 }
 
 /* 右侧面板 - 歌词/队列 */
