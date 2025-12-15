@@ -191,7 +191,6 @@
     "addSongs": "Add to Playlist",
     "removeSong": "Remove Song",
     "addSuccess": "Added successfully",
-    "addError": "Failed to add",
     "removeSuccess": "Removed successfully",
     "removeError": "Failed to remove",
     "songs": "{count} songs",

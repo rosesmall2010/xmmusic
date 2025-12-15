@@ -191,7 +191,6 @@
     "addSongs": "添加到歌单",
     "removeSong": "移除歌曲",
     "addSuccess": "添加成功",
-    "addError": "添加失败",
     "removeSuccess": "移除成功",
     "removeError": "移除失败",
     "songs": "{count} 首歌曲",
