@@ -560,6 +560,48 @@ const selectDirPath = async () => {
   gap: var(--spacing-md);
 }
 
+/* 语言按钮组样式 */
+.language-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.lang-btn {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-base);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  border: 2px solid var(--border-color);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+}
+
+.lang-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--hover-bg);
+}
+
+.lang-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.lang-flag {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.lang-name {
+  font-weight: 500;
+}
+
 /* Select Style */
 select {
   padding: var(--spacing-sm) var(--spacing-lg);

@@ -32,7 +32,8 @@
     "miniMode": "迷你模式",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
-    "settings": "设置"
+    "settings": "设置",
+    "switchLanguage": "切换语言"
   },
   "sidebar": {
     "local": "本地音乐",

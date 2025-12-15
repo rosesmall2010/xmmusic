@@ -32,7 +32,8 @@
     "miniMode": "Mini Mode",
     "switchToLight": "Switch to Light Mode",
     "switchToDark": "Switch to Dark Mode",
-    "settings": "Settings"
+    "settings": "Settings",
+    "switchLanguage": "Switch Language"
   },
   "sidebar": {
     "local": "Local Music",
