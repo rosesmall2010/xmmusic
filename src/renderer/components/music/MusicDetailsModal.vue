@@ -301,4 +301,3 @@ const copyDetails = () => {
   background: var(--bg-hover);
 }
 </style>
-

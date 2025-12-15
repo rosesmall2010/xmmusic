@@ -29,10 +29,24 @@
             <div class="setting-desc">{{ $t('settings.languageDesc') }}</div>
           </div>
           <div class="setting-control">
-            <select :value="settingsStore.language" @change="handleLanguageChange">
-              <option value="zh">{{ $t('settings.chinese') }}</option>
-              <option value="en">{{ $t('settings.english') }}</option>
-            </select>
+            <div class="language-buttons">
+              <button
+                class="lang-btn"
+                :class="{ active: settingsStore.language === 'zh' }"
+                @click="handleLanguageChange('zh')"
+              >
+                <span class="lang-flag">🇨🇳</span>
+                <span class="lang-name">{{ $t('settings.chinese') }}</span>
+              </button>
+              <button
+                class="lang-btn"
+                :class="{ active: settingsStore.language === 'en' }"
+                @click="handleLanguageChange('en')"
+              >
+                <span class="lang-flag">🇺🇸</span>
+                <span class="lang-name">{{ $t('settings.english') }}</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -451,9 +465,8 @@ const checkUpdate = () => {
   alert(t('settings.alreadyLatestVersion'))
 }
 
-const handleLanguageChange = (e: Event) => {
-  const target = e.target as HTMLSelectElement
-  settingsStore.setLanguage(target.value as 'zh' | 'en')
+const handleLanguageChange = (lang: 'zh' | 'en') => {
+  settingsStore.setLanguage(lang)
 }
 
 const handleThemeChange = async (e: Event) => {

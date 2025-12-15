@@ -83,6 +83,10 @@
         <Sun v-else :size="18" />
       </button>
 
+      <button class="header-btn" @click="toggleLanguage" :title="$t('header.switchLanguage')">
+        <Languages :size="18" />
+      </button>
+
       <button class="header-btn" @click="openSettings" :title="$t('header.settings')">
         <Settings :size="18" />
       </button>
@@ -105,9 +109,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock, X } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
+import { useSettingsStore } from '@/stores/settings'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { locale } = useI18n()
+const settingsStore = useSettingsStore()
 const searchQuery = ref('')
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const showDropdown = ref(false)
@@ -264,6 +272,11 @@ const toggleMiniMode = async () => {
   localStorage.setItem('lastRoute', router.currentRoute.value.fullPath)
   await window.electronAPI.setMiniMode(true)
   router.replace('/mini')
+}
+
+const toggleLanguage = () => {
+  const newLang = settingsStore.language === 'zh' ? 'en' : 'zh'
+  settingsStore.setLanguage(newLang)
 }
 
 const openSettings = () => {
