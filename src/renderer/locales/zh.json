@@ -163,6 +163,7 @@
     "clearConfirm": "确定要清空歌单\"{name}\"吗？这将删除 {count} 首歌曲。",
     "createdAt": "创建于",
     "noPlaylists": "还没有创建歌单",
+    "createFirst": "创建一个吧",
     "batchAdding": "批量添加中...",
     "adding": "添加中...",
     "success": "成功",
@@ -198,7 +199,15 @@
     "batchOperation": "批量操作",
     "removeFromPlaylist": "从歌单移除",
     "removeFromPlaylistConfirm": "确定要将 \"{title}\" 从歌单中移除吗？",
-    "openInExplorer": "在文件管理器中打开"
+    "openInExplorer": "在文件管理器中打开",
+    "details": "歌曲详细信息",
+    "songInfo": "歌曲信息",
+    "fileInfo": "文件信息",
+    "fileType": "文件类型",
+    "fullPath": "完整路径",
+    "fileHash": "文件路径MD5",
+    "hasLyrics": "是否有歌词",
+    "copyDetails": "复制详细信息"
   },
   "tagEditor": {
     "title": "编辑标签",
@@ -250,6 +259,28 @@
     "clear": "清空队列",
     "clearConfirm": "确定要清空播放队列吗？"
   },
+  "equalizer": {
+    "enabled": "已开启",
+    "disabled": "已关闭",
+    "preset": "预设音效",
+    "flat": "平坦",
+    "pop": "流行",
+    "rock": "摇滚",
+    "jazz": "爵士",
+    "classical": "古典",
+    "bass": "重低音",
+    "treble": "高音增强",
+    "vocal": "人声增强",
+    "reset": "重置"
+  },
+  "discover": {
+    "recentlyAdded": "最近添加",
+    "shuffleAll": "打乱播放所有歌曲"
+  },
+  "localMusic": {
+    "empty": "暂无音乐",
+    "scanFolders": "扫描音乐文件夹"
+  },
   "dialog": {
     "confirm": "确认",
     "cancel": "取消",
@@ -278,6 +309,7 @@
     "songRemoved": "移除成功",
     "songRemoveError": "移除失败",
     "tagsSaved": "标签保存成功",
-    "tagsSaveError": "标签保存失败"
+    "tagsSaveError": "标签保存失败",
+    "operationFailed": "操作失败: {error}"
   }
 }

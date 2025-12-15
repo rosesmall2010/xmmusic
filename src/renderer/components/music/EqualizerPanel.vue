@@ -1,7 +1,7 @@
 <template>
   <div class="equalizer-panel" v-if="modelValue">
     <div class="panel-header">
-      <h3 class="panel-title">音效</h3>
+      <h3 class="panel-title">{{ $t('player.equalizer') }}</h3>
       <button class="close-btn" @click="emit('update:modelValue', false)">
         <X :size="16" />
       </button>
@@ -18,21 +18,21 @@
           >
           <span class="slider round"></span>
         </label>
-        <span class="switch-label">{{ enabled ? '已开启' : '已关闭' }}</span>
+        <span class="switch-label">{{ enabled ? $t('equalizer.enabled') : $t('equalizer.disabled') }}</span>
       </div>
 
       <!-- 预设选择 -->
       <div class="setting-row">
-        <label class="preset-label">预设音效</label>
+        <label class="preset-label">{{ $t('equalizer.preset') }}</label>
         <select v-model="selectedPreset" @change="handlePresetChange" class="preset-select">
-          <option value="flat">平坦</option>
-          <option value="pop">流行</option>
-          <option value="rock">摇滚</option>
-          <option value="jazz">爵士</option>
-          <option value="classical">古典</option>
-          <option value="bass">重低音</option>
-          <option value="treble">高音增强</option>
-          <option value="vocal">人声增强</option>
+          <option value="flat">{{ $t('equalizer.flat') }}</option>
+          <option value="pop">{{ $t('equalizer.pop') }}</option>
+          <option value="rock">{{ $t('equalizer.rock') }}</option>
+          <option value="jazz">{{ $t('equalizer.jazz') }}</option>
+          <option value="classical">{{ $t('equalizer.classical') }}</option>
+          <option value="bass">{{ $t('equalizer.bass') }}</option>
+          <option value="treble">{{ $t('equalizer.treble') }}</option>
+          <option value="vocal">{{ $t('equalizer.vocal') }}</option>
         </select>
       </div>
 
@@ -61,7 +61,7 @@
 
       <!-- 操作按钮 -->
       <div class="actions">
-        <button class="btn-secondary" @click="handleReset">重置</button>
+        <button class="btn-secondary" @click="handleReset">{{ $t('equalizer.reset') }}</button>
       </div>
     </div>
   </div>

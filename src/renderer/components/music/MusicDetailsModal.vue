@@ -2,7 +2,7 @@
   <div v-if="show" class="modal-overlay" @click.self="close">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>歌曲详细信息</h2>
+        <h2>{{ $t('music.details') }}</h2>
         <button class="close-btn" @click="close">
           <X :size="20" />
         </button>
@@ -11,64 +11,64 @@
       <div v-if="music" class="modal-body">
         <!-- 歌曲信息 -->
         <div class="info-section">
-          <h3 class="section-title">歌曲信息</h3>
+          <h3 class="section-title">{{ $t('music.songInfo') }}</h3>
           <div class="info-grid">
             <div class="info-item">
-              <span class="info-label">标题:</span>
+              <span class="info-label">{{ $t('music.title') }}:</span>
               <span class="info-value">{{ music.title }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">歌手:</span>
+              <span class="info-label">{{ $t('music.artist') }}:</span>
               <span class="info-value">{{ music.artist }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">专辑:</span>
+              <span class="info-label">{{ $t('music.album') }}:</span>
               <span class="info-value">{{ music.album || '-' }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">时长:</span>
+              <span class="info-label">{{ $t('music.duration') }}:</span>
               <span class="info-value">{{ formatDuration(music.duration) }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">是否有歌词:</span>
-              <span class="info-value">{{ music.lyricsPath ? '是' : '否' }}</span>
+              <span class="info-label">{{ $t('music.hasLyrics') }}:</span>
+              <span class="info-value">{{ music.lyricsPath ? $t('common.yes') : $t('common.no') }}</span>
             </div>
           </div>
         </div>
 
         <!-- 文件信息 -->
         <div class="info-section">
-          <h3 class="section-title">文件信息</h3>
+          <h3 class="section-title">{{ $t('music.fileInfo') }}</h3>
           <div class="info-grid">
             <div class="info-item">
-              <span class="info-label">文件类型:</span>
+              <span class="info-label">{{ $t('music.fileType') }}:</span>
               <span class="info-value">{{ music.fileExtension.toUpperCase().replace('.', '') }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">文件名:</span>
+              <span class="info-label">{{ $t('music.fileName') }}:</span>
               <span class="info-value">{{ music.fileName }}</span>
             </div>
             <div class="info-item full-width">
-              <span class="info-label">完整路径:</span>
+              <span class="info-label">{{ $t('music.fullPath') }}:</span>
               <span class="info-value path">{{ music.filePath }}</span>
             </div>
             <div class="info-item full-width">
-              <span class="info-label">文件路径MD5:</span>
+              <span class="info-label">{{ $t('music.fileHash') }}:</span>
               <span class="info-value mono">{{ music.fileHash }}</span>
             </div>
             <div class="info-item">
-              <span class="info-label">文件大小:</span>
-              <span class="info-value">{{ formatFileSize(music.fileSize) }} ({{ music.fileSize.toLocaleString() }} 字节)</span>
+              <span class="info-label">{{ $t('music.fileSize') }}:</span>
+              <span class="info-value">{{ formatFileSize(music.fileSize) }} ({{ music.fileSize.toLocaleString() }} {{ $t('music.bytes') }})</span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn-secondary" @click="close">关闭</button>
+        <button class="btn-secondary" @click="close">{{ $t('common.close') }}</button>
         <button class="btn-primary" @click="copyDetails">
           <Copy :size="16" />
-          复制详细信息
+          {{ $t('music.copyDetails') }}
         </button>
       </div>
     </div>

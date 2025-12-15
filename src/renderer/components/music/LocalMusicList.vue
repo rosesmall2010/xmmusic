@@ -2,21 +2,21 @@
   <div class="local-music-list">
     <div class="list-header">
       <div>
-        <h1 class="page-title">本地音乐</h1>
-        <div class="stats">{{ totalCount }} 首歌曲</div>
+        <h1 class="page-title">{{ $t('sidebar.local') }}</h1>
+        <div class="stats">{{ $t('sidebar.totalSongs', { count: totalCount }) }}</div>
       </div>
       <div class="header-actions">
         <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0">
-          清除所有
+          {{ $t('settings.clearAll') }}
         </button>
         <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0">
-          播放全部
+          {{ $t('player.playAll') }}
         </button>
         <button class="btn-primary" @click="handleScan" :disabled="isScanning">
-          {{ isScanning ? '扫描中...' : '扫描音乐' }}
+          {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
         </button>
         <button class="btn-secondary" @click="openDirManageDialog">
-          扫描目录管理
+          {{ $t('settings.scanDirectories') }}
         </button>
       </div>
     </div>
@@ -24,7 +24,7 @@
     <!-- 扫描进度条 -->
     <div v-if="isScanning && scanProgress" class="scan-progress-bar">
       <div class="progress-info">
-        <span class="current-file" :title="scanProgress.currentFile">正在扫描: {{ scanProgress.currentFile }}</span>
+        <span class="current-file" :title="scanProgress.currentFile">{{ $t('settings.scanning') }}: {{ scanProgress.currentFile }}</span>
         <span class="progress-stats">{{ scanProgress.current }} / {{ scanProgress.total }} ({{ scanProgress.percentage.toFixed(1) }}%)</span>
       </div>
       <div class="progress-track">
@@ -35,8 +35,8 @@
     <div class="music-list-container">
       <SongList :songs="musicList" @play="playMusic" @load-more="loadMore" @songs-updated="handleSongsUpdated">
         <template #empty>
-          <p>暂无音乐</p>
-          <button class="btn-link" @click="handleScan">扫描音乐文件夹</button>
+          <p>{{ $t('localMusic.empty') }}</p>
+          <button class="btn-link" @click="handleScan">{{ $t('localMusic.scanFolders') }}</button>
         </template>
       </SongList>
     </div>
@@ -45,8 +45,8 @@
     <div v-if="showDirManageDialog" class="dialog-overlay" @click.self="closeDirManageDialog">
       <div class="dir-manage-dialog">
         <div class="dialog-header">
-          <h3 class="dialog-title">扫描目录管理</h3>
-          <button class="dialog-close" @click="closeDirManageDialog" title="关闭">×</button>
+          <h3 class="dialog-title">{{ $t('settings.scanDirectories') }}</h3>
+          <button class="dialog-close" @click="closeDirManageDialog" :title="$t('common.close')">×</button>
         </div>
         <div class="dialog-body">
           <div class="dir-manage-actions">
@@ -56,16 +56,16 @@
               :disabled="dirStore.directories.length >= 20"
             >
               <Plus :size="16" />
-              添加目录
+              {{ $t('settings.addDirectory') }}
             </button>
             <div class="dir-limit-hint" v-if="dirStore.directories.length >= 20">
-              已达到最大数量限制（20个）
+              {{ $t('settings.maxDirectoriesReached') }}
             </div>
           </div>
 
-          <div v-if="dirStore.loading" class="dir-loading">加载中...</div>
+          <div v-if="dirStore.loading" class="dir-loading">{{ $t('settings.loading') }}</div>
           <div v-else-if="dirStore.directories.length === 0" class="dir-empty">
-            暂无扫描目录，请添加音乐目录
+            {{ $t('settings.noDirectories') }}
           </div>
           <div v-else class="dir-list">
             <div
@@ -77,9 +77,9 @@
               <div class="dir-content">
                 <div class="dir-path">{{ dir.path }}</div>
                 <div class="dir-meta">
-                  <span class="dir-order">顺序: {{ dir.display_order }}</span>
+                  <span class="dir-order">{{ $t('settings.order') }}: {{ dir.display_order }}</span>
                   <span class="dir-status" :class="{ enabled: dir.enabled, disabled: !dir.enabled }">
-                    {{ dir.enabled ? '已启用' : '已禁用' }}
+                    {{ dir.enabled ? $t('settings.enabled') : $t('settings.disabled') }}
                   </span>
                 </div>
               </div>
@@ -87,15 +87,15 @@
                 <button
                   class="btn-icon"
                   @click="toggleDirEnabled(dir)"
-                  :title="dir.enabled ? '禁用' : '启用'"
+                  :title="dir.enabled ? $t('settings.disable') : $t('settings.enable')"
                 >
                   <Power v-if="dir.enabled" :size="16" />
                   <PowerOff v-else :size="16" />
                 </button>
-                <button class="btn-icon" @click="editDir(dir)" title="编辑">
+                <button class="btn-icon" @click="editDir(dir)" :title="$t('settings.edit')">
                   <Edit :size="16" />
                 </button>
-                <button class="btn-icon danger" @click="deleteDir(dir)" title="删除">
+                <button class="btn-icon danger" @click="deleteDir(dir)" :title="$t('settings.delete')">
                   <Trash2 :size="16" />
                 </button>
               </div>
@@ -108,18 +108,18 @@
     <!-- 删除确认对话框 -->
     <div v-if="showDeleteConfirmDialog" class="dialog-overlay" @click.self="cancelDelete">
       <div class="dialog-content delete-confirm-dialog">
-        <h3 class="dialog-title">确认删除</h3>
+        <h3 class="dialog-title">{{ $t('settings.deleteConfirm') }}</h3>
         <div class="dialog-body">
           <p class="delete-confirm-text">
-            确定要从扫描目录列表中删除 "<strong>{{ dirToDelete?.path }}</strong>" 吗？
+            {{ $t('settings.deleteDirectoryConfirmText', { path: dirToDelete?.path || '' }) }}
           </p>
           <p class="delete-confirm-hint">
-            注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。
+            {{ $t('settings.deleteDirectoryHint') }}
           </p>
         </div>
         <div class="dialog-actions">
-          <button class="btn-secondary" @click="cancelDelete">取消</button>
-          <button class="btn-primary btn-danger" @click="confirmDelete">确定删除</button>
+          <button class="btn-secondary" @click="cancelDelete">{{ $t('common.cancel') }}</button>
+          <button class="btn-primary btn-danger" @click="confirmDelete">{{ $t('settings.deleteConfirm') }}</button>
         </div>
       </div>
     </div>
@@ -127,39 +127,39 @@
     <!-- 添加/编辑目录对话框 -->
     <div v-if="showAddDirDialog" class="dialog-overlay" @click.self="closeAddDirDialog">
       <div class="dialog-content">
-        <h3 class="dialog-title">{{ editingDir ? '编辑目录' : '添加目录' }}</h3>
+        <h3 class="dialog-title">{{ editingDir ? $t('settings.editDirectory') : $t('settings.addDirectory') }}</h3>
         <div class="dialog-body">
           <div class="form-group">
-            <label class="form-label">目录路径</label>
+            <label class="form-label">{{ $t('settings.directoryPath') }}</label>
             <input
               v-model="newDirPath"
               type="text"
               class="form-input form-input-full"
               :class="{ 'form-input-error': isDirExists }"
-              placeholder="请输入或选择目录路径"
+              :placeholder="$t('settings.directoryPathPlaceholder')"
               @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
               @input="checkDirExists"
             />
             <div v-if="isDirExists && !editingDir" class="form-error-hint">
-              该目录已存在，请选择其他目录
+              {{ $t('message.directoryExists') }}
             </div>
             <button
               class="btn-secondary form-input-btn"
               @click="selectDirPath"
-              title="选择目录"
+              :title="$t('settings.browse')"
             >
-              浏览
+              {{ $t('settings.browse') }}
             </button>
           </div>
         </div>
         <div class="dialog-actions">
-          <button class="btn-secondary" @click="closeAddDirDialog">取消</button>
+          <button class="btn-secondary" @click="closeAddDirDialog">{{ $t('common.cancel') }}</button>
           <button
             class="btn-primary"
             @click="editingDir ? handleSaveEdit() : handleAddDir()"
             :disabled="isDirExists || !newDirPath.trim()"
           >
-            {{ editingDir ? '保存' : '添加' }}
+            {{ editingDir ? $t('common.save') : $t('common.add') }}
           </button>
         </div>
       </div>
@@ -169,6 +169,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
@@ -177,6 +178,7 @@ import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
 
+const { t } = useI18n()
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
@@ -333,7 +335,7 @@ const handleScan = async () => {
 
     // 3. 检查是否有启用的目录
     if (!enabledDirs || enabledDirs.length === 0) {
-      alert('请先添加扫描目录\n\n点击"扫描目录管理"按钮添加音乐目录')
+      alert(t('settings.noDirectoriesHint'))
       return
     }
 
@@ -352,7 +354,7 @@ const handleScan = async () => {
       startBackgroundLoading()
   } catch (error: any) {
     if (error.message !== '扫描已取消') {
-      alert(`扫描失败: ${error.message}`)
+      alert(t('message.scanError') + ': ' + error.message)
     }
   } finally {
       isScanning.value = false
@@ -360,14 +362,14 @@ const handleScan = async () => {
     }
   } catch (error: any) {
     console.error('扫描过程出错:', error)
-    alert(`操作失败: ${error.message || '未知错误'}`)
+    alert(t('message.operationFailed', { error: error.message || t('common.unknown') }))
     isScanning.value = false
     scanProgress.value = null
   }
 }
 
 const handleClearAll = async () => {
-  if (!confirm('确定要清除所有本地音乐吗？\n\n这将清空本地音乐列表。\n不会影响收藏夹、歌单和播放历史。\n\n此操作不可恢复！')) {
+  if (!confirm(t('settings.clearAllConfirm'))) {
     return
   }
 
@@ -453,13 +455,13 @@ const closeDirManageDialog = () => {
 // 添加目录
 const handleAddDir = async () => {
   if (!newDirPath.value.trim()) {
-    alert('请输入目录路径')
+    alert(t('message.directoryRequired'))
     return
   }
 
   // 如果目录已存在，不应该执行到这里（按钮已禁用），但为了安全还是检查一下
   if (isDirExists.value) {
-    alert('该目录已存在，请选择其他目录')
+    alert(t('message.directoryExists'))
     return
   }
 
@@ -467,20 +469,20 @@ const handleAddDir = async () => {
     // 验证路径
     const validation = await dirStore.validatePath(newDirPath.value.trim())
     if (!validation.valid) {
-      alert(validation.error || '路径无效')
+      alert(validation.error || t('message.directoryInvalid'))
       return
     }
 
     // 再次检查是否已存在（防止并发问题）
     const existing = dirStore.directories.find(d => d.path === newDirPath.value.trim())
     if (existing) {
-      alert('该目录已存在')
+      alert(t('message.directoryExists'))
       return
     }
 
     // 检查数量限制
     if (dirStore.directories.length >= 20) {
-      alert('最多只能添加20个扫描目录')
+      alert(t('message.directoryMaxReached'))
       return
     }
 
@@ -490,7 +492,7 @@ const handleAddDir = async () => {
     newDirPath.value = ''
     showAddDirDialog.value = false
   } catch (error: any) {
-    alert(error.message || '添加目录失败')
+    alert(error.message || t('message.directoryAddError'))
   }
 }
 
@@ -504,14 +506,14 @@ const editDir = (dir: { id: number; path: string; display_order: number; enabled
 // 保存编辑
 const handleSaveEdit = async () => {
   if (!editingDir.value || !newDirPath.value.trim()) {
-    alert('请输入目录路径')
+    alert(t('message.directoryRequired'))
     return
   }
 
   try {
     const validation = await dirStore.validatePath(newDirPath.value.trim())
     if (!validation.valid) {
-      alert(validation.error || '路径无效')
+      alert(validation.error || t('message.directoryInvalid'))
       return
     }
 
@@ -520,7 +522,7 @@ const handleSaveEdit = async () => {
       d => d.path === newDirPath.value.trim() && d.id !== editingDir.value!.id
     )
     if (existing) {
-      alert('该目录已存在')
+      alert(t('message.directoryExists'))
       return
     }
 
@@ -530,9 +532,9 @@ const handleSaveEdit = async () => {
     newDirPath.value = ''
     editingDir.value = null
     showAddDirDialog.value = false
-    alert('目录更新成功')
+    alert(t('message.directoryEditSuccess'))
   } catch (error: any) {
-    alert(error.message || '更新目录失败')
+    alert(error.message || t('message.directoryEditError'))
   }
 }
 
@@ -549,10 +551,10 @@ const confirmDelete = async () => {
   try {
     // 只删除目录配置，不删除已扫描的音乐文件
     await dirStore.deleteDirectory(dirToDelete.value.id, { removeScannedFiles: false })
-    alert('目录删除成功')
+    alert(t('message.directoryDeleteSuccess'))
     cancelDelete()
   } catch (error: any) {
-    alert(error.message || '删除目录失败')
+    alert(error.message || t('message.directoryDeleteError'))
   }
 }
 
@@ -567,7 +569,7 @@ const toggleDirEnabled = async (dir: { id: number; enabled: boolean }) => {
   try {
     await dirStore.updateDirectory(dir.id, { enabled: !dir.enabled })
   } catch (error: any) {
-    alert(error.message || '更新目录状态失败')
+    alert(error.message || t('settings.updateDirectoryStatusError'))
   }
 }
 

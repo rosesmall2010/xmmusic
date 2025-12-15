@@ -2,12 +2,12 @@
   <div class="playlists-view">
     <div class="page-header">
       <div>
-        <h1 class="page-title">我的歌单</h1>
-        <div class="stats">{{ playlists.length }} 个歌单</div>
+        <h1 class="page-title">{{ $t('sidebar.myPlaylists') }}</h1>
+        <div class="stats">{{ $t('sidebar.totalPlaylists', { count: playlists.length }) }}</div>
       </div>
       <div class="header-actions">
         <button class="btn-primary" @click="showCreateModal = true">
-          新建歌单
+          {{ $t('playlist.create') }}
         </button>
       </div>
     </div>
@@ -41,7 +41,7 @@
             </div>
             <div class="playlist-info">
               <h3 class="playlist-name">{{ playlist.name }}</h3>
-              <p class="playlist-count">{{ playlist.songCount }} 首歌曲</p>
+              <p class="playlist-count">{{ $t('playlist.songs', { count: playlist.songCount }) }}</p>
             </div>
           </div>
         </template>
@@ -50,8 +50,8 @@
       <div v-if="playlists.length === 0" class="empty-state">
         <div class="empty-placeholder">
           <Heart :size="48" class="icon" />
-          <p>还没有创建歌单</p>
-          <button class="btn-link" @click="showCreateModal = true">创建一个吧</button>
+          <p>{{ $t('playlist.noPlaylists') }}</p>
+          <button class="btn-link" @click="showCreateModal = true">{{ $t('playlist.createFirst') }}</button>
         </div>
       </div>
     </div>

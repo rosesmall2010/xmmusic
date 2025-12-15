@@ -1,40 +1,40 @@
 <template>
   <div class="discover-view">
-    <h1 class="page-title">发现音乐</h1>
+    <h1 class="page-title">{{ $t('sidebar.recommendations') }}</h1>
 
     <!-- 推荐分类 -->
     <section class="section">
-      <h2 class="section-title">智能推荐</h2>
+      <h2 class="section-title">{{ $t('sidebar.recommendations') }}</h2>
       <div class="recommendation-grid">
         <div class="recommendation-card" @click="goToRecent">
           <div class="card-icon"><Clock :size="48" stroke-width="1.5" /></div>
-          <h3>最近播放</h3>
-          <p>{{ recentCount }} 首歌曲</p>
+          <h3>{{ $t('sidebar.recent') }}</h3>
+          <p>{{ $t('recent.songs', { count: recentCount }) }}</p>
         </div>
 
         <div class="recommendation-card" @click="goToFavorites">
           <div class="card-icon"><Heart :size="48" stroke-width="1.5" /></div>
-          <h3>我喜欢</h3>
-          <p>{{ favoritesCount }} 首歌曲</p>
+          <h3>{{ $t('sidebar.favorites') }}</h3>
+          <p>{{ $t('favorites.songs', { count: favoritesCount }) }}</p>
         </div>
 
         <div class="recommendation-card" @click="goToLocalMusic">
           <div class="card-icon"><Folder :size="48" stroke-width="1.5" /></div>
-          <h3>本地音乐</h3>
-          <p>{{ totalCount }} 首歌曲</p>
+          <h3>{{ $t('sidebar.local') }}</h3>
+          <p>{{ $t('sidebar.totalSongs', { count: totalCount }) }}</p>
         </div>
 
         <div class="recommendation-card">
           <div class="card-icon"><Shuffle :size="48" stroke-width="1.5" /></div>
-          <h3>随机播放</h3>
-          <p>打乱播放所有歌曲</p>
+          <h3>{{ $t('player.shuffle') }}</h3>
+          <p>{{ $t('discover.shuffleAll') }}</p>
         </div>
       </div>
     </section>
 
     <!-- 最近添加 -->
     <section class="section">
-      <h2 class="section-title">最近添加</h2>
+      <h2 class="section-title">{{ $t('discover.recentlyAdded') }}</h2>
       <div class="music-list">
         <div
           v-for="music in recentlyAdded"

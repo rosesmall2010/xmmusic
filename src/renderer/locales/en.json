@@ -164,7 +164,14 @@
     "deleteDirectoryFilesConfirm": "Do you want to also delete scanned music files in this directory?",
     "appDescription": "A beautiful local music player based on Electron + Vue 3",
     "checkUpdate": "Check for Updates",
-    "alreadyLatestVersion": "Already the latest version"
+    "alreadyLatestVersion": "Already the latest version",
+    "maxDirectoriesReached": "Maximum limit reached (20 directories)",
+    "editDirectory": "Edit Directory",
+    "deleteConfirm": "Confirm Delete",
+    "deleteDirectoryConfirmText": "Are you sure you want to remove \"{path}\" from the scan directory list?",
+    "deleteDirectoryHint": "Note: This will only remove the directory from the scan list, not delete scanned music files.",
+    "noDirectoriesHint": "Please add scan directories first\n\nClick \"Scan Directories\" button to add music directories",
+    "updateDirectoryStatusError": "Failed to update directory status"
   },
   "playlist": {
     "create": "Create Playlist",
@@ -192,6 +199,7 @@
     "clearConfirm": "Are you sure you want to clear playlist \"{name}\"? This will remove {count} songs.",
     "createdAt": "Created at",
     "noPlaylists": "No playlists created yet",
+    "createFirst": "Create one",
     "batchAdding": "Batch adding...",
     "adding": "Adding...",
     "success": "Success",
@@ -227,7 +235,15 @@
     "batchOperation": "Batch Operation",
     "removeFromPlaylist": "Remove from Playlist",
     "removeFromPlaylistConfirm": "Are you sure you want to remove \"{title}\" from the playlist?",
-    "openInExplorer": "Open in File Explorer"
+    "openInExplorer": "Open in File Explorer",
+    "details": "Song Details",
+    "songInfo": "Song Information",
+    "fileInfo": "File Information",
+    "fileType": "File Type",
+    "fullPath": "Full Path",
+    "fileHash": "File Path MD5",
+    "hasLyrics": "Has Lyrics",
+    "copyDetails": "Copy Details"
   },
   "tagEditor": {
     "title": "Edit Tags",
@@ -279,6 +295,28 @@
     "clear": "Clear Queue",
     "clearConfirm": "Are you sure you want to clear the play queue?"
   },
+  "equalizer": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "preset": "Preset",
+    "flat": "Flat",
+    "pop": "Pop",
+    "rock": "Rock",
+    "jazz": "Jazz",
+    "classical": "Classical",
+    "bass": "Bass Boost",
+    "treble": "Treble Boost",
+    "vocal": "Vocal Boost",
+    "reset": "Reset"
+  },
+  "discover": {
+    "recentlyAdded": "Recently Added",
+    "shuffleAll": "Shuffle all songs"
+  },
+  "localMusic": {
+    "empty": "No music",
+    "scanFolders": "Scan music folders"
+  },
   "dialog": {
     "confirm": "Confirm",
     "cancel": "Cancel",
@@ -307,6 +345,7 @@
     "songRemoved": "Removed successfully",
     "songRemoveError": "Failed to remove",
     "tagsSaved": "Tags saved successfully",
-    "tagsSaveError": "Failed to save tags"
+    "tagsSaveError": "Failed to save tags",
+    "operationFailed": "Operation failed: {error}"
   }
 }
