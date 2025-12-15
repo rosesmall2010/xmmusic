@@ -10,32 +10,59 @@
       <div class="form-content">
         <div class="form-group">
           <label>{{ $t('metadataEdit.title') }}</label>
-          <input
-            v-model="formData.title"
-            type="text"
-            :placeholder="$t('metadataEdit.leaveEmpty')"
-            :disabled="loading"
-          />
+          <div class="field-with-convert">
+            <input
+              v-model="formData.title"
+              type="text"
+              :placeholder="$t('metadataEdit.leaveEmpty')"
+              :disabled="loading"
+            />
+            <EncodingConvertField
+              v-if="originalData.title && isFieldCorrupted(originalData.title)"
+              :original-value="originalData.title"
+              :current-value="formData.title"
+              @converted="(value) => formData.title = value"
+              :disabled="loading"
+            />
+          </div>
         </div>
 
         <div class="form-group">
           <label>{{ $t('metadataEdit.artist') }}</label>
-          <input
-            v-model="formData.artist"
-            type="text"
-            :placeholder="$t('metadataEdit.leaveEmpty')"
-            :disabled="loading"
-          />
+          <div class="field-with-convert">
+            <input
+              v-model="formData.artist"
+              type="text"
+              :placeholder="$t('metadataEdit.leaveEmpty')"
+              :disabled="loading"
+            />
+            <EncodingConvertField
+              v-if="originalData.artist && isFieldCorrupted(originalData.artist)"
+              :original-value="originalData.artist"
+              :current-value="formData.artist"
+              @converted="(value) => formData.artist = value"
+              :disabled="loading"
+            />
+          </div>
         </div>
 
         <div class="form-group">
           <label>{{ $t('metadataEdit.album') }}</label>
-          <input
-            v-model="formData.album"
-            type="text"
-            :placeholder="$t('metadataEdit.leaveEmpty')"
-            :disabled="loading"
-          />
+          <div class="field-with-convert">
+            <input
+              v-model="formData.album"
+              type="text"
+              :placeholder="$t('metadataEdit.leaveEmpty')"
+              :disabled="loading"
+            />
+            <EncodingConvertField
+              v-if="originalData.album && isFieldCorrupted(originalData.album)"
+              :original-value="originalData.album"
+              :current-value="formData.album"
+              @converted="(value) => formData.album = value"
+              :disabled="loading"
+            />
+          </div>
         </div>
 
         <div class="form-row">
@@ -53,12 +80,21 @@
 
           <div class="form-group">
             <label>{{ $t('metadataEdit.genre') }}</label>
-            <input
-              v-model="formData.genre"
-              type="text"
-              :placeholder="$t('metadataEdit.leaveEmpty')"
-              :disabled="loading"
-            />
+            <div class="field-with-convert">
+              <input
+                v-model="formData.genre"
+                type="text"
+                :placeholder="$t('metadataEdit.leaveEmpty')"
+                :disabled="loading"
+              />
+              <EncodingConvertField
+                v-if="originalData.genre && isFieldCorrupted(originalData.genre)"
+                :original-value="originalData.genre"
+                :current-value="formData.genre"
+                @converted="(value) => formData.genre = value"
+                :disabled="loading"
+              />
+            </div>
           </div>
         </div>
 
@@ -97,9 +133,9 @@
       </div>
 
       <div class="dialog-actions">
-          <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
+        <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
             {{ $t('metadataEdit.save') }}
-          </button>
+        </button>
         <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('metadataEdit.cancel') }}</button>
       </div>
     </div>
@@ -110,6 +146,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MusicItem } from '@shared/types/music'
+import EncodingConvertField from './EncodingConvertField.vue'
 
 interface Props {
   show: boolean
@@ -145,6 +182,32 @@ const coverPreview = ref<string | null>(null)
 const coverPath = ref<string | null>(null)
 const loading = ref(false)
 const loadingText = ref('')
+
+const originalData = ref({
+  title: '',
+  artist: '',
+  album: '',
+  genre: ''
+})
+
+// 检测字段是否为乱码
+const isFieldCorrupted = (value: string): boolean => {
+  if (!value) return false
+  
+  // 检查是否包含替换字符（Unicode 替换字符）
+  if (/[\uFFFD]/.test(value)) return true
+  
+  // 检查是否包含控制字符（除了常见的空白字符）
+  if (/[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(value)) return true
+  
+  // 检查是否看起来像乱码（包含很多非ASCII且非中文的字符）
+  const nonAsciiNonChinese = value.match(/[^\x20-\x7E\u4e00-\u9fa5]/g)
+  if (nonAsciiNonChinese && nonAsciiNonChinese.length > value.length * 0.3) {
+    return true
+  }
+  
+  return false
+}
 
 const hasChanges = computed(() => {
   return !!(
@@ -186,6 +249,12 @@ const resetForm = () => {
   }
   coverPath.value = null
   coverPreview.value = null
+  originalData.value = {
+    title: '',
+    artist: '',
+    album: '',
+    genre: ''
+  }
 }
 
 const loadMusicData = (music: MusicItem) => {
@@ -198,6 +267,14 @@ const loadMusicData = (music: MusicItem) => {
     coverPath: music.coverPath || null
   }
   coverPath.value = music.coverPath || null
+  
+  // 保存原始数据用于编码转换
+  originalData.value = {
+    title: music.title,
+    artist: music.artist,
+    album: music.album || '',
+    genre: music.genre || ''
+  }
 }
 
 const selectCover = async () => {
@@ -362,6 +439,12 @@ const close = () => {
 .form-group input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.field-with-convert {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
 }
 
 .cover-section {

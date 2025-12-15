@@ -385,7 +385,13 @@
     "batchUpdateResult": "更新完成：成功 {success} 首，失败 {failed} 首\n\n失败的文件：\n{errors}",
     "batchUpdateSuccess": "成功更新 {count} 首歌曲的元数据",
     "updateSuccess": "元数据更新成功！",
-    "imageFiles": "图片文件"
+    "imageFiles": "图片文件",
+    "originalValue": "原始值",
+    "convertedValue": "转换后",
+    "convertFrom": "从 {encoding} 转换",
+    "applyAndSave": "采用并保存",
+    "convertFailed": "从 {encoding} 转换失败{error}",
+    "convertError": "编码转换失败"
   },
   "dialog": {
     "confirm": "确认",

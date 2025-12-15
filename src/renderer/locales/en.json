@@ -385,7 +385,13 @@
     "batchUpdateResult": "Update completed: {success} succeeded, {failed} failed\n\nFailed files:\n{errors}",
     "batchUpdateSuccess": "Successfully updated metadata for {count} songs",
     "updateSuccess": "Metadata updated successfully!",
-    "imageFiles": "Image Files"
+    "imageFiles": "Image Files",
+    "originalValue": "Original Value",
+    "convertedValue": "Converted",
+    "convertFrom": "Convert from {encoding}",
+    "applyAndSave": "Apply and Save",
+    "convertFailed": "Failed to convert from {encoding}{error}",
+    "convertError": "Encoding conversion failed"
   },
   "dialog": {
     "confirm": "Confirm",
