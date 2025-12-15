@@ -14,22 +14,22 @@
         <div class="playlist-info">
           <h1 class="page-title">{{ playlist.name }}</h1>
           <div class="stats">
-            <span>{{ songs.length }} 首歌曲</span>
+            <span>{{ $t('playlist.songs', { count: songs.length }) }}</span>
             <span class="separator">•</span>
-            <span>创建于 {{ formatDate(playlist.createdAt) }}</span>
+            <span>{{ $t('playlist.createdAt') }} {{ formatDate(playlist.createdAt) }}</span>
           </div>
           <div class="actions">
             <button class="btn-primary" @click="playAll" :disabled="totalSongs === 0">
-              播放全部
+              {{ $t('player.playAll') }}
             </button>
             <button class="btn-secondary" @click="clearPlaylist" :disabled="totalSongs === 0">
-              清空歌单
+              {{ $t('playlist.clear') }}
             </button>
             <button class="btn-secondary" @click="openEditModal">
-              编辑信息
+              {{ $t('playlist.edit') }}
             </button>
             <button class="btn-secondary" @click="deletePlaylist">
-              删除歌单
+              {{ $t('playlist.delete') }}
             </button>
           </div>
         </div>
@@ -40,7 +40,7 @@
         <!-- 加载状态 -->
         <div v-if="loading" class="loading-container">
           <div class="loading-spinner"></div>
-          <p>加载中... ({{ songs.length }} / {{ totalSongs }})</p>
+          <p>{{ $t('common.loading') }} ({{ songs.length }} / {{ totalSongs }})</p>
         </div>
 
         <SongList
@@ -55,8 +55,8 @@
           <template #empty>
             <div class="empty-placeholder">
               <Music :size="64" class="icon" />
-              <p>歌单还是空的</p>
-              <p class="sub-text">去添加一些歌曲吧</p>
+              <p>{{ $t('playlist.empty') }}</p>
+              <p class="sub-text">{{ $t('playlist.addSongsHint') }}</p>
             </div>
           </template>
         </SongList>
@@ -73,6 +73,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
@@ -81,6 +82,7 @@ import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { Music } from 'lucide-vue-next'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const playerStore = usePlayerStore()
@@ -287,7 +289,7 @@ const removeSong = async (music: MusicItem) => {
 const clearPlaylist = async () => {
   if (!playlist.value || totalSongs.value === 0) return
 
-  if (!confirm(`确定要清空歌单"${playlist.value.name}"吗？这将删除 ${totalSongs.value} 首歌曲。`)) {
+  if (!confirm(t('playlist.clearConfirm', { name: playlist.value.name, count: totalSongs.value }))) {
     return
   }
 
@@ -307,7 +309,7 @@ const clearPlaylist = async () => {
 }
 
 const deletePlaylist = async () => {
-  if (!confirm('确定要删除这个歌单吗？')) return
+  if (!confirm(t('playlist.deleteConfirm', { name: playlist.value?.name || '' }))) return
 
   try {
     await window.electronAPI.deletePlaylist(playlist.value.id)

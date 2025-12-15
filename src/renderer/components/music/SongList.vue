@@ -4,27 +4,27 @@
     <div v-if="selectionMode && selectedSongs.size > 0" class="batch-actions">
       <div class="selection-info">
         <Check :size="16" />
-        已选择 {{ selectedSongs.size }} 首
+        {{ $t('music.selected', { count: selectedSongs.size }) }}
       </div>
       <button class="batch-btn" @click="handleBatchAddToFavorites">
         <Heart :size="16" />
-        添加到我喜欢
+        {{ $t('music.addToFavorites') }}
       </button>
       <button class="batch-btn" @click="handleBatchAddToPlaylist">
         <Music :size="16" />
-        添加到歌单
+        {{ $t('music.addToPlaylist') }}
       </button>
       <button class="batch-btn" @click="handleBatchAddToQueue">
         <ListMusic :size="16" />
-        添加到播放队列
+        {{ $t('music.addToQueue') }}
       </button>
       <button v-if="showRemoveFromPlaylist" class="batch-btn danger" @click="handleBatchRemove">
         <Trash2 :size="16" />
-        批量删除
+        {{ $t('music.batchDelete') }}
       </button>
       <button class="batch-btn" @click="cancelSelection">
         <X :size="16" />
-        取消
+        {{ $t('common.cancel') }}
       </button>
     </div>
 
@@ -37,11 +37,11 @@
         />
       </div>
       <div class="col-index">#</div>
-      <div class="col-title">标题</div>
-      <div class="col-album">专辑</div>
-      <div class="col-filename">文件名</div>
-      <div class="col-duration">时长</div>
-      <div class="col-actions">操作</div>
+      <div class="col-title">{{ $t('music.title') }}</div>
+      <div class="col-album">{{ $t('music.album') }}</div>
+      <div class="col-filename">{{ $t('music.fileName') }}</div>
+      <div class="col-duration">{{ $t('music.duration') }}</div>
+      <div class="col-actions">{{ $t('common.actions') }}</div>
     </div>
 
     <div class="list-content" ref="containerRef" @scroll="handleScroll">
@@ -104,7 +104,7 @@
                   v-else-if="music.isPlayable === false"
                   :size="14"
                   class="status-icon status-icon-unplayable"
-                  :title="music.playErrorReason || '无法播放'"
+                  :title="music.playErrorReason || $t('music.cannotPlay')"
                 />
               </div>
               <div class="item-artist" :title="music.artist">{{ music.artist }}</div>
@@ -118,7 +118,7 @@
               class="action-btn"
               :class="{ active: isFavorite(music) }"
               @click.stop="toggleFavorite(music)"
-              :title="isFavorite(music) ? '取消喜欢' : '喜欢'"
+              :title="isFavorite(music) ? $t('music.removeFromFavorites') : $t('music.addToFavorites')"
             >
               <Heart :size="16" :fill="isFavorite(music) ? 'currentColor' : 'none'" />
             </button>
@@ -126,7 +126,7 @@
               class="action-btn"
               :class="{ active: isInQueue(music) }"
               @click.stop="toggleQueue(music)"
-              :title="isInQueue(music) ? '从播放队列移除' : '添加到播放队列'"
+              :title="isInQueue(music) ? $t('music.removeFromQueue') : $t('music.addToQueue')"
             >
               <ListMusic :size="16" />
             </button>
@@ -136,7 +136,7 @@
 
       <div v-if="songs.length === 0" class="empty-state">
         <slot name="empty">
-          <p>暂无歌曲</p>
+          <p>{{ $t('common.empty') }}</p>
         </slot>
       </div>
     </div>
@@ -148,33 +148,33 @@
       :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
     >
       <div class="menu-item" @click="handlePlay(contextMenu.music!)">
-        播放
+        {{ $t('music.play') }}
       </div>
       <div class="menu-item" @click="toggleFavorite(contextMenu.music!)">
         <Heart :size="16" :fill="contextMenu.isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': contextMenu.isFavorite }" class="icon" />
-        {{ contextMenu.isFavorite ? '取消喜欢' : '喜欢' }}
+        {{ contextMenu.isFavorite ? $t('music.removeFromFavorites') : $t('music.addToFavorites') }}
       </div>
       <div class="menu-item" @click="openAddToPlaylist(contextMenu.music!)">
         <Music :size="16" class="icon" />
-        添加到歌单
+        {{ $t('music.addToPlaylist') }}
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="openEditTag(contextMenu.music!)">
         <Edit :size="16" class="icon" />
-        编辑标签
+        {{ $t('music.editTags') }}
       </div>
       <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
         <FolderOpen :size="16" class="icon" />
-        在文件管理器中打开
+        {{ $t('music.openInExplorer') }}
       </div>
       <div class="menu-item" @click="showMusicDetails(contextMenu.music!)">
         <Info :size="16" class="icon" />
-        详细信息
+        {{ $t('music.viewDetails') }}
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="enableSelectionMode">
         <Check :size="16" class="icon" />
-        批量操作
+        {{ $t('music.batchOperation') }}
       </div>
       <div
         v-if="showRemoveFromPlaylist"
@@ -182,7 +182,7 @@
         @click="handleRemoveFromPlaylist(contextMenu.music!)"
       >
         <Trash2 :size="16" class="icon" />
-        从歌单移除
+        {{ $t('music.removeFromPlaylist') }}
       </div>
     </div>
 
@@ -213,6 +213,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
 import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX } from 'lucide-vue-next'
@@ -236,6 +237,7 @@ const emit = defineEmits<{
   (e: 'songs-updated'): void  // 批量操作后通知父组件刷新
 }>()
 
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const currentMusic = computed(() => playerStore.currentMusic)
 
@@ -511,7 +513,7 @@ const openAddToPlaylist = (music: MusicItem) => {
 }
 
 const handleRemoveFromPlaylist = (music: MusicItem) => {
-  if (confirm(`确定要将 "${music.title}" 从歌单中移除吗？`)) {
+  if (confirm(t('music.removeFromPlaylistConfirm', { title: music.title }))) {
     emit('remove-from-playlist', music)
   }
   closeContextMenu()

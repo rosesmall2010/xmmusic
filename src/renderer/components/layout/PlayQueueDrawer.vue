@@ -3,14 +3,14 @@
     <div v-if="visible" class="play-queue-drawer">
       <div class="drawer-header">
         <div class="header-title">
-          <h3>播放队列</h3>
+          <h3>{{ $t('queue.title') }}</h3>
           <span class="count">({{ queue.length }})</span>
         </div>
         <div class="header-actions">
-          <button class="action-btn" @click="clearQueue" title="清空队列">
+          <button class="action-btn" @click="clearQueue" :title="$t('queue.clear')">
             <Trash2 :size="18" />
           </button>
-          <button class="close-btn" @click="close" title="关闭">
+          <button class="close-btn" @click="close" :title="$t('common.close')">
             <X :size="24" />
           </button>
         </div>
@@ -37,13 +37,13 @@
             </div>
           </div>
           <div class="item-duration">{{ formatDuration(music.duration) }}</div>
-          <button class="remove-btn" @click.stop="removeItem(index)" title="移除">
+          <button class="remove-btn" @click.stop="removeItem(index)" :title="$t('queue.remove')">
             <span>×</span>
           </button>
         </div>
 
         <div v-if="queue.length === 0" class="empty-state">
-          <p>队列为空</p>
+          <p>{{ $t('queue.empty') }}</p>
         </div>
       </div>
     </div>
@@ -53,6 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { Volume2, Trash2, X } from 'lucide-vue-next'
@@ -66,6 +67,7 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const { play } = usePlayer()
 const listRef = ref<HTMLElement | null>(null)
@@ -88,7 +90,7 @@ const removeItem = (index: number) => {
 }
 
 const clearQueue = () => {
-  if (confirm('确定要清空播放队列吗？')) {
+  if (confirm(t('queue.clearConfirm'))) {
     playerStore.clearQueue()
   }
 }

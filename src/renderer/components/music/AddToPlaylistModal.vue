@@ -2,25 +2,25 @@
   <div v-if="modelValue" class="modal-overlay" @click="close">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h3>添加到歌单</h3>
+        <h3>{{ $t('playlist.addSongs') }}</h3>
         <button class="close-btn" @click="close"><X :size="24" /></button>
       </div>
 
       <div class="modal-body">
         <!-- 进度显示（只在批量添加时显示） -->
         <div v-if="isProcessing && musicListToAd && musicListToAd.length > 0" class="progress-container">
-          <div class="progress-text">批量添加中...</div>
+          <div class="progress-text">{{ $t('playlist.batchAdding') }}</div>
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
           </div>
           <div class="progress-info">
-            {{ progress.current }} / {{ progress.total }} (成功{{ progress.added }}，跳过{{ progress.skipped }})
+            {{ progress.current }} / {{ progress.total }} ({{ $t('playlist.success') }}{{ progress.added }}，{{ $t('playlist.skipped') }}{{ progress.skipped }})
           </div>
         </div>
 
         <!-- 单个添加时的加载提示 -->
         <div v-else-if="isProcessing && musicToAd" class="progress-container">
-          <div class="progress-text">添加中...</div>
+          <div class="progress-text">{{ $t('playlist.adding') }}</div>
         </div>
 
         <!-- 歌单列表 -->
@@ -42,19 +42,19 @@
             </div>
             <div class="playlist-info">
               <div class="playlist-name">{{ playlist.name }}</div>
-              <div class="playlist-count">{{ playlist.songCount }} 首歌曲</div>
+              <div class="playlist-count">{{ $t('playlist.songs', { count: playlist.songCount }) }}</div>
             </div>
           </div>
         </div>
 
         <div v-else class="empty-state">
-          <p>还没有创建歌单</p>
+          <p>{{ $t('playlist.noPlaylists') }}</p>
         </div>
       </div>
 
       <div class="modal-footer">
         <button class="btn-create" @click="showCreateModal = true">
-          + 新建歌单
+          + {{ $t('playlist.create') }}
         </button>
       </div>
     </div>

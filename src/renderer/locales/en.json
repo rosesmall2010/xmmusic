@@ -21,7 +21,8 @@
     "error": "Error",
     "success": "Success",
     "warning": "Warning",
-    "info": "Info"
+    "info": "Info",
+    "actions": "Actions"
   },
   "header": {
     "searchPlaceholder": "Search music, artists, albums...",
@@ -138,7 +139,32 @@
     "language": "Language",
     "languageDesc": "Choose the interface language",
     "chinese": "中文",
-    "english": "English"
+    "english": "English",
+    "dataManagement": "Data Management",
+    "musicLibrary": "Music Library",
+    "clearCache": "Clear Cache",
+    "clearCacheDesc": "Clear cover images and temporary files",
+    "clearCacheConfirm": "Are you sure you want to clear all cache? This will delete cover cache and temporary files.",
+    "clearCacheSuccess": "Cache cleared",
+    "clearCacheError": "Failed to clear cache",
+    "clearing": "Clearing...",
+    "searchHistory": "Search History",
+    "clearSearchHistoryDesc": "Clear all search records",
+    "clearSearchHistoryConfirm": "Are you sure you want to clear search history?",
+    "clearSearchHistorySuccess": "Search history cleared",
+    "playHistory": "Play History",
+    "clearPlayHistoryDesc": "Clear all play records",
+    "clearPlayHistoryConfirm": "Are you sure you want to clear play history?",
+    "clearPlayHistorySuccess": "Play history cleared",
+    "clearHistory": "Clear Records",
+    "clearError": "Clear failed",
+    "scanning": "Scanning...",
+    "noEnabledDirectories": "No enabled scan directories, please add and enable music directories first",
+    "deleteDirectoryConfirm": "Are you sure you want to delete directory \"{path}\"?\n\nYou can choose whether to also delete scanned music files in this directory.",
+    "deleteDirectoryFilesConfirm": "Do you want to also delete scanned music files in this directory?",
+    "appDescription": "A beautiful local music player based on Electron + Vue 3",
+    "checkUpdate": "Check for Updates",
+    "alreadyLatestVersion": "Already the latest version"
   },
   "playlist": {
     "create": "Create Playlist",
@@ -153,15 +179,23 @@
     "deleteConfirm": "Are you sure you want to delete playlist \"{name}\"?",
     "deleteSuccess": "Playlist deleted successfully",
     "deleteError": "Failed to delete playlist",
-    "addSongs": "Add Songs",
+    "addSongs": "Add to Playlist",
     "removeSong": "Remove Song",
     "addSuccess": "Added successfully",
     "addError": "Failed to add",
     "removeSuccess": "Removed successfully",
     "removeError": "Failed to remove",
-    "songs": "songs",
+    "songs": "{count} songs",
     "empty": "Playlist is empty",
-    "addSongsHint": "Click to add songs to this playlist"
+    "addSongsHint": "Click to add songs to this playlist",
+    "clear": "Clear Playlist",
+    "clearConfirm": "Are you sure you want to clear playlist \"{name}\"? This will remove {count} songs.",
+    "createdAt": "Created at",
+    "noPlaylists": "No playlists created yet",
+    "batchAdding": "Batch adding...",
+    "adding": "Adding...",
+    "success": "Success",
+    "skipped": "Skipped"
   },
   "music": {
     "title": "Title",
@@ -187,7 +221,13 @@
     "bytes": "bytes",
     "notExists": "File not exists",
     "cannotPlay": "Cannot play",
-    "statusReason": "Status Reason"
+    "statusReason": "Status Reason",
+    "selected": "{count} selected",
+    "batchDelete": "Batch Delete",
+    "batchOperation": "Batch Operation",
+    "removeFromPlaylist": "Remove from Playlist",
+    "removeFromPlaylistConfirm": "Are you sure you want to remove \"{title}\" from the playlist?",
+    "openInExplorer": "Open in File Explorer"
   },
   "tagEditor": {
     "title": "Edit Tags",
@@ -201,7 +241,11 @@
     "saveSuccess": "Saved successfully",
     "saveError": "Failed to save",
     "swapTitleArtist": "Swap",
-    "parseFromFilename": "Parse from Filename"
+    "parseFromFilename": "Parse from Filename",
+    "titlePlaceholder": "Enter song title",
+    "artistPlaceholder": "Enter artist name",
+    "albumPlaceholder": "Enter album name",
+    "saving": "Saving..."
   },
   "search": {
     "placeholder": "Search music, artists, albums...",
@@ -209,7 +253,9 @@
     "results": "Search Results",
     "songs": "Songs",
     "artists": "Artists",
-    "albums": "Albums"
+    "albums": "Albums",
+    "searching": "Searching...",
+    "found": "Found {count} songs"
   },
   "favorites": {
     "title": "My Favorites",

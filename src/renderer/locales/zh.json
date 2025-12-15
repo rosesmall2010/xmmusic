@@ -21,7 +21,8 @@
     "error": "错误",
     "success": "成功",
     "warning": "警告",
-    "info": "信息"
+    "info": "信息",
+    "actions": "操作"
   },
   "header": {
     "searchPlaceholder": "搜索音乐、艺术家、专辑...",
@@ -149,15 +150,23 @@
     "deleteConfirm": "确定要删除歌单「{name}」吗？",
     "deleteSuccess": "歌单删除成功",
     "deleteError": "歌单删除失败",
-    "addSongs": "添加歌曲",
+    "addSongs": "添加到歌单",
     "removeSong": "移除歌曲",
     "addSuccess": "添加成功",
     "addError": "添加失败",
     "removeSuccess": "移除成功",
     "removeError": "移除失败",
-    "songs": "首",
+    "songs": "{count} 首歌曲",
     "empty": "歌单为空",
-    "addSongsHint": "点击添加歌曲到此歌单"
+    "addSongsHint": "点击添加歌曲到此歌单",
+    "clear": "清空歌单",
+    "clearConfirm": "确定要清空歌单\"{name}\"吗？这将删除 {count} 首歌曲。",
+    "createdAt": "创建于",
+    "noPlaylists": "还没有创建歌单",
+    "batchAdding": "批量添加中...",
+    "adding": "添加中...",
+    "success": "成功",
+    "skipped": "跳过"
   },
   "music": {
     "title": "标题",
@@ -183,12 +192,18 @@
     "bytes": "字节",
     "notExists": "文件不存在",
     "cannotPlay": "不可播放",
-    "statusReason": "状态原因"
+    "statusReason": "状态原因",
+    "selected": "已选择 {count} 首",
+    "batchDelete": "批量删除",
+    "batchOperation": "批量操作",
+    "removeFromPlaylist": "从歌单移除",
+    "removeFromPlaylistConfirm": "确定要将 \"{title}\" 从歌单中移除吗？",
+    "openInExplorer": "在文件管理器中打开"
   },
   "tagEditor": {
     "title": "编辑标签",
-    "titleLabel": "标题",
-    "artistLabel": "艺术家",
+    "titleLabel": "歌曲名",
+    "artistLabel": "歌手",
     "albumLabel": "专辑",
     "yearLabel": "年份",
     "genreLabel": "流派",
@@ -197,7 +212,11 @@
     "saveSuccess": "保存成功",
     "saveError": "保存失败",
     "swapTitleArtist": "对调",
-    "parseFromFilename": "从文件名解析"
+    "parseFromFilename": "从文件名解析",
+    "titlePlaceholder": "输入歌曲名",
+    "artistPlaceholder": "输入歌手名",
+    "albumPlaceholder": "输入专辑名",
+    "saving": "正在保存..."
   },
   "search": {
     "placeholder": "搜索音乐、艺术家、专辑...",
@@ -205,7 +224,9 @@
     "results": "搜索结果",
     "songs": "歌曲",
     "artists": "艺术家",
-    "albums": "专辑"
+    "albums": "专辑",
+    "searching": "正在搜索...",
+    "found": "找到 {count} 首歌曲"
   },
   "favorites": {
     "title": "我的收藏",

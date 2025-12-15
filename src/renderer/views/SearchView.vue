@@ -1,14 +1,14 @@
 <template>
   <div class="search-view">
     <div class="page-header">
-      <h1 class="page-title">搜索结果: "{{ query }}"</h1>
-      <p class="result-count">找到 {{ searchResults.length }} 首歌曲</p>
+      <h1 class="page-title">{{ $t('search.results') }}: "{{ query }}"</h1>
+      <p class="result-count">{{ $t('search.found', { count: searchResults.length }) }}</p>
     </div>
 
     <div class="content">
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
-        <p>正在搜索...</p>
+        <p>{{ $t('search.searching') }}</p>
       </div>
 
       <SongList
@@ -21,7 +21,7 @@
         <div class="empty-icon">
           <Search :size="64" />
         </div>
-        <p>未找到相关歌曲</p>
+        <p>{{ $t('search.noResults') }}</p>
       </div>
     </div>
   </div>

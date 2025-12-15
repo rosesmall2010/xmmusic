@@ -107,9 +107,9 @@
             <div class="dir-content">
               <div class="dir-path">{{ dir.path }}</div>
               <div class="dir-meta">
-                <span class="dir-order">顺序: {{ dir.display_order }}</span>
+                <span class="dir-order">{{ $t('settings.order') }}: {{ dir.display_order }}</span>
                 <span class="dir-status" :class="{ enabled: dir.enabled, disabled: !dir.enabled }">
-                  {{ dir.enabled ? '已启用' : '已禁用' }}
+                  {{ dir.enabled ? $t('settings.enabled') : $t('settings.disabled') }}
                 </span>
               </div>
             </div>
@@ -117,15 +117,15 @@
               <button
                 class="btn-icon"
                 @click="toggleDirEnabled(dir)"
-                :title="dir.enabled ? '禁用' : '启用'"
+                :title="dir.enabled ? $t('settings.disable') : $t('settings.enable')"
               >
                 <Power v-if="dir.enabled" :size="16" />
                 <PowerOff v-else :size="16" />
               </button>
-              <button class="btn-icon" @click="editDir(dir)" title="编辑">
+              <button class="btn-icon" @click="editDir(dir)" :title="$t('settings.edit')">
                 <Edit :size="16" />
               </button>
-              <button class="btn-icon danger" @click="deleteDir(dir)" title="删除">
+              <button class="btn-icon danger" @click="deleteDir(dir)" :title="$t('settings.delete')">
                 <Trash2 :size="16" />
               </button>
             </div>
@@ -135,56 +135,56 @@
 
       <!-- 存储与数据 -->
       <section class="settings-section">
-        <h2 class="section-title">数据管理</h2>
+        <h2 class="section-title">{{ $t('settings.dataManagement') }}</h2>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">音乐库</div>
-            <div class="setting-desc">重新扫描所有音乐文件夹</div>
+            <div class="setting-label">{{ $t('settings.musicLibrary') }}</div>
+            <div class="setting-desc">{{ $t('settings.rescanAllDesc') }}</div>
           </div>
           <div class="setting-control">
             <button class="btn-secondary" @click="rescanLibrary" :disabled="isRescanning">
-              {{ isRescanning ? '扫描中...' : '重新扫描' }}
+              {{ isRescanning ? $t('settings.scanning') : $t('settings.rescanAll') }}
             </button>
           </div>
         </div>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">清除缓存</div>
-            <div class="setting-desc">清除封面图片和临时文件</div>
+            <div class="setting-label">{{ $t('settings.clearCache') }}</div>
+            <div class="setting-desc">{{ $t('settings.clearCacheDesc') }}</div>
           </div>
           <div class="setting-control">
             <button class="btn-secondary" @click="clearCache" :disabled="isClearing">
-              {{ isClearing ? '清除中...' : '清除缓存' }}
+              {{ isClearing ? $t('settings.clearing') : $t('settings.clearCache') }}
             </button>
           </div>
         </div>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">搜索历史</div>
-            <div class="setting-desc">清除所有搜索记录</div>
+            <div class="setting-label">{{ $t('settings.searchHistory') }}</div>
+            <div class="setting-desc">{{ $t('settings.clearSearchHistoryDesc') }}</div>
           </div>
           <div class="setting-control">
-            <button class="btn-secondary" @click="clearSearchHistory">清除记录</button>
+            <button class="btn-secondary" @click="clearSearchHistory">{{ $t('settings.clearHistory') }}</button>
           </div>
         </div>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">播放历史</div>
-            <div class="setting-desc">清除所有播放记录</div>
+            <div class="setting-label">{{ $t('settings.playHistory') }}</div>
+            <div class="setting-desc">{{ $t('settings.clearPlayHistoryDesc') }}</div>
           </div>
           <div class="setting-control">
-            <button class="btn-secondary" @click="clearPlayHistory">清除记录</button>
+            <button class="btn-secondary" @click="clearPlayHistory">{{ $t('settings.clearHistory') }}</button>
           </div>
         </div>
       </section>
 
       <!-- 关于 -->
       <section class="settings-section">
-        <h2 class="section-title">关于</h2>
+        <h2 class="section-title">{{ $t('settings.about') }}</h2>
 
         <div class="about-card">
           <div class="app-logo">
@@ -192,13 +192,13 @@
           </div>
           <div class="app-info">
             <h3 class="app-name">XM Music</h3>
-            <p class="app-version">Version {{ appVersion }}</p>
-            <p class="app-desc">一个基于 Electron + Vue 3 的高颜值本地音乐播放器</p>
+            <p class="app-version">{{ $t('settings.version') }} {{ appVersion }}</p>
+            <p class="app-desc">{{ $t('settings.appDescription') }}</p>
           </div>
           <div class="app-links">
             <a href="https://github.com/zdhsoft/xmmusic" target="_blank" class="link">GitHub</a>
             <span class="divider">|</span>
-            <a href="#" class="link" @click.prevent="checkUpdate">检查更新</a>
+            <a href="#" class="link" @click.prevent="checkUpdate">{{ $t('settings.checkUpdate') }}</a>
           </div>
         </div>
       </section>
@@ -210,29 +210,29 @@
         <h3 class="dialog-title">{{ editingDir ? '编辑目录' : '添加目录' }}</h3>
         <div class="dialog-body">
           <div class="form-group">
-            <label class="form-label">目录路径</label>
+            <label class="form-label">{{ $t('settings.directoryPath') }}</label>
             <div class="form-input-group">
               <input
                 v-model="newDirPath"
                 type="text"
                 class="form-input"
-                placeholder="请输入或选择目录路径"
+                :placeholder="$t('settings.directoryPathPlaceholder')"
                 @keyup.enter="editingDir ? handleSaveEdit() : handleAddDir()"
               />
               <button
                 class="btn-secondary"
                 @click="selectDirPath"
-                title="选择目录"
+                :title="$t('settings.browse')"
               >
-                浏览
+                {{ $t('settings.browse') }}
               </button>
             </div>
           </div>
         </div>
         <div class="dialog-actions">
-          <button class="btn-secondary" @click="closeDialog">取消</button>
+          <button class="btn-secondary" @click="closeDialog">{{ $t('common.cancel') }}</button>
           <button class="btn-primary" @click="editingDir ? handleSaveEdit() : handleAddDir()">
-            {{ editingDir ? '保存' : '添加' }}
+            {{ editingDir ? $t('common.save') : $t('common.add') }}
           </button>
         </div>
       </div>
@@ -242,10 +242,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Music, Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 
+const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const dirStore = useLocalMusicDirStore()
 const isClearing = ref(false)
@@ -273,7 +275,7 @@ onMounted(async () => {
 // 添加目录
 const handleAddDir = async () => {
   if (!newDirPath.value.trim()) {
-    alert('请输入目录路径')
+    alert(t('message.directoryRequired'))
     return
   }
 
@@ -281,29 +283,29 @@ const handleAddDir = async () => {
     // 验证路径
     const validation = await dirStore.validatePath(newDirPath.value.trim())
     if (!validation.valid) {
-      alert(validation.error || '路径无效')
+      alert(validation.error || t('message.directoryInvalid'))
       return
     }
 
     // 检查是否已存在
     const existing = dirStore.directories.find(d => d.path === newDirPath.value.trim())
     if (existing) {
-      alert('该目录已存在')
+      alert(t('message.directoryExists'))
       return
     }
 
     // 检查数量限制
     if (dirStore.directories.length >= 20) {
-      alert('最多只能添加20个扫描目录')
+      alert(t('message.directoryMaxReached'))
       return
     }
 
     await dirStore.addDirectory(newDirPath.value.trim())
     newDirPath.value = ''
     showAddDirDialog.value = false
-    alert('目录添加成功')
+    alert(t('message.directoryAdded'))
   } catch (error: any) {
-    alert(error.message || '添加目录失败')
+    alert(error.message || t('message.directoryAddError'))
   }
 }
 
@@ -317,14 +319,14 @@ const editDir = (dir: { id: number; path: string; display_order: number; enabled
 // 保存编辑
 const handleSaveEdit = async () => {
   if (!editingDir.value || !newDirPath.value.trim()) {
-    alert('请输入目录路径')
+    alert(t('message.directoryRequired'))
     return
   }
 
   try {
     const validation = await dirStore.validatePath(newDirPath.value.trim())
     if (!validation.valid) {
-      alert(validation.error || '路径无效')
+      alert(validation.error || t('message.directoryInvalid'))
       return
     }
 
@@ -333,7 +335,7 @@ const handleSaveEdit = async () => {
       d => d.path === newDirPath.value.trim() && d.id !== editingDir.value!.id
     )
     if (existing) {
-      alert('该目录已存在')
+      alert(t('message.directoryExists'))
       return
     }
 
@@ -343,24 +345,24 @@ const handleSaveEdit = async () => {
     newDirPath.value = ''
     editingDir.value = null
     showAddDirDialog.value = false
-    alert('目录更新成功')
+    alert(t('message.directoryEditSuccess'))
   } catch (error: any) {
-    alert(error.message || '更新目录失败')
+    alert(error.message || t('message.directoryEditError'))
   }
 }
 
 // 删除目录
 const deleteDir = async (dir: { id: number; path: string }) => {
-  if (!confirm(`确定要删除目录 "${dir.path}" 吗？\n\n可以选择是否同时删除该目录下已扫描的音乐文件。`)) {
+  if (!confirm(t('settings.deleteDirectoryConfirm', { path: dir.path }))) {
     return
   }
 
-  const removeFiles = confirm('是否同时删除该目录下已扫描的音乐文件？')
+  const removeFiles = confirm(t('settings.deleteDirectoryFilesConfirm'))
   try {
     await dirStore.deleteDirectory(dir.id, { removeScannedFiles: removeFiles })
-    alert('目录删除成功')
+    alert(t('message.directoryDeleteSuccess'))
   } catch (error: any) {
-    alert(error.message || '删除目录失败')
+    alert(error.message || t('message.directoryDeleteError'))
   }
 }
 
@@ -381,51 +383,51 @@ const closeDialog = () => {
 }
 
 const clearCache = async () => {
-  if (!confirm('确定要清除所有缓存吗？这将删除封面缓存和临时文件。')) return
+  if (!confirm(t('settings.clearCacheConfirm'))) return
 
   isClearing.value = true
   try {
     await window.electronAPI.clearCache()
-    alert('缓存已清除')
+    alert(t('settings.clearCacheSuccess'))
   } catch (error) {
     console.error('清除缓存失败:', error)
-    alert('清除缓存失败')
+    alert(t('settings.clearCacheError'))
   } finally {
     isClearing.value = false
   }
 }
 
 const clearSearchHistory = async () => {
-  if (!confirm('确定要清除搜索历史吗？')) return
+  if (!confirm(t('settings.clearSearchHistoryConfirm'))) return
   try {
     await window.electronAPI.clearSearchHistory()
-    alert('搜索历史已清除')
+    alert(t('settings.clearSearchHistorySuccess'))
   } catch (error) {
     console.error('清除搜索历史失败:', error)
-    alert('清除失败')
+    alert(t('settings.clearError'))
   }
 }
 
 const clearPlayHistory = async () => {
-  if (!confirm('确定要清除播放历史吗？')) return
+  if (!confirm(t('settings.clearPlayHistoryConfirm'))) return
   try {
     await window.electronAPI.clearPlayHistory()
-    alert('播放历史已清除')
+    alert(t('settings.clearPlayHistorySuccess'))
   } catch (error) {
     console.error('清除播放历史失败:', error)
-    alert('清除失败')
+    alert(t('settings.clearError'))
   }
 }
 
 const rescanLibrary = async () => {
   if (isRescanning.value) return
-  if (!confirm('确定要重新扫描所有启用的音乐目录吗？这可能需要一些时间。')) return
+  if (!confirm(t('settings.rescanAllConfirm'))) return
 
   isRescanning.value = true
   try {
     const enabledDirs = await dirStore.getEnabledDirectories()
     if (enabledDirs.length === 0) {
-      alert('没有启用的扫描目录，请先添加并启用音乐目录')
+      alert(t('settings.noEnabledDirectories'))
       return
     }
 
@@ -436,17 +438,17 @@ const rescanLibrary = async () => {
       excludePaths: [],
       forceRescan: false
     })
-    alert('扫描完成')
+    alert(t('message.scanCompleted'))
   } catch (error: any) {
     console.error('扫描失败:', error)
-    alert(error.message || '扫描过程中出错')
+    alert(error.message || t('message.scanError'))
   } finally {
     isRescanning.value = false
   }
 }
 
 const checkUpdate = () => {
-  alert('当前已是最新版本')
+  alert(t('settings.alreadyLatestVersion'))
 }
 
 const handleLanguageChange = (e: Event) => {

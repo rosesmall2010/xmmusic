@@ -2,7 +2,7 @@
   <div v-if="modelValue" class="modal-overlay" @click="close">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h3>{{ isEdit ? '编辑歌单' : '新建歌单' }}</h3>
+        <h3>{{ isEdit ? $t('playlist.edit') : $t('playlist.create') }}</h3>
         <button class="close-btn" @click="close">
           <X :size="24" />
         </button>
@@ -10,11 +10,11 @@
 
       <div class="modal-body">
         <div class="form-group">
-          <label>歌单名称</label>
+          <label>{{ $t('playlist.name') }}</label>
           <input
             v-model="name"
             type="text"
-            placeholder="请输入歌单名称"
+            :placeholder="$t('playlist.namePlaceholder')"
             ref="inputRef"
             @keyup.enter="confirm"
           />
@@ -22,9 +22,9 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn-cancel" @click="close">取消</button>
+        <button class="btn-cancel" @click="close">{{ $t('common.cancel') }}</button>
         <button class="btn-confirm" @click="confirm" :disabled="!name.trim()">
-          确定
+          {{ $t('common.confirm') }}
         </button>
       </div>
     </div>

@@ -1,7 +1,7 @@
 <template>
   <div v-if="show" class="dialog-overlay" @click.self="close">
     <div class="dialog edit-tag-dialog">
-      <h3>编辑标签</h3>
+      <h3>{{ $t('tagEditor.title') }}</h3>
 
       <div class="file-info">
         <p class="filename">{{ music?.fileName }}</p>
@@ -9,11 +9,11 @@
 
       <div class="form-content">
         <div class="form-group">
-          <label>歌手 <span class="hint">(Artist)</span></label>
+          <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
           <input
             v-model="formData.artist"
             type="text"
-            placeholder="输入歌手名"
+            :placeholder="$t('tagEditor.artistPlaceholder')"
             :disabled="loading"
             @keyup.enter="save"
           />
@@ -23,27 +23,27 @@
         <div class="swap-button-container">
           <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
             <ArrowLeftRight :size="16" />
-            <span>对调</span>
+            <span>{{ $t('tagEditor.swapTitleArtist') }}</span>
           </button>
         </div>
 
         <div class="form-group">
-          <label>歌曲名 <span class="hint">(Title)</span></label>
+          <label>{{ $t('tagEditor.titleLabel') }} <span class="hint">(Title)</span></label>
           <input
             v-model="formData.title"
             type="text"
-            placeholder="输入歌曲名"
+            :placeholder="$t('tagEditor.titlePlaceholder')"
             :disabled="loading"
             @keyup.enter="save"
           />
         </div>
 
         <div class="form-group">
-          <label>专辑 <span class="hint">(Album)</span></label>
+          <label>{{ $t('tagEditor.albumLabel') }} <span class="hint">(Album)</span></label>
           <input
             v-model="formData.album"
             type="text"
-            placeholder="输入专辑名"
+            :placeholder="$t('tagEditor.albumPlaceholder')"
             :disabled="loading"
             @keyup.enter="save"
           />
@@ -53,15 +53,15 @@
       <div v-if="loading" class="loading-overlay">
         <div class="loading-content">
           <div class="spinner"></div>
-          <p>正在保存...</p>
+          <p>{{ $t('tagEditor.saving') }}</p>
         </div>
       </div>
 
       <div class="dialog-actions">
         <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
-          保存
+          {{ $t('tagEditor.save') }}
         </button>
-        <button @click="close" class="btn-secondary" :disabled="loading">取消</button>
+        <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('tagEditor.cancel') }}</button>
       </div>
     </div>
   </div>
