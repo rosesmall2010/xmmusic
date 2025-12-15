@@ -56,14 +56,20 @@ export default class ShortcutManager {
     // 先注销所有已注册的快捷键
     this.unregisterAll()
 
+    console.log(`📋 开始注册快捷键，共 ${Object.keys(shortcuts).length} 个`)
+
     // 注册新的快捷键
     for (const [action, accelerator] of Object.entries(shortcuts)) {
       if (accelerator && accelerator !== '') {
         try {
           const registered = globalShortcut.register(accelerator, () => {
+            console.log(`⌨️  [快捷键触发] ${action} (${accelerator}) - ${new Date().toLocaleTimeString()}`)
             const handler = handlers[action]
             if (handler) {
               handler()
+              console.log(`✅ [快捷键处理完成] ${action}`)
+            } else {
+              console.warn(`⚠️ [快捷键处理失败] ${action} - 未找到对应的处理器`)
             }
           })
 
@@ -76,16 +82,24 @@ export default class ShortcutManager {
         } catch (error) {
           console.error(`❌ 快捷键注册错误: ${action} -> ${accelerator}`, error)
         }
+      } else {
+        console.log(`⏭️  跳过空快捷键: ${action}`)
       }
     }
+
+    console.log(`📋 快捷键注册完成，已注册 ${this.shortcuts.size} 个快捷键`)
+    console.log(`📋 已注册的快捷键列表:`, Array.from(this.shortcuts.entries()).map(([a, k]) => `${a}: ${k}`).join(', '))
   }
 
   /**
    * 注销所有快捷键
    */
   unregisterAll(): void {
+    const count = this.shortcuts.size
+    console.log(`🗑️  [注销所有快捷键] 共 ${count} 个`)
     globalShortcut.unregisterAll()
     this.shortcuts.clear()
+    console.log(`✅ [注销完成]`)
   }
 
   /**
@@ -95,19 +109,29 @@ export default class ShortcutManager {
     // 先注销旧的快捷键（如果存在）
     const oldAccelerator = this.shortcuts.get(action)
     if (oldAccelerator) {
+      console.log(`🔄 [快捷键更新] ${action}: ${oldAccelerator} -> ${accelerator}`)
       globalShortcut.unregister(oldAccelerator)
     }
 
     if (!accelerator || accelerator === '') {
+      console.log(`⏭️  [跳过空快捷键] ${action}`)
       return true
     }
 
     try {
-      const registered = globalShortcut.register(accelerator, handler)
+      const wrappedHandler = () => {
+        console.log(`⌨️  [快捷键触发] ${action} (${accelerator}) - ${new Date().toLocaleTimeString()}`)
+        handler()
+        console.log(`✅ [快捷键处理完成] ${action}`)
+      }
+      
+      const registered = globalShortcut.register(accelerator, wrappedHandler)
       if (registered) {
         this.shortcuts.set(action, accelerator)
+        console.log(`✅ [快捷键注册成功] ${action} -> ${accelerator}`)
         return true
       } else {
+        console.warn(`⚠️ [快捷键注册失败] ${action} -> ${accelerator} (可能冲突)`)
         // 如果注册失败，尝试恢复旧的快捷键
         if (oldAccelerator) {
           globalShortcut.register(oldAccelerator, handler)
@@ -115,7 +139,7 @@ export default class ShortcutManager {
         return false
       }
     } catch (error) {
-      console.error(`快捷键注册错误: ${action} -> ${accelerator}`, error)
+      console.error(`❌ [快捷键注册错误] ${action} -> ${accelerator}`, error)
       return false
     }
   }
@@ -126,8 +150,12 @@ export default class ShortcutManager {
   unregister(action: string): void {
     const accelerator = this.shortcuts.get(action)
     if (accelerator) {
+      console.log(`🗑️  [注销快捷键] ${action} (${accelerator})`)
       globalShortcut.unregister(accelerator)
       this.shortcuts.delete(action)
+      console.log(`✅ [注销完成] ${action}`)
+    } else {
+      console.log(`ℹ️  [注销快捷键] ${action} - 未找到，可能未注册`)
     }
   }
 

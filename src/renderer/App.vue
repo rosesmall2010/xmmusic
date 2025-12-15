@@ -140,40 +140,64 @@ onMounted(async () => {
 
 // 处理快捷键
 function handleShortcutAction(action: string) {
+  console.log(`🎯 [渲染进程] 收到快捷键动作: ${action} - ${new Date().toLocaleTimeString()}`)
+  
   switch (action) {
     case 'play-pause':
+      console.log(`▶️ [播放控制] 当前状态: ${playerStore.isPlaying ? '播放中' : '暂停'}`)
       if (playerStore.isPlaying) {
         player.pause()
+        console.log(`✅ [播放控制] 已暂停`)
       } else {
         if (playerStore.currentMusic) {
           player.resume()
+          console.log(`✅ [播放控制] 已恢复播放`)
         } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
           player.play(playerStore.queue[playerStore.currentQueueIndex])
+          console.log(`✅ [播放控制] 开始播放队列中的歌曲`)
+        } else {
+          console.warn(`⚠️ [播放控制] 没有可播放的音乐`)
         }
       }
       break
     case 'previous':
+      console.log(`⏮️ [上一首] 执行中...`)
       handlePrevious()
+      console.log(`✅ [上一首] 完成`)
       break
     case 'next':
+      console.log(`⏭️ [下一首] 执行中...`)
       handleNext()
+      console.log(`✅ [下一首] 完成`)
       break
     case 'volume-up':
+      const oldVolume = playerStore.volume
       playerStore.volume = Math.min(100, playerStore.volume + 5)
       player.setVolume(playerStore.volume)
+      console.log(`🔊 [音量] ${oldVolume}% -> ${playerStore.volume}%`)
       break
     case 'volume-down':
+      const oldVol = playerStore.volume
       playerStore.volume = Math.max(0, playerStore.volume - 5)
       player.setVolume(playerStore.volume)
+      console.log(`🔉 [音量] ${oldVol}% -> ${playerStore.volume}%`)
       break
     case 'toggle-favorite':
       if (playerStore.currentMusic) {
+        console.log(`❤️ [收藏] 切换收藏状态: ${playerStore.currentMusic.title}`)
         window.electronAPI.toggleFavorite(playerStore.currentMusic.id).then(() => {
           window.dispatchEvent(new Event('favorites-updated'))
+          console.log(`✅ [收藏] 收藏状态已更新`)
         })
+      } else {
+        console.warn(`⚠️ [收藏] 没有当前播放的音乐`)
       }
       break
+    default:
+      console.warn(`⚠️ [渲染进程] 未知的快捷键动作: ${action}`)
   }
+  
+  console.log(`✅ [渲染进程] 快捷键动作处理完成: ${action}`)
 }
 
 // 处理托盘操作

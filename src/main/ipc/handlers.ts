@@ -1300,42 +1300,73 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
     // 加载并注册保存的快捷键
     ipcMain.handle('load-shortcuts', async () => {
-      if (!shortcutManager) return false
+      if (!shortcutManager) {
+        console.warn('⚠️ [加载快捷键] shortcutManager 未初始化')
+        return false
+      }
+
+      console.log('📥 [加载快捷键] 开始加载快捷键配置...')
 
       let shortcuts: ShortcutConfig = {}
       let settings: any = {}
       if (db) {
         try {
           settings = db.getAllSettings()
+          console.log('📥 [加载快捷键] 从数据库加载设置')
         } catch (error) {
           settings = loadSettingsFromFile()
+          console.log('📥 [加载快捷键] 从文件加载设置')
         }
       } else {
         settings = loadSettingsFromFile()
+        console.log('📥 [加载快捷键] 从文件加载设置（数据库未初始化）')
       }
 
       if (settings.shortcuts) {
         shortcuts = settings.shortcuts
+        console.log(`📥 [加载快捷键] 使用保存的快捷键配置，共 ${Object.keys(shortcuts).length} 个`)
       } else {
         shortcuts = await shortcutManager.getDefaultShortcuts()
+        console.log(`📥 [加载快捷键] 使用默认快捷键配置，共 ${Object.keys(shortcuts).length} 个`)
       }
 
       // 注册快捷键
       const handlers: Record<string, () => void> = {
-        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
-        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
-        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
-        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
-        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
+        'play-pause': () => {
+          console.log(`📤 [IPC发送] shortcut-action: play-pause`)
+          mainWindow?.webContents.send('shortcut-action', 'play-pause')
+        },
+        'previous': () => {
+          console.log(`📤 [IPC发送] shortcut-action: previous`)
+          mainWindow?.webContents.send('shortcut-action', 'previous')
+        },
+        'next': () => {
+          console.log(`📤 [IPC发送] shortcut-action: next`)
+          mainWindow?.webContents.send('shortcut-action', 'next')
+        },
+        'volume-up': () => {
+          console.log(`📤 [IPC发送] shortcut-action: volume-up`)
+          mainWindow?.webContents.send('shortcut-action', 'volume-up')
+        },
+        'volume-down': () => {
+          console.log(`📤 [IPC发送] shortcut-action: volume-down`)
+          mainWindow?.webContents.send('shortcut-action', 'volume-down')
+        },
         'toggle-window': () => {
+          console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)
           if (mainWindow?.isVisible()) {
             mainWindow.hide()
+            console.log(`✅ [窗口切换] 已隐藏`)
           } else {
             mainWindow?.show()
             mainWindow?.focus()
+            console.log(`✅ [窗口切换] 已显示并聚焦`)
           }
         },
-        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+        'toggle-favorite': () => {
+          console.log(`📤 [IPC发送] shortcut-action: toggle-favorite`)
+          mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+        }
       }
 
       const parsedShortcuts: Record<string, string> = {}
