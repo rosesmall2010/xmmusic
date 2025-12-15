@@ -41,12 +41,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, shallowRef, triggerRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Heart } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem } from '@shared/types/music'
 
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const { play } = usePlayer()
 const songs = shallowRef<MusicItem[]>([]) // 使用 shallowRef 优化性能
