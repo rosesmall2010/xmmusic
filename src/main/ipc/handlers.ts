@@ -1250,24 +1250,50 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     })
 
     ipcMain.handle('register-all-shortcuts', async (_, shortcuts: ShortcutConfig) => {
-      if (!shortcutManager) return false
+      if (!shortcutManager) {
+        console.warn('⚠️ [注册快捷键] shortcutManager 未初始化')
+        return false
+      }
+
+      console.log(`📝 [注册快捷键] 开始注册 ${Object.keys(shortcuts).length} 个快捷键`)
 
       // 创建处理函数映射
       const handlers: Record<string, () => void> = {
-        'play-pause': () => mainWindow?.webContents.send('shortcut-action', 'play-pause'),
-        'previous': () => mainWindow?.webContents.send('shortcut-action', 'previous'),
-        'next': () => mainWindow?.webContents.send('shortcut-action', 'next'),
-        'volume-up': () => mainWindow?.webContents.send('shortcut-action', 'volume-up'),
-        'volume-down': () => mainWindow?.webContents.send('shortcut-action', 'volume-down'),
+        'play-pause': () => {
+          console.log(`📤 [IPC发送] shortcut-action: play-pause`)
+          mainWindow?.webContents.send('shortcut-action', 'play-pause')
+        },
+        'previous': () => {
+          console.log(`📤 [IPC发送] shortcut-action: previous`)
+          mainWindow?.webContents.send('shortcut-action', 'previous')
+        },
+        'next': () => {
+          console.log(`📤 [IPC发送] shortcut-action: next`)
+          mainWindow?.webContents.send('shortcut-action', 'next')
+        },
+        'volume-up': () => {
+          console.log(`📤 [IPC发送] shortcut-action: volume-up`)
+          mainWindow?.webContents.send('shortcut-action', 'volume-up')
+        },
+        'volume-down': () => {
+          console.log(`📤 [IPC发送] shortcut-action: volume-down`)
+          mainWindow?.webContents.send('shortcut-action', 'volume-down')
+        },
         'toggle-window': () => {
+          console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)
           if (mainWindow?.isVisible()) {
             mainWindow.hide()
+            console.log(`✅ [窗口切换] 已隐藏`)
           } else {
             mainWindow?.show()
             mainWindow?.focus()
+            console.log(`✅ [窗口切换] 已显示并聚焦`)
           }
         },
-        'toggle-favorite': () => mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+        'toggle-favorite': () => {
+          console.log(`📤 [IPC发送] shortcut-action: toggle-favorite`)
+          mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
+        }
       }
 
       // 转换快捷键格式
