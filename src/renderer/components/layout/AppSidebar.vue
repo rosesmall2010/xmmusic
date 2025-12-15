@@ -93,10 +93,6 @@ import { useI18n } from 'vue-i18n'
 import { Music, Folder, Heart, Clock, ListMusic } from 'lucide-vue-next'
 
 const router = useRouter()
-const totalCount = ref(0)
-const playlists = ref<any[]>([])
-
-const router = useRouter()
 const { t } = useI18n()
 const totalCount = ref(0)
 const playlists = ref<any[]>([])
