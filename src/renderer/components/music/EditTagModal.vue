@@ -1,125 +1,136 @@
 <template>
   <div v-if="show" class="dialog-overlay" @click.self="close">
-    <div class="dialog edit-tag-dialog">
+    <div class="dialog edit-tag-dialog" :class="{ 'has-id3': rawID3Tags }">
       <h3>{{ $t('tagEditor.title') }}</h3>
 
       <div class="file-info">
         <p class="filename">{{ music?.fileName }}</p>
       </div>
 
-      <!-- ID3元数据信息区域 -->
-      <div v-if="rawID3Tags" class="id3-metadata-section">
-        <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
-        <div class="metadata-display">
-          <div class="metadata-group">
-            <label>{{ $t('tagEditor.rawMetadata') }}</label>
-            <div class="metadata-info">
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
-                <span class="metadata-value">{{ rawID3Tags.artist || '-' }}</span>
-              </div>
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
-                <span class="metadata-value">{{ rawID3Tags.title || '-' }}</span>
-              </div>
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
-                <span class="metadata-value">{{ rawID3Tags.album || '-' }}</span>
-              </div>
-              <div v-if="rawID3Tags.year" class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.yearLabel') }}:</span>
-                <span class="metadata-value">{{ rawID3Tags.year }}</span>
-              </div>
-              <div v-if="rawID3Tags.genre" class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.genreLabel') }}:</span>
-                <span class="metadata-value">{{ rawID3Tags.genre }}</span>
-              </div>
+      <div class="main-content">
+        <!-- 左侧：表单编辑区域 -->
+        <div class="form-section">
+          <h4 class="section-title">{{ $t('tagEditor.editInfo') }}</h4>
+          <div class="form-content">
+            <div class="form-group">
+              <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
+              <input
+                v-model="formData.artist"
+                type="text"
+                :placeholder="$t('tagEditor.artistPlaceholder')"
+                :disabled="loading"
+                @keyup.enter="save"
+              />
+            </div>
+
+            <!-- Swap Button -->
+            <div class="swap-button-container">
+              <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
+                <ArrowLeftRight :size="16" />
+                <span>{{ $t('tagEditor.swapTitleArtist') }}</span>
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label>{{ $t('tagEditor.titleLabel') }} <span class="hint">(Title)</span></label>
+              <input
+                v-model="formData.title"
+                type="text"
+                :placeholder="$t('tagEditor.titlePlaceholder')"
+                :disabled="loading"
+                @keyup.enter="save"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>{{ $t('tagEditor.albumLabel') }} <span class="hint">(Album)</span></label>
+              <input
+                v-model="formData.album"
+                type="text"
+                :placeholder="$t('tagEditor.albumPlaceholder')"
+                :disabled="loading"
+                @keyup.enter="save"
+              />
             </div>
           </div>
+        </div>
 
-          <!-- 转换后的元数据显示 -->
-          <div v-if="convertedTags" class="metadata-group">
-            <label>{{ $t('tagEditor.convertedMetadata') }}</label>
-            <div class="metadata-info">
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
-                <span class="metadata-value converted">{{ convertedTags.artist || '-' }}</span>
-              </div>
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
-                <span class="metadata-value converted">{{ convertedTags.title || '-' }}</span>
-              </div>
-              <div class="metadata-item">
-                <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
-                <span class="metadata-value converted">{{ convertedTags.album || '-' }}</span>
+        <!-- 分隔线 -->
+        <div v-if="rawID3Tags || loadingMetadata" class="divider"></div>
+
+        <!-- 右侧：ID3元数据信息区域 -->
+        <div v-if="rawID3Tags || loadingMetadata" class="id3-section">
+          <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
+          
+          <div v-if="loadingMetadata" class="loading-metadata">
+            {{ $t('tagEditor.loadingMetadata') }}
+          </div>
+
+          <div v-else-if="rawID3Tags" class="metadata-display">
+            <!-- 原始元数据 -->
+            <div class="metadata-group">
+              <label>{{ $t('tagEditor.rawMetadata') }}</label>
+              <div class="metadata-info">
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
+                  <span class="metadata-value">{{ rawID3Tags.artist || '-' }}</span>
+                </div>
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
+                  <span class="metadata-value">{{ rawID3Tags.title || '-' }}</span>
+                </div>
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
+                  <span class="metadata-value">{{ rawID3Tags.album || '-' }}</span>
+                </div>
+                <div v-if="rawID3Tags.year" class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.yearLabel') }}:</span>
+                  <span class="metadata-value">{{ rawID3Tags.year }}</span>
+                </div>
+                <div v-if="rawID3Tags.genre" class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.genreLabel') }}:</span>
+                  <span class="metadata-value">{{ rawID3Tags.genre }}</span>
+                </div>
               </div>
             </div>
+
+            <!-- 转换后的元数据显示 -->
+            <div v-if="convertedTags" class="metadata-group converted-group">
+              <label>{{ $t('tagEditor.convertedMetadata') }}</label>
+              <div class="metadata-info converted-info">
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
+                  <span class="metadata-value converted">{{ convertedTags.artist || '-' }}</span>
+                </div>
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
+                  <span class="metadata-value converted">{{ convertedTags.title || '-' }}</span>
+                </div>
+                <div class="metadata-item">
+                  <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
+                  <span class="metadata-value converted">{{ convertedTags.album || '-' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 编码转换按钮 -->
+            <div class="encoding-actions">
+              <button @click="convertFromGB2312" class="btn-convert" :disabled="loading || !rawID3Tags">
+                {{ $t('tagEditor.convertFromGB2312') }}
+              </button>
+              <button @click="convertFromGBK" class="btn-convert" :disabled="loading || !rawID3Tags">
+                {{ $t('tagEditor.convertFromGBK') }}
+              </button>
+              <button
+                v-if="convertedTags"
+                @click="applyConvertedTags"
+                class="btn-save-converted"
+                :disabled="loading"
+              >
+                {{ $t('tagEditor.saveConverted') }}
+              </button>
+            </div>
           </div>
-        </div>
-
-        <!-- 编码转换按钮 -->
-        <div class="encoding-actions">
-          <button @click="convertFromGB2312" class="btn-convert" :disabled="loading || !rawID3Tags">
-            {{ $t('tagEditor.convertFromGB2312') }}
-          </button>
-          <button @click="convertFromGBK" class="btn-convert" :disabled="loading || !rawID3Tags">
-            {{ $t('tagEditor.convertFromGBK') }}
-          </button>
-          <button
-            v-if="convertedTags"
-            @click="applyConvertedTags"
-            class="btn-save-converted"
-            :disabled="loading"
-          >
-            {{ $t('tagEditor.saveConverted') }}
-          </button>
-        </div>
-      </div>
-
-      <div v-if="loadingMetadata" class="loading-metadata">
-        {{ $t('tagEditor.loadingMetadata') }}
-      </div>
-
-      <div class="form-content">
-        <div class="form-group">
-          <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
-          <input
-            v-model="formData.artist"
-            type="text"
-            :placeholder="$t('tagEditor.artistPlaceholder')"
-            :disabled="loading"
-            @keyup.enter="save"
-          />
-        </div>
-
-        <!-- Swap Button -->
-        <div class="swap-button-container">
-          <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
-            <ArrowLeftRight :size="16" />
-            <span>{{ $t('tagEditor.swapTitleArtist') }}</span>
-          </button>
-        </div>
-
-        <div class="form-group">
-          <label>{{ $t('tagEditor.titleLabel') }} <span class="hint">(Title)</span></label>
-          <input
-            v-model="formData.title"
-            type="text"
-            :placeholder="$t('tagEditor.titlePlaceholder')"
-            :disabled="loading"
-            @keyup.enter="save"
-          />
-        </div>
-
-        <div class="form-group">
-          <label>{{ $t('tagEditor.albumLabel') }} <span class="hint">(Album)</span></label>
-          <input
-            v-model="formData.album"
-            type="text"
-            :placeholder="$t('tagEditor.albumPlaceholder')"
-            :disabled="loading"
-            @keyup.enter="save"
-          />
         </div>
       </div>
 
@@ -377,6 +388,12 @@ const close = () => {
 .edit-tag-dialog {
   width: 500px;
   max-width: 90%;
+  transition: width 0.3s ease;
+}
+
+/* 当有ID3信息时，对话框变宽 */
+.edit-tag-dialog.has-id3 {
+  width: 850px;
 }
 
 .file-info {
@@ -391,6 +408,44 @@ const close = () => {
   color: var(--text-secondary);
   margin: 0;
   word-break: break-all;
+}
+
+/* 主内容区域：左右两栏布局 */
+.main-content {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+}
+
+/* 左侧表单区域 */
+.form-section {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 分隔线 */
+.divider {
+  width: 1px;
+  background: var(--border-color);
+  margin: 0 var(--spacing-lg);
+  align-self: stretch;
+}
+
+/* 右侧ID3信息区域 */
+.id3-section {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 var(--spacing-md) 0;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .form-content {
@@ -559,25 +614,12 @@ const close = () => {
   cursor: not-allowed;
 }
 
-.id3-metadata-section {
-  margin-bottom: var(--spacing-lg);
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-}
-
-.section-title {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-color);
-  margin: 0 0 var(--spacing-md) 0;
-}
-
+/* ID3元数据显示区域 */
 .metadata-display {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  flex: 1;
 }
 
 .metadata-group {
@@ -594,9 +636,20 @@ const close = () => {
 
 .metadata-info {
   padding: var(--spacing-sm);
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border-radius: var(--radius-base);
   border: 1px solid var(--border-color);
+}
+
+.converted-group {
+  margin-top: var(--spacing-sm);
+}
+
+.converted-info {
+  background: var(--bg-primary);
+  border-color: var(--color-primary);
+  border-width: 1px;
+  border-style: solid;
 }
 
 .metadata-item {
@@ -606,10 +659,15 @@ const close = () => {
   font-size: var(--font-size-sm);
 }
 
+.metadata-item:not(:last-child) {
+  border-bottom: 1px dashed var(--border-color);
+}
+
 .metadata-label {
   font-weight: 500;
   color: var(--text-secondary);
-  min-width: 60px;
+  min-width: 50px;
+  flex-shrink: 0;
 }
 
 .metadata-value {
@@ -623,6 +681,7 @@ const close = () => {
   font-weight: 500;
 }
 
+/* 编码转换按钮 */
 .encoding-actions {
   display: flex;
   gap: var(--spacing-sm);
@@ -675,9 +734,27 @@ const close = () => {
 }
 
 .loading-metadata {
-  padding: var(--spacing-md);
+  padding: var(--spacing-xl);
   text-align: center;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+/* 响应式设计：小屏幕时恢复上下布局 */
+@media (max-width: 768px) {
+  .edit-tag-dialog.has-id3 {
+    width: 90%;
+  }
+  
+  .main-content {
+    flex-direction: column;
+    gap: var(--spacing-lg);
+  }
+  
+  .divider {
+    width: 100%;
+    height: 1px;
+    margin: var(--spacing-md) 0;
+  }
 }
 </style>

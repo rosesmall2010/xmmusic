@@ -271,6 +271,7 @@
   },
   "tagEditor": {
     "title": "Edit Tags",
+    "editInfo": "Edit Info",
     "titleLabel": "Title",
     "artistLabel": "Artist",
     "albumLabel": "Album",

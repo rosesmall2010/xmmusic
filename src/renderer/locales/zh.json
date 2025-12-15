@@ -271,6 +271,7 @@
   },
   "tagEditor": {
     "title": "编辑标签",
+    "editInfo": "编辑信息",
     "titleLabel": "歌曲名",
     "artistLabel": "歌手",
     "albumLabel": "专辑",
