@@ -117,6 +117,8 @@ interface Props {
   musicIds?: number[]
 }
 
+const { t } = useI18n()
+
 const props = withDefaults(defineProps<Props>(), {
   music: null,
   musicIds: () => []
@@ -207,7 +209,7 @@ const selectCover = async () => {
     }
   } catch (error: any) {
     console.error('选择封面失败:', error)
-    alert(`选择封面失败: ${error.message}`)
+    alert(t('metadataEdit.selectCoverError') + ': ' + error.message)
   }
 }
 
@@ -221,14 +223,14 @@ const extractCover = async () => {
 
   try {
     loading.value = true
-    loadingText.value = '正在提取封面...'
+    loadingText.value = t('metadataEdit.extractingCover')
 
     // 选择保存位置
     const savePath = await window.electronAPI.showSaveDialog({
       title: t('metadataEdit.saveCoverImage'),
       defaultPath: `${currentMusic.value.title}_cover.jpg`,
       filters: [
-        { name: '图片文件', extensions: ['jpg', 'jpeg', 'png'] }
+        { name: t('metadataEdit.imageFiles'), extensions: ['jpg', 'jpeg', 'png'] }
       ]
     })
 
@@ -236,11 +238,11 @@ const extractCover = async () => {
       await window.electronAPI.extractMusicCover(currentMusic.value.id, savePath)
       coverPath.value = savePath
       formData.value.coverPath = savePath
-      alert('封面提取成功！')
+      alert(t('metadataEdit.extractSuccess'))
     }
   } catch (error: any) {
     console.error('提取封面失败:', error)
-    alert(`提取封面失败: ${error.message}`)
+    alert(t('metadataEdit.extractError') + ': ' + error.message)
   } finally {
     loading.value = false
   }
@@ -248,7 +250,7 @@ const extractCover = async () => {
 
 const save = async () => {
   if (!hasChanges.value) {
-    alert('请至少修改一个字段')
+    alert(t('metadataEdit.atLeastOneField'))
     return
   }
 
@@ -268,20 +270,20 @@ const save = async () => {
 
     if (isBatch.value) {
       // 批量更新
-      loadingText.value = `正在更新 ${props.musicIds.length} 首歌曲...`
+      loadingText.value = t('metadataEdit.updating', { count: props.musicIds.length })
       const result = await window.electronAPI.batchUpdateMusicMetadata(props.musicIds, updates)
 
       if (result.failed > 0) {
-        alert(`更新完成：成功 ${result.success} 首，失败 ${result.failed} 首\n\n失败的文件：\n${result.errors.map(e => `- ${e.file}: ${e.error}`).join('\n')}`)
+        alert(t('metadataEdit.batchUpdateResult', { success: result.success, failed: result.failed, errors: result.errors.map(e => `- ${e.file}: ${e.error}`).join('\n') }))
       } else {
-        alert(`成功更新 ${result.success} 首歌曲的元数据`)
+        alert(t('metadataEdit.batchUpdateSuccess', { count: result.success }))
       }
     } else {
       // 单个更新
       if (!currentMusic.value) return
       loadingText.value = t('metadataEdit.saving')
       await window.electronAPI.updateMusicMetadata(currentMusic.value.id, updates)
-      alert('元数据更新成功！')
+      alert(t('metadataEdit.updateSuccess'))
     }
 
     emit('saved')

@@ -306,7 +306,17 @@
     "save": "保存",
     "cancel": "取消",
     "saving": "正在保存...",
-    "saveError": "保存失败"
+    "saveError": "保存失败",
+    "extractingCover": "正在提取封面...",
+    "extractSuccess": "封面提取成功！",
+    "extractError": "提取封面失败",
+    "selectCoverError": "选择封面失败",
+    "atLeastOneField": "请至少修改一个字段",
+    "updating": "正在更新 {count} 首歌曲...",
+    "batchUpdateResult": "更新完成：成功 {success} 首，失败 {failed} 首\n\n失败的文件：\n{errors}",
+    "batchUpdateSuccess": "成功更新 {count} 首歌曲的元数据",
+    "updateSuccess": "元数据更新成功！",
+    "imageFiles": "图片文件"
   },
   "dialog": {
     "confirm": "确认",

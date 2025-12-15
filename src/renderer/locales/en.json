@@ -342,7 +342,17 @@
     "save": "Save",
     "cancel": "Cancel",
     "saving": "Saving...",
-    "saveError": "Save failed"
+    "saveError": "Save failed",
+    "extractingCover": "Extracting cover...",
+    "extractSuccess": "Cover extracted successfully!",
+    "extractError": "Failed to extract cover",
+    "selectCoverError": "Failed to select cover",
+    "atLeastOneField": "Please modify at least one field",
+    "updating": "Updating {count} songs...",
+    "batchUpdateResult": "Update completed: {success} succeeded, {failed} failed\n\nFailed files:\n{errors}",
+    "batchUpdateSuccess": "Successfully updated metadata for {count} songs",
+    "updateSuccess": "Metadata updated successfully!",
+    "imageFiles": "Image Files"
   },
   "dialog": {
     "confirm": "Confirm",
