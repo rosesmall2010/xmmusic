@@ -112,7 +112,16 @@
           </div>
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
-          <div class="col-duration">{{ formatDuration(music.duration) }}</div>
+          <div class="col-duration">
+            <div class="duration-line">{{ formatDuration(music.duration) }}</div>
+            <div class="audio-info-line">
+              <span>{{ formatBitrate(music.bitrate) }}</span>
+              <span class="separator">|</span>
+              <span>{{ formatSampleRate(music.sampleRate) }}</span>
+              <span class="separator">|</span>
+              <span>{{ formatChannels(music.channels) }}</span>
+            </div>
+          </div>
           <div class="col-actions">
             <button
               class="action-btn"
@@ -633,6 +642,23 @@ const formatDuration = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+const formatBitrate = (bitrate: number) => {
+  if (bitrate === 0) return '-'
+  return `${bitrate} ${t('music.kbps')}`
+}
+
+const formatSampleRate = (sampleRate: number) => {
+  if (sampleRate === 0) return '-'
+  return `${sampleRate}${t('music.hz')}`
+}
+
+const formatChannels = (channels: number) => {
+  if (channels === 0) return '-'
+  if (channels === 1) return t('music.mono')
+  if (channels === 2) return t('music.stereo')
+  return `${channels}ch`
+}
+
 // Edit Tag Modal handlers
 const openEditTag = (music: MusicItem) => {
   editingMusic.value = music
@@ -868,10 +894,33 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
 }
 
 .col-duration {
-  width: 60px;
+  width: 180px;
   text-align: right;
   color: var(--text-tertiary);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+}
+
+.duration-line {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.audio-info-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.audio-info-line .separator {
+  color: var(--text-tertiary);
+  opacity: 0.5;
 }
 
 /* Item content */
