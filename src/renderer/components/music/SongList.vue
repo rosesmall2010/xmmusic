@@ -113,13 +113,15 @@
           <div class="col-album" :title="music.album || ''">{{ music.album || '-' }}</div>
           <div class="col-filename" :title="music.fileName">{{ music.fileName }}</div>
           <div class="col-duration">
-            <div class="duration-line">{{ formatDuration(music.duration) }}</div>
+            <div class="duration-line">
+              <span>{{ formatDuration(music.duration) }}</span>
+              <span class="separator">|</span>
+              <span>{{ formatChannels(music.channels) }}</span>
+            </div>
             <div class="audio-info-line">
               <span>{{ formatBitrate(music.bitrate) }}</span>
               <span class="separator">|</span>
               <span>{{ formatSampleRate(music.sampleRate) }}</span>
-              <span class="separator">|</span>
-              <span>{{ formatChannels(music.channels) }}</span>
             </div>
           </div>
           <div class="col-actions">
@@ -908,6 +910,9 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
 .duration-line {
   font-weight: 500;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .audio-info-line {
