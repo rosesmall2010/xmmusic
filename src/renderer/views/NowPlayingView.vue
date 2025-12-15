@@ -590,6 +590,7 @@ watch(
   padding: var(--spacing-xl) 0;
   color: white;
   overflow-y: auto;
+  overflow-x: hidden;
   width: 100%;
   isolation: isolate; /* 确保背景层不会影响内部堆叠 */
 }
@@ -610,6 +611,10 @@ watch(
   -webkit-app-region: drag;
   position: relative;
   z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .btn-back {
@@ -702,6 +707,8 @@ watch(
   gap: var(--spacing-2xl);
   position: relative;
   z-index: 1;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* 上半部分 - 左右分栏 */
@@ -712,6 +719,7 @@ watch(
   gap: var(--spacing-3xl);
   min-height: 0;
   overflow: hidden;
+  min-width: 0;
 }
 
 /* 左侧面板 - 封面和歌曲信息 */
@@ -815,6 +823,7 @@ watch(
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   gap: var(--spacing-md);
 }
@@ -825,6 +834,8 @@ watch(
   gap: var(--spacing-sm);
   padding-bottom: var(--spacing-md);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: hidden;
+  flex-wrap: nowrap;
 }
 
 .panel-tab {
@@ -836,6 +847,8 @@ watch(
   cursor: pointer;
   border-radius: var(--radius-base);
   transition: all var(--transition-base);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .panel-tab:hover {
@@ -1055,10 +1068,17 @@ watch(
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .progress-section {
   width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .progress-bar {
@@ -1107,6 +1127,10 @@ watch(
   gap: var(--spacing-lg);
   justify-content: center;
   flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .volume-control {
