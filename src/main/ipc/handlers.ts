@@ -1271,14 +1271,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
           console.log(`📤 [IPC发送] shortcut-action: next`)
           mainWindow?.webContents.send('shortcut-action', 'next')
         },
-        'volume-up': () => {
-          console.log(`📤 [IPC发送] shortcut-action: volume-up`)
-          mainWindow?.webContents.send('shortcut-action', 'volume-up')
-        },
-        'volume-down': () => {
-          console.log(`📤 [IPC发送] shortcut-action: volume-down`)
-          mainWindow?.webContents.send('shortcut-action', 'volume-down')
-        },
         'toggle-window': () => {
           console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)
           if (mainWindow?.isVisible()) {
@@ -1369,14 +1361,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         'next': () => {
           console.log(`📤 [IPC发送] shortcut-action: next`)
           mainWindow?.webContents.send('shortcut-action', 'next')
-        },
-        'volume-up': () => {
-          console.log(`📤 [IPC发送] shortcut-action: volume-up`)
-          mainWindow?.webContents.send('shortcut-action', 'volume-up')
-        },
-        'volume-down': () => {
-          console.log(`📤 [IPC发送] shortcut-action: volume-down`)
-          mainWindow?.webContents.send('shortcut-action', 'volume-down')
         },
         'toggle-window': () => {
           console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)

@@ -171,18 +171,6 @@ function handleShortcutAction(action: string) {
       handleNext()
       console.log(`✅ [下一首] 完成`)
       break
-    case 'volume-up':
-      const oldVolume = playerStore.volume
-      playerStore.volume = Math.min(100, playerStore.volume + 5)
-      player.setVolume(playerStore.volume)
-      console.log(`🔊 [音量] ${oldVolume}% -> ${playerStore.volume}%`)
-      break
-    case 'volume-down':
-      const oldVol = playerStore.volume
-      playerStore.volume = Math.max(0, playerStore.volume - 5)
-      player.setVolume(playerStore.volume)
-      console.log(`🔉 [音量] ${oldVol}% -> ${playerStore.volume}%`)
-      break
     case 'toggle-favorite':
       if (playerStore.currentMusic) {
         console.log(`❤️ [收藏] 切换收藏状态: ${playerStore.currentMusic.title}`)

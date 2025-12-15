@@ -8,8 +8,6 @@ export default class ShortcutManager {
     'play-pause': 'MediaPlayPause',
     'previous': 'MediaPreviousTrack',
     'next': 'MediaNextTrack',
-    'volume-up': 'CommandOrControl+Up',
-    'volume-down': 'CommandOrControl+Down',
     'toggle-window': 'CommandOrControl+M',
     'toggle-favorite': 'CommandOrControl+F'
   }
@@ -30,8 +28,6 @@ export default class ShortcutManager {
     'play-pause': 'MediaPlayPause',
     'previous': 'MediaPreviousTrack',
     'next': 'MediaNextTrack',
-    'volume-up': 'Ctrl+Shift+Up',
-    'volume-down': 'Ctrl+Shift+Down',
     'toggle-window': 'Ctrl+Alt+M',
     'toggle-favorite': 'Ctrl+Shift+F'
   }
@@ -47,6 +43,27 @@ export default class ShortcutManager {
 
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window
+
+    // 监听所有键盘输入事件
+    if (window && window.webContents) {
+      window.webContents.on('before-input-event', (event, input) => {
+        const key = input.key
+        const code = input.code
+        const type = input.type
+        const modifiers = []
+
+        if (input.control) modifiers.push('Ctrl')
+        if (input.alt) modifiers.push('Alt')
+        if (input.shift) modifiers.push('Shift')
+        if (input.meta) modifiers.push('Meta')
+        if (input.isAutoRepeat) modifiers.push('Repeat')
+
+        const modifierStr = modifiers.length > 0 ? ` [${modifiers.join('+')}]` : ''
+        console.log(`⌨️  [按键输入] ${type}: key="${key}" code="${code}"${modifierStr}`)
+      })
+
+      console.log('✅ [按键监听] 已启用全局按键监听')
+    }
   }
 
   /**

@@ -36,6 +36,29 @@
           </div>
         </div>
 
+        <!-- 音频信息 -->
+        <div class="info-section">
+          <h3 class="section-title">{{ $t('music.audioInfo') }}</h3>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">{{ $t('music.bitrate') }}:</span>
+              <span class="info-value">{{ music.bitrate > 0 ? `${music.bitrate} ${$t('music.kbps')}` : '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">{{ $t('music.sampleRate') }}:</span>
+              <span class="info-value">{{ music.sampleRate > 0 ? `${music.sampleRate} ${$t('music.hz')}` : '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">{{ $t('music.channels') }}:</span>
+              <span class="info-value">{{ formatChannels(music.channels) }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">{{ $t('music.codec') }}:</span>
+              <span class="info-value">{{ music.fileExtension.toUpperCase().replace('.', '') }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 文件信息 -->
         <div class="info-section">
           <h3 class="section-title">{{ $t('music.fileInfo') }}</h3>
@@ -121,6 +144,12 @@ ${t('music.artist')}: ${props.music.artist}
 ${t('music.album')}: ${props.music.album || '-'}
 ${t('music.duration')}: ${formatDuration(props.music.duration)}
 ${t('music.hasLyrics')}: ${props.music.lyricsPath ? t('common.yes') : t('common.no')}
+
+【${t('music.audioInfo')}】
+${t('music.bitrate')}: ${props.music.bitrate > 0 ? `${props.music.bitrate} ${t('music.kbps')}` : '-'}
+${t('music.sampleRate')}: ${props.music.sampleRate > 0 ? `${props.music.sampleRate} ${t('music.hz')}` : '-'}
+${t('music.channels')}: ${formatChannels(props.music.channels)}
+${t('music.codec')}: ${props.music.fileExtension.toUpperCase().replace('.', '')}
 
 【${t('music.fileInfo')}】
 ${t('music.fileType')}: ${props.music.fileExtension.toUpperCase().replace('.', '')}

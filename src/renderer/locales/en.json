@@ -254,7 +254,16 @@
     "copyDetails": "Copy Details",
     "cover": "Cover",
     "copySuccess": "Details copied to clipboard",
-    "copyError": "Copy failed"
+    "copyError": "Copy failed",
+    "audioInfo": "Audio Information",
+    "bitrate": "Bitrate",
+    "sampleRate": "Sample Rate",
+    "channels": "Channels",
+    "codec": "Codec",
+    "kbps": "kbps",
+    "hz": "Hz",
+    "mono": "Mono",
+    "stereo": "Stereo"
   },
   "tagEditor": {
     "title": "Edit Tags",
