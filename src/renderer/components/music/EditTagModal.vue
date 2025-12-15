@@ -240,7 +240,15 @@ const convertFromGB2312 = async () => {
 
   try {
     loading.value = true
-    const converted = await window.electronAPI.convertID3TagsEncoding(rawID3Tags.value, 'gb2312')
+    // 转换为纯对象，避免 IPC 序列化问题
+    const tagsToConvert = {
+      title: rawID3Tags.value.title || '',
+      artist: rawID3Tags.value.artist || '',
+      album: rawID3Tags.value.album || '',
+      year: rawID3Tags.value.year,
+      genre: rawID3Tags.value.genre
+    }
+    const converted = await window.electronAPI.convertID3TagsEncoding(tagsToConvert, 'gb2312')
     convertedTags.value = {
       title: converted.title,
       artist: converted.artist,
@@ -259,7 +267,15 @@ const convertFromGBK = async () => {
 
   try {
     loading.value = true
-    const converted = await window.electronAPI.convertID3TagsEncoding(rawID3Tags.value, 'gbk')
+    // 转换为纯对象，避免 IPC 序列化问题
+    const tagsToConvert = {
+      title: rawID3Tags.value.title || '',
+      artist: rawID3Tags.value.artist || '',
+      album: rawID3Tags.value.album || '',
+      year: rawID3Tags.value.year,
+      genre: rawID3Tags.value.genre
+    }
+    const converted = await window.electronAPI.convertID3TagsEncoding(tagsToConvert, 'gbk')
     convertedTags.value = {
       title: converted.title,
       artist: converted.artist,
