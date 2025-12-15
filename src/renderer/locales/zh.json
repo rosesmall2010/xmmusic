@@ -281,6 +281,33 @@
     "empty": "暂无音乐",
     "scanFolders": "扫描音乐文件夹"
   },
+  "desktopLyrics": {
+    "lock": "锁定",
+    "unlock": "解锁"
+  },
+  "metadataEdit": {
+    "edit": "编辑元数据",
+    "batchEdit": "批量编辑元数据",
+    "selected": "已选择 {count} 首歌曲",
+    "title": "标题",
+    "artist": "艺术家",
+    "album": "专辑",
+    "year": "年份",
+    "genre": "流派",
+    "cover": "封面图片",
+    "coverPreview": "封面预览",
+    "noCover": "暂无封面",
+    "remove": "移除",
+    "selectCover": "选择封面",
+    "replaceCover": "更换封面",
+    "extractFromFile": "从文件提取",
+    "saveCoverImage": "保存封面图片",
+    "leaveEmpty": "留空则不修改",
+    "save": "保存",
+    "cancel": "取消",
+    "saving": "正在保存...",
+    "saveError": "保存失败"
+  },
   "dialog": {
     "confirm": "确认",
     "cancel": "取消",

@@ -317,6 +317,33 @@
     "empty": "No music",
     "scanFolders": "Scan music folders"
   },
+  "desktopLyrics": {
+    "lock": "Lock",
+    "unlock": "Unlock"
+  },
+  "metadataEdit": {
+    "edit": "Edit Metadata",
+    "batchEdit": "Batch Edit Metadata",
+    "selected": "{count} songs selected",
+    "title": "Title",
+    "artist": "Artist",
+    "album": "Album",
+    "year": "Year",
+    "genre": "Genre",
+    "cover": "Cover Image",
+    "coverPreview": "Cover Preview",
+    "noCover": "No cover",
+    "remove": "Remove",
+    "selectCover": "Select Cover",
+    "replaceCover": "Replace Cover",
+    "extractFromFile": "Extract from File",
+    "saveCoverImage": "Save Cover Image",
+    "leaveEmpty": "Leave empty to keep unchanged",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "saveError": "Save failed"
+  },
   "dialog": {
     "confirm": "Confirm",
     "cancel": "Cancel",

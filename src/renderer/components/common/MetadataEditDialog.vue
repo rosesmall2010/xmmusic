@@ -1,50 +1,50 @@
 <template>
   <div v-if="show" class="dialog-overlay" @click.self="close">
     <div class="dialog metadata-dialog">
-      <h3>{{ isBatch ? '批量编辑元数据' : '编辑元数据' }}</h3>
+      <h3>{{ isBatch ? $t('metadataEdit.batchEdit') : $t('metadataEdit.edit') }}</h3>
 
       <div v-if="isBatch" class="batch-info">
-        <p>已选择 {{ musicIds.length }} 首歌曲</p>
+        <p>{{ $t('metadataEdit.selected', { count: musicIds.length }) }}</p>
       </div>
 
       <div class="form-content">
         <div class="form-group">
-          <label>标题</label>
+          <label>{{ $t('metadataEdit.title') }}</label>
           <input
             v-model="formData.title"
             type="text"
-            placeholder="留空则不修改"
+            :placeholder="$t('metadataEdit.leaveEmpty')"
             :disabled="loading"
           />
         </div>
 
         <div class="form-group">
-          <label>艺术家</label>
+          <label>{{ $t('metadataEdit.artist') }}</label>
           <input
             v-model="formData.artist"
             type="text"
-            placeholder="留空则不修改"
+            :placeholder="$t('metadataEdit.leaveEmpty')"
             :disabled="loading"
           />
         </div>
 
         <div class="form-group">
-          <label>专辑</label>
+          <label>{{ $t('metadataEdit.album') }}</label>
           <input
             v-model="formData.album"
             type="text"
-            placeholder="留空则不修改"
+            :placeholder="$t('metadataEdit.leaveEmpty')"
             :disabled="loading"
           />
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label>年份</label>
+            <label>{{ $t('metadataEdit.year') }}</label>
             <input
               v-model.number="formData.year"
               type="number"
-              placeholder="留空则不修改"
+              :placeholder="$t('metadataEdit.leaveEmpty')"
               min="1900"
               max="2100"
               :disabled="loading"
@@ -52,29 +52,29 @@
           </div>
 
           <div class="form-group">
-            <label>流派</label>
+            <label>{{ $t('metadataEdit.genre') }}</label>
             <input
               v-model="formData.genre"
               type="text"
-              placeholder="留空则不修改"
+              :placeholder="$t('metadataEdit.leaveEmpty')"
               :disabled="loading"
             />
           </div>
         </div>
 
         <div class="form-group">
-          <label>封面图片</label>
+          <label>{{ $t('metadataEdit.cover') }}</label>
           <div class="cover-section">
             <div v-if="coverPreview" class="cover-preview">
-              <img :src="coverPreview" alt="封面预览" />
-              <button @click="removeCover" class="btn-remove-cover" :disabled="loading">移除</button>
+              <img :src="coverPreview" :alt="$t('metadataEdit.coverPreview')" />
+              <button @click="removeCover" class="btn-remove-cover" :disabled="loading">{{ $t('metadataEdit.remove') }}</button>
             </div>
             <div v-else class="cover-placeholder">
-              <span>暂无封面</span>
+              <span>{{ $t('metadataEdit.noCover') }}</span>
             </div>
             <div class="cover-actions">
               <button @click="selectCover" class="btn-select-cover" :disabled="loading">
-                {{ coverPath ? '更换封面' : '选择封面' }}
+                {{ coverPath ? $t('metadataEdit.replaceCover') : $t('metadataEdit.selectCover') }}
               </button>
               <button
                 v-if="!isBatch && currentMusic"
@@ -82,7 +82,7 @@
                 class="btn-extract-cover"
                 :disabled="loading"
               >
-                从文件提取
+                {{ $t('metadataEdit.extractFromFile') }}
               </button>
             </div>
           </div>
@@ -97,10 +97,10 @@
       </div>
 
       <div class="dialog-actions">
-        <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
-          保存
-        </button>
-        <button @click="close" class="btn-secondary" :disabled="loading">取消</button>
+          <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
+            {{ $t('metadataEdit.save') }}
+          </button>
+        <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('metadataEdit.cancel') }}</button>
       </div>
     </div>
   </div>
@@ -108,6 +108,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { MusicItem } from '@shared/types/music'
 
 interface Props {
@@ -224,7 +225,7 @@ const extractCover = async () => {
 
     // 选择保存位置
     const savePath = await window.electronAPI.showSaveDialog({
-      title: '保存封面图片',
+      title: t('metadataEdit.saveCoverImage'),
       defaultPath: `${currentMusic.value.title}_cover.jpg`,
       filters: [
         { name: '图片文件', extensions: ['jpg', 'jpeg', 'png'] }
@@ -278,7 +279,7 @@ const save = async () => {
     } else {
       // 单个更新
       if (!currentMusic.value) return
-      loadingText.value = '正在保存...'
+      loadingText.value = t('metadataEdit.saving')
       await window.electronAPI.updateMusicMetadata(currentMusic.value.id, updates)
       alert('元数据更新成功！')
     }
@@ -287,7 +288,7 @@ const save = async () => {
     close()
   } catch (error: any) {
     console.error('保存失败:', error)
-    alert(`保存失败: ${error.message}`)
+    alert(t('metadataEdit.saveError') + ': ' + error.message)
   } finally {
     loading.value = false
     loadingText.value = ''

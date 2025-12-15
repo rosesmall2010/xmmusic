@@ -1,17 +1,17 @@
 <template>
   <div class="desktop-lyrics-window" :class="{ locked }">
     <div v-if="!locked" class="control-bar">
-      <button class="control-btn" @click="toggleLock" title="锁定">
+      <button class="control-btn" @click="toggleLock" :title="$t('desktopLyrics.lock')">
         <Lock :size="14" />
       </button>
-      <button class="control-btn close-btn" @click="closeWindow" title="关闭">
+      <button class="control-btn close-btn" @click="closeWindow" :title="$t('common.close')">
         ×
       </button>
     </div>
 
     <div class="lyrics-content">
       <div class="current-line">
-        {{ currentLine || '暂无歌词' }}
+        {{ currentLine || $t('nowPlaying.noLyrics') }}
       </div>
     </div>
   </div>
@@ -19,10 +19,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { parseLrc, type LyricLine } from '@/utils/lrcParser'
 import { Lock } from 'lucide-vue-next'
 
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const locked = ref(false)
 const lyrics = ref<LyricLine[]>([])
@@ -32,7 +34,7 @@ const currentLine = computed(() => {
   if (currentLyricIndex.value >= 0 && lyrics.value[currentLyricIndex.value]) {
     return lyrics.value[currentLyricIndex.value].text
   }
-  return playerStore.currentMusic?.title || '暂无播放'
+  return playerStore.currentMusic?.title || t('player.noMusic')
 })
 
 const currentMusic = computed(() => playerStore.currentMusic)
