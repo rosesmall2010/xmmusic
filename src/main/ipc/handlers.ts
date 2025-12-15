@@ -91,33 +91,34 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       if (!normalBounds && !mainWindow.isFullScreen()) {
         normalBounds = mainWindow.getBounds()
       }
-      
+
       isMiniMode = true
-      
+
       // 禁用窗口大小调整
       mainWindow.setResizable(false)
       mainWindow.setMinimumSize(MINI_WIDTH, MINI_HEIGHT)
       mainWindow.setMaximumSize(MINI_WIDTH, MINI_HEIGHT)
       mainWindow.setSize(MINI_WIDTH, MINI_HEIGHT, true)
       mainWindow.setAlwaysOnTop(true)
-      
+
       // 添加事件监听器
       mainWindow.on('resize', handleWindowResize)
       mainWindow.on('move', handleWindowMove)
     } else {
       // 退出迷你模式
       isMiniMode = false
-      
+
       // 移除事件监听器
       mainWindow.removeListener('resize', handleWindowResize)
       mainWindow.removeListener('move', handleWindowMove)
-      
+
       // 恢复窗口大小调整
       mainWindow.setResizable(true)
       mainWindow.setAlwaysOnTop(false)
       mainWindow.setMinimumSize(800, 600)
-      mainWindow.setMaximumSize(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
-      
+      // 移除最大尺寸限制，使用一个很大的合理值（9999x9999 足够大，且不会导致转换错误）
+      mainWindow.setMaximumSize(9999, 9999)
+
       if (normalBounds) {
         mainWindow.setBounds(normalBounds, true)
         normalBounds = null  // 重置为null,防止下次保存mini窗口尺寸
