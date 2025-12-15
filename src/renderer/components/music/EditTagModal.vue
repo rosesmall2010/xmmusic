@@ -65,10 +65,10 @@
           <button @click="convertFromGBK" class="btn-convert" :disabled="loading || !rawID3Tags">
             {{ $t('tagEditor.convertFromGBK') }}
           </button>
-          <button 
-            v-if="convertedTags" 
-            @click="applyConvertedTags" 
-            class="btn-save-converted" 
+          <button
+            v-if="convertedTags"
+            @click="applyConvertedTags"
+            class="btn-save-converted"
             :disabled="loading"
           >
             {{ $t('tagEditor.saveConverted') }}

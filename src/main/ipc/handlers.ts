@@ -1017,7 +1017,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('convert-id3-tags-encoding', async (_, rawTags: any, sourceEncoding: string) => {
-    return id3Fixer.convertID3TagsEncoding(rawTags, sourceEncoding)
+    // 验证编码类型
+    const validEncodings = ['utf8', 'gbk', 'gb2312', 'big5', 'utf16le', 'latin1'] as const
+    if (!validEncodings.includes(sourceEncoding as any)) {
+      throw new Error(`不支持的编码类型: ${sourceEncoding}`)
+    }
+    return id3Fixer.convertID3TagsEncoding(rawTags, sourceEncoding as 'utf8' | 'gbk' | 'gb2312' | 'big5' | 'utf16le' | 'latin1')
   })
 
   ipcMain.handle('detect-id3-encoding', async (_, filePath: string) => {

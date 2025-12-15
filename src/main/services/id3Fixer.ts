@@ -68,7 +68,7 @@ export default class ID3Fixer {
     try {
       const nodeID3 = getNodeID3()
       const tags = nodeID3.read(filePath)
-      
+
       if (!tags) {
         return null
       }
