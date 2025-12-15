@@ -385,7 +385,7 @@ const toggleDirEnabled = async (dir: { id: number; enabled: boolean }) => {
   try {
     await dirStore.updateDirectory(dir.id, { enabled: !dir.enabled })
   } catch (error: any) {
-    alert(error.message || '更新目录状态失败')
+    alert(error.message || t('settings.updateDirectoryStatusError'))
   }
 }
 

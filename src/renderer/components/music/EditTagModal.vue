@@ -69,9 +69,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeftRight } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 import { parseFilenameForTags } from '@/utils/parseFilename'
+
+const { t } = useI18n()
 
 interface Props {
   show: boolean
