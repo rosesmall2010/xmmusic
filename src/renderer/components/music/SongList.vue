@@ -242,6 +242,7 @@ import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
+import MetadataEditDialog from '@/components/common/MetadataEditDialog.vue'
 import type { MusicItem } from '@shared/types/music'
 import { useElementSize } from '@vueuse/core'
 
@@ -681,6 +682,28 @@ const openEditTag = (music: MusicItem) => {
 const closeEditTag = () => {
   showEditTag.value = false
   editingMusic.value = null
+}
+
+// Edit Metadata Dialog handlers
+const showEditMetadata = ref(false)
+const editingMetadataMusic = ref<MusicItem | null>(null)
+
+const openEditMetadata = (music: MusicItem) => {
+  editingMetadataMusic.value = music
+  showEditMetadata.value = true
+  closeContextMenu()
+}
+
+const closeEditMetadata = () => {
+  showEditMetadata.value = false
+  editingMetadataMusic.value = null
+}
+
+const handleMetadataSaved = () => {
+  // 触发刷新事件
+  emit('songs-updated')
+  // 触发全局事件，通知其他组件更新
+  window.dispatchEvent(new CustomEvent('music-metadata-updated'))
 }
 
 const handleTagSaved = () => {
