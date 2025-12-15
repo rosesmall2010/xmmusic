@@ -55,6 +55,35 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   // 迷你模式状态
   let normalBounds: Electron.Rectangle | null = null
+  let isMiniMode = false
+  const MINI_WIDTH = 320
+  const MINI_HEIGHT = 480
+
+  // 监听窗口大小变化，在 mini 模式下强制保持固定大小
+  const handleWindowResize = () => {
+    if (isMiniMode) {
+      const bounds = mainWindow.getBounds()
+      // 如果窗口大小不是 mini 模式的大小，强制恢复
+      if (bounds.width !== MINI_WIDTH || bounds.height !== MINI_HEIGHT) {
+        mainWindow.setSize(MINI_WIDTH, MINI_HEIGHT, false)
+      }
+    }
+  }
+
+  // 监听窗口移动，在拖动后检查并恢复 mini 模式的大小
+  // 这在多显示器环境下特别重要，因为拖动到不同显示器时可能会触发大小变化
+  const handleWindowMove = () => {
+    if (isMiniMode) {
+      // 延迟执行，确保在显示器切换完成后恢复大小
+      setTimeout(() => {
+        const bounds = mainWindow.getBounds()
+        if (bounds.width !== MINI_WIDTH || bounds.height !== MINI_HEIGHT) {
+          console.log(`🔧 检测到 mini 窗口大小变化: ${bounds.width}x${bounds.height}，恢复为 ${MINI_WIDTH}x${MINI_HEIGHT}`)
+          mainWindow.setSize(MINI_WIDTH, MINI_HEIGHT, false)
+        }
+      }, 100)
+    }
+  }
 
   ipcMain.handle('set-mini-mode', async (_, enabled: boolean) => {
     if (enabled) {
@@ -62,13 +91,33 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       if (!normalBounds && !mainWindow.isFullScreen()) {
         normalBounds = mainWindow.getBounds()
       }
-      mainWindow.setMinimumSize(300, 100)
-      mainWindow.setSize(320, 480, true)
+      
+      isMiniMode = true
+      
+      // 禁用窗口大小调整
+      mainWindow.setResizable(false)
+      mainWindow.setMinimumSize(MINI_WIDTH, MINI_HEIGHT)
+      mainWindow.setMaximumSize(MINI_WIDTH, MINI_HEIGHT)
+      mainWindow.setSize(MINI_WIDTH, MINI_HEIGHT, true)
       mainWindow.setAlwaysOnTop(true)
+      
+      // 添加事件监听器
+      mainWindow.on('resize', handleWindowResize)
+      mainWindow.on('move', handleWindowMove)
     } else {
       // 退出迷你模式
+      isMiniMode = false
+      
+      // 移除事件监听器
+      mainWindow.removeListener('resize', handleWindowResize)
+      mainWindow.removeListener('move', handleWindowMove)
+      
+      // 恢复窗口大小调整
+      mainWindow.setResizable(true)
       mainWindow.setAlwaysOnTop(false)
       mainWindow.setMinimumSize(800, 600)
+      mainWindow.setMaximumSize(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
+      
       if (normalBounds) {
         mainWindow.setBounds(normalBounds, true)
         normalBounds = null  // 重置为null,防止下次保存mini窗口尺寸
