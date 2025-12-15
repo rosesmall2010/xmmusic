@@ -124,7 +124,7 @@ export default class ShortcutManager {
         handler()
         console.log(`✅ [快捷键处理完成] ${action}`)
       }
-      
+
       const registered = globalShortcut.register(accelerator, wrappedHandler)
       if (registered) {
         this.shortcuts.set(action, accelerator)

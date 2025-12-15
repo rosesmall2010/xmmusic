@@ -105,6 +105,7 @@ onMounted(async () => {
   // 用户可以通过点击播放按钮手动继续播放
 
   // 监听快捷键
+  console.log('🎧 [渲染进程] 注册快捷键监听器')
   window.electronAPI.onShortcutAction(handleShortcutAction)
 
   // 监听托盘操作
