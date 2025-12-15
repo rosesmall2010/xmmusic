@@ -41,7 +41,7 @@
                 <DefaultCover class="fallback-cover" mode="fill" />
                 <img
                   :src="getCoverUrl(currentMusic.coverPath)"
-                  alt="封面"
+                  :alt="$t('music.cover')"
                   @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
                 />
               </template>
@@ -488,7 +488,7 @@ const loadLyrics = async () => {
     }
   } catch (error) {
     console.error('Failed to load lyrics:', error)
-    lyrics.value = [{ time: 0, text: '歌词加载失败' }]
+    lyrics.value = [{ time: 0, text: t('nowPlaying.lyricsLoadError') }]
   }
 }
 

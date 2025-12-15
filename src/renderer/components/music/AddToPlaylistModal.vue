@@ -68,9 +68,12 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -171,16 +174,16 @@ const selectPlaylist = async (playlist: any) => {
       // 移除进度监听
       window.electronAPI.offBatchAddProgress(handleProgress)
 
-      console.log(`批量添加完成: ${result.added} 个，跳过 ${result.skipped} 个`)
+      console.log(t('playlist.batchAddComplete', { added: result.added, skipped: result.skipped }))
 
       // 显示结果提示
       if (result.added > 0) {
         const message = result.skipped > 0
-          ? `成功添加 ${result.added} 首歌曲，${result.skipped} 首已存在`
-          : `成功添加 ${result.added} 首歌曲`
+          ? t('playlist.batchAddSuccessWithSkipped', { added: result.added, skipped: result.skipped })
+          : t('playlist.batchAddSuccess', { count: result.added })
         alert(message)
       } else if (result.skipped > 0) {
-        alert(`所有歌曲已存在于该歌单中`)
+        alert(t('playlist.allSongsExist'))
       }
     } else if (props.musicToAd) {
       // 单个添加（v1.0.6 使用 music_id）
@@ -192,13 +195,13 @@ const selectPlaylist = async (playlist: any) => {
         // 先关闭处理状态，再显示提示，避免进度条闪烁
         isProcessing.value = false
         // 显示成功提示
-        alert(`已添加到歌单 "${playlist.name}"`)
+        alert(t('playlist.addedToPlaylist', { name: playlist.name }))
       } catch (error: any) {
         // 关闭处理状态
         isProcessing.value = false
         // 检查是否是重复添加的错误
         if (error?.message?.includes('UNIQUE constraint') || error?.message?.includes('已存在')) {
-          alert(`该歌曲已存在于歌单 "${playlist.name}" 中`)
+          alert(t('playlist.songAlreadyExists', { name: playlist.name }))
           return // 重复添加时不关闭对话框
         } else {
           throw error // 重新抛出其他错误
@@ -219,7 +222,7 @@ const selectPlaylist = async (playlist: any) => {
     close()
   } catch (error) {
     console.error('添加到歌单失败:', error)
-    alert('添加失败，请重试')
+    alert(t('playlist.addError'))
     // 确保在错误时也关闭处理状态
     isProcessing.value = false
     progress.value = { current: 0, total: 0, added: 0, skipped: 0 }

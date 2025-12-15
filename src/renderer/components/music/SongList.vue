@@ -84,7 +84,7 @@
                  <DefaultCover class="fallback-cover" size="small" />
                  <img
                    :src="getCoverUrl(music.coverPath)"
-                   alt="封面"
+                   :alt="$t('music.cover')"
                    loading="lazy"
                    @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
                  />
@@ -98,7 +98,7 @@
                   v-if="music.isExists === false"
                   :size="14"
                   class="status-icon status-icon-missing"
-                  :title="'文件不存在'"
+                  :title="$t('music.notExists')"
                 />
                 <AlertCircle
                   v-else-if="music.isPlayable === false"

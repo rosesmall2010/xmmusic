@@ -159,12 +159,12 @@ const save = async () => {
         close()
       }, 100)
     } else {
-      alert('保存失败，请重试')
+      alert(t('tagEditor.saveErrorRetry'))
       loading.value = false
     }
   } catch (error: any) {
     console.error('保存标签失败:', error)
-    alert(`保存失败: ${error.message}`)
+    alert(t('tagEditor.saveError') + ': ' + error.message)
     loading.value = false
   }
 }

@@ -48,7 +48,7 @@
               <DefaultCover class="fallback-cover" mode="fill" />
               <img
                 :src="getCoverUrl(music.coverPath)"
-                alt="封面"
+                :alt="$t('music.cover')"
                 @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
               />
             </template>

@@ -83,7 +83,8 @@
     "queue": "Play Queue",
     "noLyrics": "No lyrics available",
     "noMusic": "No music playing",
-    "unknownArtist": "Unknown Artist"
+    "unknownArtist": "Unknown Artist",
+    "lyricsLoadError": "Failed to load lyrics"
   },
   "miniPlayer": {
     "exitMiniMode": "Exit Mini Mode",
@@ -204,7 +205,14 @@
     "batchAdding": "Batch adding...",
     "adding": "Adding...",
     "success": "Success",
-    "skipped": "Skipped"
+    "skipped": "Skipped",
+    "batchAddComplete": "Batch add completed: {added} added, {skipped} skipped",
+    "batchAddSuccess": "Successfully added {count} songs",
+    "batchAddSuccessWithSkipped": "Successfully added {added} songs, {skipped} already exist",
+    "allSongsExist": "All songs already exist in this playlist",
+    "addedToPlaylist": "Added to playlist \"{name}\"",
+    "songAlreadyExists": "This song already exists in playlist \"{name}\"",
+    "addError": "Add failed, please try again"
   },
   "music": {
     "title": "Title",
@@ -244,7 +252,10 @@
     "fullPath": "Full Path",
     "fileHash": "File Path MD5",
     "hasLyrics": "Has Lyrics",
-    "copyDetails": "Copy Details"
+    "copyDetails": "Copy Details",
+    "cover": "Cover",
+    "copySuccess": "Details copied to clipboard",
+    "copyError": "Copy failed"
   },
   "tagEditor": {
     "title": "Edit Tags",
@@ -262,7 +273,8 @@
     "titlePlaceholder": "Enter song title",
     "artistPlaceholder": "Enter artist name",
     "albumPlaceholder": "Enter album name",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "saveErrorRetry": "Save failed, please try again"
   },
   "search": {
     "placeholder": "Search music, artists, albums...",
@@ -278,7 +290,8 @@
     "title": "My Favorites",
     "empty": "No favorites yet",
     "addHint": "Click ❤️ icon to favorite music",
-    "songs": "{count} songs"
+    "songs": "{count} songs",
+    "clearConfirm": "Are you sure you want to clear your favorites list? This will remove {count} songs."
   },
   "recent": {
     "title": "Recent Plays",

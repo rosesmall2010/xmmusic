@@ -83,7 +83,8 @@
     "queue": "播放队列",
     "noLyrics": "暂无歌词",
     "noMusic": "暂无播放",
-    "unknownArtist": "未知艺术家"
+    "unknownArtist": "未知艺术家",
+    "lyricsLoadError": "歌词加载失败"
   },
   "miniPlayer": {
     "exitMiniMode": "退出迷你模式",
@@ -136,7 +137,43 @@
     "about": "关于",
     "version": "版本",
     "author": "作者",
-    "license": "许可证"
+    "license": "许可证",
+    "language": "语言",
+    "languageDesc": "选择界面语言",
+    "chinese": "中文",
+    "english": "English",
+    "dataManagement": "数据管理",
+    "musicLibrary": "音乐库",
+    "clearCache": "清除缓存",
+    "clearCacheDesc": "清除封面图片和临时文件",
+    "clearCacheConfirm": "确定要清除所有缓存吗？这将删除封面缓存和临时文件。",
+    "clearCacheSuccess": "缓存已清除",
+    "clearCacheError": "清除缓存失败",
+    "clearing": "清除中...",
+    "searchHistory": "搜索历史",
+    "clearSearchHistoryDesc": "清除所有搜索记录",
+    "clearSearchHistoryConfirm": "确定要清除搜索历史吗？",
+    "clearSearchHistorySuccess": "搜索历史已清除",
+    "playHistory": "播放历史",
+    "clearPlayHistoryDesc": "清除所有播放记录",
+    "clearPlayHistoryConfirm": "确定要清除播放历史吗？",
+    "clearPlayHistorySuccess": "播放历史已清除",
+    "clearHistory": "清除记录",
+    "clearError": "清除失败",
+    "scanning": "扫描中...",
+    "noEnabledDirectories": "没有启用的扫描目录，请先添加并启用音乐目录",
+    "deleteDirectoryConfirm": "确定要删除目录 \"{path}\" 吗？\n\n可以选择是否同时删除该目录下已扫描的音乐文件。",
+    "deleteDirectoryFilesConfirm": "是否同时删除该目录下已扫描的音乐文件？",
+    "appDescription": "一个基于 Electron + Vue 3 的高颜值本地音乐播放器",
+    "checkUpdate": "检查更新",
+    "alreadyLatestVersion": "当前已是最新版本",
+    "maxDirectoriesReached": "已达到最大数量限制（20个）",
+    "editDirectory": "编辑目录",
+    "deleteConfirm": "确认删除",
+    "deleteDirectoryConfirmText": "确定要从扫描目录列表中删除 \"{path}\" 吗？",
+    "deleteDirectoryHint": "注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。",
+    "noDirectoriesHint": "请先添加扫描目录\n\n点击\"扫描目录管理\"按钮添加音乐目录",
+    "updateDirectoryStatusError": "更新目录状态失败"
   },
   "playlist": {
     "create": "创建歌单",
@@ -168,7 +205,14 @@
     "batchAdding": "批量添加中...",
     "adding": "添加中...",
     "success": "成功",
-    "skipped": "跳过"
+    "skipped": "跳过",
+    "batchAddComplete": "批量添加完成: {added} 个，跳过 {skipped} 个",
+    "batchAddSuccess": "成功添加 {count} 首歌曲",
+    "batchAddSuccessWithSkipped": "成功添加 {added} 首歌曲，{skipped} 首已存在",
+    "allSongsExist": "所有歌曲已存在于该歌单中",
+    "addedToPlaylist": "已添加到歌单 \"{name}\"",
+    "songAlreadyExists": "该歌曲已存在于歌单 \"{name}\" 中",
+    "addError": "添加失败，请重试"
   },
   "music": {
     "title": "标题",
@@ -208,7 +252,10 @@
     "fullPath": "完整路径",
     "fileHash": "文件路径MD5",
     "hasLyrics": "是否有歌词",
-    "copyDetails": "复制详细信息"
+    "copyDetails": "复制详细信息",
+    "cover": "封面",
+    "copySuccess": "详细信息已复制到剪贴板",
+    "copyError": "复制失败"
   },
   "tagEditor": {
     "title": "编辑标签",
@@ -226,7 +273,8 @@
     "titlePlaceholder": "输入歌曲名",
     "artistPlaceholder": "输入歌手名",
     "albumPlaceholder": "输入专辑名",
-    "saving": "正在保存..."
+    "saving": "正在保存...",
+    "saveErrorRetry": "保存失败，请重试"
   },
   "search": {
     "placeholder": "搜索音乐、艺术家、专辑...",
@@ -242,7 +290,8 @@
     "title": "我的收藏",
     "empty": "还没有收藏任何音乐",
     "addHint": "点击 ❤️ 图标收藏喜欢的音乐",
-    "songs": "{count} 首歌曲"
+    "songs": "{count} 首歌曲",
+    "clearConfirm": "确定要清空我喜欢列表吗？这将删除 {count} 首歌曲。"
   },
   "recent": {
     "title": "最近播放",

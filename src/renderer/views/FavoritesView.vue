@@ -166,7 +166,7 @@ const playAll = async () => {
 const clearList = async () => {
   if (totalCount.value === 0) return
 
-  if (!confirm(`确定要清空我喜欢列表吗？这将删除 ${totalCount.value} 首歌曲。`)) {
+  if (!confirm(t('favorites.clearConfirm', { count: totalCount.value }))) {
     return
   }
 

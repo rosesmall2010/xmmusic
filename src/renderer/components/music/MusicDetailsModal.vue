@@ -76,8 +76,11 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { X, Copy } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   show: boolean
@@ -110,27 +113,27 @@ const formatFileSize = (bytes: number) => {
 const copyDetails = () => {
   if (!props.music) return
 
-  const details = `歌曲详细信息
+  const details = `${t('music.details')}
 
-【歌曲信息】
-标题: ${props.music.title}
-歌手: ${props.music.artist}
-专辑: ${props.music.album || '-'}
-时长: ${formatDuration(props.music.duration)}
-是否有歌词: ${props.music.lyricsPath ? '是' : '否'}
+【${t('music.songInfo')}】
+${t('music.title')}: ${props.music.title}
+${t('music.artist')}: ${props.music.artist}
+${t('music.album')}: ${props.music.album || '-'}
+${t('music.duration')}: ${formatDuration(props.music.duration)}
+${t('music.hasLyrics')}: ${props.music.lyricsPath ? t('common.yes') : t('common.no')}
 
-【文件信息】
-文件类型: ${props.music.fileExtension.toUpperCase().replace('.', '')}
-文件名: ${props.music.fileName}
-完整路径: ${props.music.filePath}
-文件路径MD5: ${props.music.fileHash}
-文件大小: ${formatFileSize(props.music.fileSize)} (${props.music.fileSize.toLocaleString()} 字节)`
+【${t('music.fileInfo')}】
+${t('music.fileType')}: ${props.music.fileExtension.toUpperCase().replace('.', '')}
+${t('music.fileName')}: ${props.music.fileName}
+${t('music.fullPath')}: ${props.music.filePath}
+${t('music.fileHash')}: ${props.music.fileHash}
+${t('music.fileSize')}: ${formatFileSize(props.music.fileSize)} (${props.music.fileSize.toLocaleString()} ${t('music.bytes')})`
 
   navigator.clipboard.writeText(details).then(() => {
-    console.log('详细信息已复制到剪贴板')
+    console.log(t('music.copySuccess'))
     // TODO: 显示提示消息
   }).catch(err => {
-    console.error('复制失败:', err)
+    console.error(t('music.copyError'), err)
   })
 }
 </script>
