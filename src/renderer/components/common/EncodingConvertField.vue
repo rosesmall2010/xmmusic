@@ -54,11 +54,11 @@ const converting = ref(false)
 
 const convert = async (encoding: string) => {
   if (!props.originalValue) return
-  
+
   try {
     converting.value = true
     const result = await window.electronAPI.convertStringEncoding(props.originalValue, encoding.toLowerCase())
-    
+
     if (result.success) {
       convertedValue.value = result.result
     } else {

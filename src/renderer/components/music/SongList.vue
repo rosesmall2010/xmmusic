@@ -174,6 +174,10 @@
         <Edit :size="16" class="icon" />
         {{ $t('music.editTags') }}
       </div>
+      <div class="menu-item" @click="openEditMetadata(contextMenu.music!)">
+        <Edit :size="16" class="icon" />
+        {{ $t('music.editMetadata') }}
+      </div>
       <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
         <FolderOpen :size="16" class="icon" />
         {{ $t('music.openInExplorer') }}
@@ -218,6 +222,12 @@
       :show="showDetailsDialog"
       :music="detailsMusic"
       @close="showDetailsDialog = false"
+    />
+    <MetadataEditDialog
+      :show="showEditMetadata"
+      :music="editingMetadataMusic"
+      @close="closeEditMetadata"
+      @saved="handleMetadataSaved"
     />
   </div>
 </template>

@@ -193,19 +193,19 @@ const originalData = ref({
 // 检测字段是否为乱码
 const isFieldCorrupted = (value: string): boolean => {
   if (!value) return false
-  
+
   // 检查是否包含替换字符（Unicode 替换字符）
   if (/[\uFFFD]/.test(value)) return true
-  
+
   // 检查是否包含控制字符（除了常见的空白字符）
   if (/[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(value)) return true
-  
+
   // 检查是否看起来像乱码（包含很多非ASCII且非中文的字符）
   const nonAsciiNonChinese = value.match(/[^\x20-\x7E\u4e00-\u9fa5]/g)
   if (nonAsciiNonChinese && nonAsciiNonChinese.length > value.length * 0.3) {
     return true
   }
-  
+
   return false
 }
 
@@ -267,7 +267,7 @@ const loadMusicData = (music: MusicItem) => {
     coverPath: music.coverPath || null
   }
   coverPath.value = music.coverPath || null
-  
+
   // 保存原始数据用于编码转换
   originalData.value = {
     title: music.title,
