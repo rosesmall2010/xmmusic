@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import { setLocale } from '@/locales'
 
 export type Theme = 'light' | 'dark' | 'system'
+export type Language = 'zh' | 'en'
 
 export const useSettingsStore = defineStore('settings', () => {
   // State
   const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'dark')
+  const language = ref<Language>((localStorage.getItem('locale') as Language) || 'zh')
   const closeToTray = ref(localStorage.getItem('closeToTray') === 'true')
   const autoPlay = ref(localStorage.getItem('autoPlay') !== 'false') // Default true
   const scanOnStartup = ref(localStorage.getItem('scanOnStartup') === 'true')
@@ -30,6 +33,12 @@ export const useSettingsStore = defineStore('settings', () => {
   function toggleScanOnStartup() {
     scanOnStartup.value = !scanOnStartup.value
     localStorage.setItem('scanOnStartup', String(scanOnStartup.value))
+  }
+
+  function setLanguage(newLanguage: Language) {
+    language.value = newLanguage
+    localStorage.setItem('locale', newLanguage)
+    setLocale(newLanguage)
   }
 
   // Helper to apply theme
@@ -58,10 +67,12 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     theme,
+    language,
     closeToTray,
     autoPlay,
     scanOnStartup,
     setTheme,
+    setLanguage,
     toggleCloseToTray,
     toggleAutoPlay,
     toggleScanOnStartup

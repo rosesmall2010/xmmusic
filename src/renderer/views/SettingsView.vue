@@ -1,32 +1,45 @@
 <template>
   <div class="settings-view">
     <div class="page-header">
-      <h1 class="page-title">设置</h1>
+      <h1 class="page-title">{{ $t('settings.title') }}</h1>
     </div>
 
     <div class="settings-content">
       <!-- 常规设置 -->
       <section class="settings-section">
-        <h2 class="section-title">常规</h2>
+        <h2 class="section-title">{{ $t('settings.general') }}</h2>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">主题模式</div>
-            <div class="setting-desc">选择应用的显示风格</div>
+            <div class="setting-label">{{ $t('settings.theme') }}</div>
+            <div class="setting-desc">{{ $t('settings.themeDesc') }}</div>
           </div>
           <div class="setting-control">
             <select :value="settingsStore.theme" @change="handleThemeChange">
-              <option value="light">浅色模式</option>
-              <option value="dark">深色模式</option>
-              <option value="system">跟随系统</option>
+              <option value="light">{{ $t('settings.lightMode') }}</option>
+              <option value="dark">{{ $t('settings.darkMode') }}</option>
+              <option value="system">{{ $t('settings.systemMode') }}</option>
             </select>
           </div>
         </div>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">关闭主面板</div>
-            <div class="setting-desc">点击关闭按钮时的行为</div>
+            <div class="setting-label">{{ $t('settings.language') }}</div>
+            <div class="setting-desc">{{ $t('settings.languageDesc') }}</div>
+          </div>
+          <div class="setting-control">
+            <select :value="settingsStore.language" @change="handleLanguageChange">
+              <option value="zh">{{ $t('settings.chinese') }}</option>
+              <option value="en">{{ $t('settings.english') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-label">{{ $t('settings.closeBehavior') }}</div>
+            <div class="setting-desc">{{ $t('settings.closeBehaviorDesc') }}</div>
           </div>
           <div class="setting-control">
             <label class="switch">
@@ -37,19 +50,19 @@
               >
               <span class="slider round"></span>
             </label>
-            <span class="switch-label">{{ settingsStore.closeToTray ? '最小化到托盘' : '退出程序' }}</span>
+            <span class="switch-label">{{ settingsStore.closeToTray ? $t('settings.minimizeToTray') : $t('settings.exitApp') }}</span>
           </div>
         </div>
       </section>
 
       <!-- 播放设置 -->
       <section class="settings-section">
-        <h2 class="section-title">播放</h2>
+        <h2 class="section-title">{{ $t('settings.playback') }}</h2>
 
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">自动播放</div>
-            <div class="setting-desc">程序启动或切换歌曲时自动播放</div>
+            <div class="setting-label">{{ $t('settings.autoPlay') }}</div>
+            <div class="setting-desc">{{ $t('settings.autoPlayDesc') }}</div>
           </div>
           <div class="setting-control">
             <label class="switch">
@@ -66,23 +79,23 @@
 
       <!-- 音乐目录管理 -->
       <section class="settings-section">
-        <h2 class="section-title">音乐目录</h2>
+        <h2 class="section-title">{{ $t('settings.musicDirectories') }}</h2>
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">扫描目录</div>
-            <div class="setting-desc">添加或管理音乐扫描目录（最多20个）</div>
+            <div class="setting-label">{{ $t('settings.scanDirectories') }}</div>
+            <div class="setting-desc">{{ $t('settings.scanDirectoriesDesc') }}</div>
           </div>
           <div class="setting-control">
             <button class="btn-primary" @click="showAddDirDialog = true" :disabled="dirStore.directories.length >= 20">
               <Plus :size="16" />
-              添加目录
+              {{ $t('settings.addDirectory') }}
             </button>
           </div>
         </div>
 
-        <div v-if="dirStore.loading" class="dir-loading">加载中...</div>
+        <div v-if="dirStore.loading" class="dir-loading">{{ $t('settings.loading') }}</div>
         <div v-else-if="dirStore.directories.length === 0" class="dir-empty">
-          暂无扫描目录，请添加音乐目录
+          {{ $t('settings.noDirectories') }}
         </div>
         <div v-else class="dir-list">
           <div
@@ -434,6 +447,11 @@ const rescanLibrary = async () => {
 
 const checkUpdate = () => {
   alert('当前已是最新版本')
+}
+
+const handleLanguageChange = (e: Event) => {
+  const target = e.target as HTMLSelectElement
+  settingsStore.setLanguage(target.value as 'zh' | 'en')
 }
 
 const handleThemeChange = async (e: Event) => {

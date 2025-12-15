@@ -2,10 +2,10 @@
   <header class="app-header">
     <div class="header-left">
       <div class="nav-buttons">
-        <button class="nav-btn" @click="goBack" :disabled="!canGoBack" title="后退">
+        <button class="nav-btn" @click="goBack" :disabled="!canGoBack" :title="$t('common.back')">
           <ChevronLeft :size="20" />
         </button>
-        <button class="nav-btn" @click="goForward" :disabled="!canGoForward" title="前进">
+        <button class="nav-btn" @click="goForward" :disabled="!canGoForward" :title="$t('common.forward')">
           <ChevronRight :size="20" />
         </button>
       </div>
@@ -19,7 +19,7 @@
             ref="searchInputRef"
             v-model="searchQuery"
             type="text"
-            placeholder="搜索音乐、艺术家、专辑..."
+            :placeholder="$t('header.searchPlaceholder')"
             @keyup.enter="handleSearch"
             @focus="handleSearchFocus"
             @blur="handleSearchBlur"
@@ -35,8 +35,8 @@
           <!-- Search History -->
           <div v-if="searchHistory.length > 0 && !searchQuery" class="dropdown-section">
             <div class="section-header">
-              <span>搜索历史</span>
-              <button class="clear-history-btn" @click="clearHistory">清除</button>
+              <span>{{ $t('header.searchHistory') }}</span>
+              <button class="clear-history-btn" @click="clearHistory">{{ $t('common.clear') }}</button>
             </div>
             <div
               v-for="(item, index) in searchHistory.slice(0, 5)"
@@ -52,7 +52,7 @@
 
           <!-- Search Suggestions -->
           <div v-if="searchSuggestions.length > 0 && searchQuery" class="dropdown-section">
-            <div class="section-header">搜索建议</div>
+            <div class="section-header">{{ $t('header.searchSuggestions') }}</div>
             <div
               v-for="(suggestion, index) in searchSuggestions.slice(0, 5)"
               :key="'suggestion-' + index"
@@ -67,23 +67,23 @@
 
           <!-- Empty state -->
           <div v-if="searchQuery && searchSuggestions.length === 0" class="dropdown-empty">
-            暂无搜索建议
+            {{ $t('header.noSuggestions') }}
           </div>
         </div>
       </div>
     </div>
 
     <div class="header-right">
-      <button class="header-btn" @click="toggleMiniMode" title="迷你模式">
+      <button class="header-btn" @click="toggleMiniMode" :title="$t('header.miniMode')">
         <Minimize2 :size="18" />
       </button>
 
-      <button class="header-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'">
+      <button class="header-btn" @click="toggleTheme" :title="theme === 'dark' ? $t('header.switchToLight') : $t('header.switchToDark')">
         <Moon v-if="theme === 'light'" :size="18" />
         <Sun v-else :size="18" />
       </button>
 
-      <button class="header-btn" @click="openSettings" title="设置">
+      <button class="header-btn" @click="openSettings" :title="$t('header.settings')">
         <Settings :size="18" />
       </button>
 

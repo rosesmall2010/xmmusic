@@ -21,7 +21,7 @@
       <!-- 我的音乐 -->
       <div class="nav-section">
         <div class="section-header">
-          <span class="section-title">我的音乐</span>
+          <span class="section-title">{{ $t('sidebar.myMusic') }}</span>
         </div>
         <nav class="nav-section">
           <router-link
@@ -44,8 +44,8 @@
       <!-- 创建的歌单 -->
       <div class="nav-section">
         <div class="section-header">
-          <span class="section-title">我的歌单</span>
-          <button class="add-btn" @click="createPlaylist" title="创建歌单">
+          <span class="section-title">{{ $t('sidebar.myPlaylists') }}</span>
+          <button class="add-btn" @click="createPlaylist" :title="$t('sidebar.createPlaylist')">
             <span>+</span>
           </button>
         </div>
@@ -70,8 +70,8 @@
         </router-link>
 
         <div v-if="playlists.length === 0" class="empty-hint">
-          <p>还没有歌单</p>
-          <button class="link-button" @click="createPlaylist">创建第一个歌单</button>
+          <p>{{ $t('sidebar.noPlaylists') }}</p>
+          <button class="link-button" @click="createPlaylist">{{ $t('sidebar.createFirstPlaylist') }}</button>
         </div>
       </div>
     </nav>
@@ -79,8 +79,8 @@
     <!-- 底部统计信息 -->
     <div class="sidebar-footer">
       <div class="stats-item">
-        <span class="stats-label">本地音乐</span>
-        <span class="stats-value">{{ totalCount }} 首</span>
+        <span class="stats-label">{{ $t('sidebar.local') }}</span>
+        <span class="stats-value">{{ $t('sidebar.totalSongs', { count: totalCount }) }}</span>
       </div>
     </div>
   </aside>
@@ -89,17 +89,23 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Music, Folder, Heart, Clock, ListMusic } from 'lucide-vue-next'
 
 const router = useRouter()
 const totalCount = ref(0)
 const playlists = ref<any[]>([])
 
-const navItems = ref([
-  { path: '/discover', icon: Music, label: '发现音乐' },
-  { path: '/local', icon: Folder, label: '本地音乐' },
-  { path: '/favorites', icon: Heart, label: '我喜欢', count: 0 },
-  { path: '/recent', icon: Clock, label: '最近播放', count: 0 },
+const router = useRouter()
+const { t } = useI18n()
+const totalCount = ref(0)
+const playlists = ref<any[]>([])
+
+const navItems = computed(() => [
+  { path: '/discover', icon: Music, label: t('sidebar.recommendations') },
+  { path: '/local', icon: Folder, label: t('sidebar.local') },
+  { path: '/favorites', icon: Heart, label: t('sidebar.favorites'), count: 0 },
+  { path: '/recent', icon: Clock, label: t('sidebar.recent'), count: 0 },
 ])
 
 const mainNavItems = computed(() => navItems.value.slice(0, 2))
