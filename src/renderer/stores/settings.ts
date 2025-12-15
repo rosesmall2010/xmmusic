@@ -5,10 +5,31 @@ import { setLocale } from '@/locales'
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
 
+// 检测系统语言
+function detectSystemLanguage(): 'zh' | 'en' {
+  const systemLang = navigator.language || (navigator as any).userLanguage || 'zh'
+  // 检查是否是中文（包括 zh-CN, zh-TW, zh-HK 等）
+  if (systemLang.toLowerCase().startsWith('zh')) {
+    return 'zh'
+  }
+  // 默认返回英文
+  return 'en'
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   // State
   const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'dark')
-  const language = ref<Language>((localStorage.getItem('locale') as Language) || 'zh')
+  // 如果 localStorage 中没有语言设置，则根据系统语言自动设置
+  const savedLanguage = localStorage.getItem('locale') as Language | null
+  const language = ref<Language>(savedLanguage || detectSystemLanguage())
+  
+  // 如果是第一次启动（没有保存的语言），自动保存系统语言
+  if (!savedLanguage) {
+    const systemLang = detectSystemLanguage()
+    language.value = systemLang
+    localStorage.setItem('locale', systemLang)
+    setLocale(systemLang)
+  }
   const closeToTray = ref(localStorage.getItem('closeToTray') === 'true')
   const autoPlay = ref(localStorage.getItem('autoPlay') !== 'false') // Default true
   const scanOnStartup = ref(localStorage.getItem('scanOnStartup') === 'true')
