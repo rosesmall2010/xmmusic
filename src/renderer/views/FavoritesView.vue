@@ -2,15 +2,15 @@
   <div class="favorites-view">
     <div class="page-header">
       <div>
-        <h1 class="page-title">我喜欢的音乐</h1>
-        <div class="stats">{{ totalCount }} 首歌曲</div>
+        <h1 class="page-title">{{ $t('favorites.title') }}</h1>
+        <div class="stats">{{ $t('favorites.songs', { count: totalCount }) }}</div>
       </div>
       <div class="header-actions">
         <button class="btn-secondary" @click="clearList" :disabled="totalCount === 0">
-          清空列表
+          {{ $t('common.clear') }}
         </button>
         <button class="btn-primary" @click="playAll" :disabled="totalCount === 0">
-          播放全部
+          {{ $t('player.playAll') }}
         </button>
       </div>
     </div>
@@ -18,7 +18,7 @@
     <div class="content">
       <div v-if="loading && songs.length === 0" class="loading-container">
         <div class="loading-spinner"></div>
-        <p>加载中...</p>
+        <p>{{ $t('common.loading') }}</p>
       </div>
       <SongList
         v-else
@@ -30,8 +30,8 @@
         <template #empty>
           <div class="empty-placeholder">
             <Heart :size="48" class="icon" />
-            <p>还没有收藏任何歌曲</p>
-            <p class="sub-text">在播放时点击爱心图标即可收藏</p>
+            <p>{{ $t('favorites.empty') }}</p>
+            <p class="sub-text">{{ $t('favorites.addHint') }}</p>
           </div>
         </template>
       </SongList>

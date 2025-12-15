@@ -2,12 +2,12 @@
   <div class="recent-play-view">
     <div class="page-header">
       <div>
-        <h1 class="page-title">最近播放</h1>
-        <div class="stats">{{ songs.length }} 首歌曲</div>
+        <h1 class="page-title">{{ $t('recent.title') }}</h1>
+        <div class="stats">{{ $t('recent.songs', { count: songs.length }) }}</div>
       </div>
       <div class="header-actions">
         <button class="btn-primary" @click="playAll" :disabled="songs.length === 0">
-          播放全部
+          {{ $t('player.playAll') }}
         </button>
       </div>
     </div>
@@ -17,8 +17,8 @@
         <template #empty>
           <div class="empty-placeholder">
             <Clock :size="48" class="icon" />
-            <p>还没有播放记录</p>
-            <p class="sub-text">去听听歌吧</p>
+            <p>{{ $t('recent.empty') }}</p>
+            <p class="sub-text">{{ $t('recent.playHint') }}</p>
           </div>
         </template>
       </SongList>

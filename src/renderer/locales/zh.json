@@ -58,6 +58,7 @@
     "repeat": "单曲循环",
     "repeatAll": "列表循环",
     "shuffle": "随机播放",
+    "sequential": "列表顺序",
     "volume": "音量",
     "mute": "静音",
     "unmute": "取消静音",
@@ -65,7 +66,10 @@
     "unknownArtist": "未知艺术家",
     "unknownAlbum": "未知专辑",
     "currentTime": "当前时间",
-    "duration": "总时长"
+    "duration": "总时长",
+    "favorites": "喜欢",
+    "equalizer": "音效",
+    "playAll": "播放全部"
   },
   "nowPlaying": {
     "title": "正在播放",
@@ -206,12 +210,14 @@
   "favorites": {
     "title": "我的收藏",
     "empty": "还没有收藏任何音乐",
-    "addHint": "点击 ❤️ 图标收藏喜欢的音乐"
+    "addHint": "点击 ❤️ 图标收藏喜欢的音乐",
+    "songs": "{count} 首歌曲"
   },
   "recent": {
     "title": "最近播放",
     "empty": "还没有播放记录",
-    "playHint": "开始播放音乐，记录会显示在这里"
+    "playHint": "开始播放音乐，记录会显示在这里",
+    "songs": "{count} 首歌曲"
   },
   "queue": {
     "title": "播放队列",

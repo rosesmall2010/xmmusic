@@ -58,6 +58,7 @@
     "repeat": "Repeat One",
     "repeatAll": "Repeat All",
     "shuffle": "Shuffle",
+    "sequential": "Sequential",
     "volume": "Volume",
     "mute": "Mute",
     "unmute": "Unmute",
@@ -65,7 +66,10 @@
     "unknownArtist": "Unknown Artist",
     "unknownAlbum": "Unknown Album",
     "currentTime": "Current Time",
-    "duration": "Duration"
+    "duration": "Duration",
+    "favorites": "Like",
+    "equalizer": "Equalizer",
+    "playAll": "Play All"
   },
   "nowPlaying": {
     "title": "Now Playing",
@@ -210,12 +214,14 @@
   "favorites": {
     "title": "My Favorites",
     "empty": "No favorites yet",
-    "addHint": "Click ❤️ icon to favorite music"
+    "addHint": "Click ❤️ icon to favorite music",
+    "songs": "{count} songs"
   },
   "recent": {
     "title": "Recent Plays",
     "empty": "No play history yet",
-    "playHint": "Start playing music, records will appear here"
+    "playHint": "Start playing music, records will appear here",
+    "songs": "{count} songs"
   },
   "queue": {
     "title": "Play Queue",

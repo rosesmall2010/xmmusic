@@ -5,7 +5,7 @@
     <div class="mini-header">
       <div class="drag-region"></div>
       <div class="window-controls">
-        <button class="control-btn close" @click="exitMiniMode" title="退出迷你模式">
+        <button class="control-btn close" @click="exitMiniMode" :title="$t('miniPlayer.exitMiniMode')">
           <Maximize2 :size="20" />
         </button>
       </div>
@@ -28,8 +28,8 @@
       </div>
 
       <div class="info-section">
-        <div class="music-title" :title="currentMusic?.title">{{ currentMusic?.title || '暂无播放' }}</div>
-        <div class="music-artist" :title="currentMusic?.artist">{{ currentMusic?.artist || '未知艺术家' }}</div>
+        <div class="music-title" :title="currentMusic?.title">{{ currentMusic?.title || $t('miniPlayer.noMusic') }}</div>
+        <div class="music-artist" :title="currentMusic?.artist">{{ currentMusic?.artist || $t('miniPlayer.unknownArtist') }}</div>
       </div>
 
       <!-- 进度条 -->

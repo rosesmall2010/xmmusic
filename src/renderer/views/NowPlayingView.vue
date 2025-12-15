@@ -8,21 +8,21 @@
     <div class="top-bar">
       <button class="btn-back" @click="goBack">
         <span class="icon">←</span>
-        <span>返回</span>
+        <span>{{ $t('nowPlaying.back') }}</span>
       </button>
 
       <div class="actions">
         <button class="btn-action" @click="toggleMiniMode">
           <Minimize2 :size="20" />
-          <span class="btn-tooltip">切换到迷你模式</span>
+          <span class="btn-tooltip">{{ $t('nowPlaying.switchToMini') }}</span>
         </button>
         <button class="btn-action" @click="toggleDesktopLyrics">
           <Monitor :size="20" />
-          <span class="btn-tooltip">桌面歌词（仅生产模式可用）</span>
+          <span class="btn-tooltip">{{ $t('nowPlaying.desktopLyrics') }}</span>
         </button>
         <button class="btn-action" @click="toggleQueue">
           <List :size="20" />
-          <span class="btn-tooltip">显示播放队列</span>
+          <span class="btn-tooltip">{{ $t('nowPlaying.showQueue') }}</span>
         </button>
       </div>
     </div>
@@ -50,8 +50,8 @@
 
           <!-- 歌曲信息 -->
           <div class="song-info animate-slide-in-up">
-            <h1 class="song-title">{{ currentMusic?.title || '暂无播放' }}</h1>
-            <p class="song-artist">{{ currentMusic?.artist || '未知艺术家' }}</p>
+            <h1 class="song-title">{{ currentMusic?.title || $t('nowPlaying.noMusic') }}</h1>
+            <p class="song-artist">{{ currentMusic?.artist || $t('nowPlaying.unknownArtist') }}</p>
             <p class="song-album" v-if="currentMusic?.album">{{ currentMusic.album }}</p>
           </div>
         </div>
@@ -65,14 +65,14 @@
               :class="{ active: rightPanelMode === 'lyrics' }"
               @click="rightPanelMode = 'lyrics'"
             >
-              歌词
+              {{ $t('nowPlaying.lyrics') }}
             </button>
             <button
               class="panel-tab"
               :class="{ active: rightPanelMode === 'queue' }"
               @click="rightPanelMode = 'queue'"
             >
-              播放队列 ({{ queue.length }})
+              {{ $t('nowPlaying.queue') }} ({{ queue.length }})
             </button>
           </div>
 
@@ -88,7 +88,7 @@
               >
                 {{ line.text }}
               </p>
-              <p v-if="lyrics.length === 0" class="lyrics-line empty">暂无歌词</p>
+              <p v-if="lyrics.length === 0" class="lyrics-line empty">{{ $t('nowPlaying.noLyrics') }}</p>
             </div>
           </div>
 
@@ -117,7 +117,7 @@
                 <div class="item-duration">{{ formatTime(music.duration) }}</div>
                 <button class="item-remove" @click.stop="removeQueueItem(index)">×</button>
               </div>
-              <div v-if="queue.length === 0" class="queue-empty">队列为空</div>
+              <div v-if="queue.length === 0" class="queue-empty">{{ $t('queue.empty') }}</div>
             </div>
           </div>
         </div>
@@ -140,20 +140,20 @@
 
         <!-- 播放控制 -->
         <div class="controls">
-          <button class="btn-control btn-secondary" @click="toggleFavorite" title="喜欢">
+          <button class="btn-control btn-secondary" @click="toggleFavorite" :title="$t('player.favorites')">
             <Heart :size="20" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="previous" title="上一首">
+          <button class="btn-control btn-secondary" @click="previous" :title="$t('player.previous')">
             <SkipBack :size="20" />
           </button>
 
-          <button class="btn-control btn-primary" @click="togglePlay" title="播放/暂停">
+          <button class="btn-control btn-primary" @click="togglePlay" :title="isPlaying ? $t('player.pause') : $t('player.play')">
             <Play v-if="!isPlaying" :size="22" :style="{ marginLeft: '2px' }" />
             <Pause v-else :size="22" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="next" title="下一首">
+          <button class="btn-control btn-secondary" @click="next" :title="$t('player.next')">
             <SkipForward :size="20" />
           </button>
 
@@ -161,12 +161,12 @@
             <component :is="PlayModeIcon" :size="20" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="toggleEqualizer" title="音效">
+          <button class="btn-control btn-secondary" @click="toggleEqualizer" :title="$t('player.equalizer')">
             <Sliders :size="20" />
           </button>
 
           <div class="volume-control">
-            <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? '取消静音' : '静音'">
+            <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? $t('player.unmute') : $t('player.mute')">
               <component :is="VolumeIcon" :size="20" />
             </button>
             <div class="volume-slider">
@@ -191,6 +191,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
@@ -202,6 +203,7 @@ import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
@@ -245,10 +247,10 @@ const PlayModeIcon = computed(() => {
 
 const playModeText = computed(() => {
   const texts = {
-    sequential: '列表顺序',
-    random: '随机播放',
-    repeat: '列表循环',
-    single: '单曲循环',
+    sequential: t('player.sequential'),
+    random: t('player.shuffle'),
+    repeat: t('player.repeatAll'),
+    single: t('player.repeat'),
   }
   return texts[playMode.value]
 })
@@ -482,7 +484,7 @@ const loadLyrics = async () => {
       lyrics.value = lyricsData.lines
     } else {
       // TODO: 如果本地没有，可以尝试在线搜索（未来功能）
-      lyrics.value = [{ time: 0, text: '暂无歌词' }]
+      lyrics.value = [{ time: 0, text: t('nowPlaying.noLyrics') }]
     }
   } catch (error) {
     console.error('Failed to load lyrics:', error)

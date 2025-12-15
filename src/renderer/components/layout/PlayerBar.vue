@@ -15,8 +15,8 @@
           </template>
         </div>
         <div class="music-details">
-          <div class="music-title">{{ currentMusic?.title || '暂无播放' }}</div>
-          <div class="music-artist">{{ currentMusic?.artist || '未知艺术家' }}</div>
+          <div class="music-title">{{ currentMusic?.title || $t('player.noMusic') }}</div>
+          <div class="music-artist">{{ currentMusic?.artist || $t('player.unknownArtist') }}</div>
         </div>
       </div>
     </div>
@@ -27,7 +27,7 @@
         <button
           class="control-btn"
           @click="previous"
-          title="上一首"
+          :title="$t('player.previous')"
           :disabled="!hasMusic"
         >
           <SkipBack :size="18" />
@@ -36,7 +36,7 @@
         <button
           class="control-btn play-btn"
           @click="togglePlay"
-          title="播放/暂停"
+          :title="isPlaying ? $t('player.pause') : $t('player.play')"
           :disabled="!hasMusic && queue.length === 0"
         >
           <Play v-if="!isPlaying" :size="20" :style="{ marginLeft: '2px' }" />
@@ -46,7 +46,7 @@
         <button
           class="control-btn"
           @click="next"
-          title="下一首"
+          :title="$t('player.next')"
           :disabled="!hasMusic"
         >
           <SkipForward :size="18" />
@@ -60,7 +60,7 @@
           <component :is="PlayModeIcon" v-if="PlayModeIcon" :size="18" />
         </button>
 
-        <button class="control-btn" @click="toggleQueue" title="播放队列">
+        <button class="control-btn" @click="toggleQueue" :title="$t('queue.title')">
           <List :size="18" />
         </button>
       </div>
@@ -83,24 +83,24 @@
         class="control-icon-btn"
         @click="toggleFavorite"
         :class="{ active: isFavorite }"
-        title="喜欢"
+        :title="$t('player.favorites')"
       >
         <Heart :size="18" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
       </button>
 
       <div class="equalizer-wrapper">
-        <button class="control-icon-btn" @click="toggleEqualizer" title="音效">
+        <button class="control-icon-btn" @click="toggleEqualizer" :title="$t('player.equalizer')">
           <Sliders :size="18" />
         </button>
         <EqualizerPanel v-model="showEqualizer" />
       </div>
 
-      <button class="control-icon-btn" @click="toggleLyrics" title="歌词">
+      <button class="control-icon-btn" @click="toggleLyrics" :title="$t('nowPlaying.lyrics')">
         <FileText :size="18" />
       </button>
 
       <div class="volume-control">
-        <button class="control-icon-btn" @click="toggleMute" title="音量">
+        <button class="control-icon-btn" @click="toggleMute" :title="$t('player.volume')">
           <component :is="VolumeIcon" :size="18" />
         </button>
         <div class="volume-slider">
@@ -120,6 +120,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
@@ -129,6 +130,7 @@ import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import { useEqualizer } from '@/composables/useEqualizer'
 
 const router = useRouter()
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const { play, pause, resume, seek, setVolume } = usePlayer()
 
@@ -172,10 +174,10 @@ const PlayModeIcon = computed(() => {
 
 const playModeText = computed(() => {
   const texts = {
-    sequential: '列表顺序',
-    random: '随机播放',
-    repeat: '列表循环',
-    single: '单曲循环',
+    sequential: t('player.sequential'),
+    random: t('player.shuffle'),
+    repeat: t('player.repeatAll'),
+    single: t('player.repeat'),
   }
   return texts[playMode.value]
 })
