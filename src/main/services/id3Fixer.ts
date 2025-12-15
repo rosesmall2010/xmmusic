@@ -62,6 +62,31 @@ export default class ID3Fixer {
   }
 
   /**
+   * 读取原始ID3标签（可能包含乱码）
+   */
+  async readRawID3Tags(filePath: string): Promise<{ title: string; artist: string; album: string; year?: string; genre?: string } | null> {
+    try {
+      const nodeID3 = getNodeID3()
+      const tags = nodeID3.read(filePath)
+      
+      if (!tags) {
+        return null
+      }
+
+      return {
+        title: tags.title || '',
+        artist: tags.artist || '',
+        album: tags.album || '',
+        year: tags.year || undefined,
+        genre: tags.genre || undefined
+      }
+    } catch (error) {
+      console.error('读取ID3标签失败:', error)
+      return null
+    }
+  }
+
+  /**
    * 检测ID3标签的编码
    */
   async detectEncoding(filePath: string): Promise<EncodingDetection[]> {
@@ -131,6 +156,22 @@ export default class ID3Fixer {
       return iconv.decode(buffer, encoding)
     } catch (error) {
       return value
+    }
+  }
+
+  /**
+   * 转换ID3标签编码（不写入文件，只返回转换后的值）
+   */
+  public convertID3TagsEncoding(
+    rawTags: { title: string; artist: string; album: string; year?: string; genre?: string },
+    sourceEncoding: Encoding
+  ): { title: string; artist: string; album: string; year?: string; genre?: string } {
+    return {
+      title: this.tryDecode(rawTags.title, sourceEncoding),
+      artist: this.tryDecode(rawTags.artist, sourceEncoding),
+      album: this.tryDecode(rawTags.album, sourceEncoding),
+      year: rawTags.year ? this.tryDecode(rawTags.year, sourceEncoding) : undefined,
+      genre: rawTags.genre ? this.tryDecode(rawTags.genre, sourceEncoding) : undefined
     }
   }
 

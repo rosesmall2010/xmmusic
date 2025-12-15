@@ -7,6 +7,79 @@
         <p class="filename">{{ music?.fileName }}</p>
       </div>
 
+      <!-- ID3元数据信息区域 -->
+      <div v-if="rawID3Tags" class="id3-metadata-section">
+        <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
+        <div class="metadata-display">
+          <div class="metadata-group">
+            <label>{{ $t('tagEditor.rawMetadata') }}</label>
+            <div class="metadata-info">
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
+                <span class="metadata-value">{{ rawID3Tags.artist || '-' }}</span>
+              </div>
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
+                <span class="metadata-value">{{ rawID3Tags.title || '-' }}</span>
+              </div>
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
+                <span class="metadata-value">{{ rawID3Tags.album || '-' }}</span>
+              </div>
+              <div v-if="rawID3Tags.year" class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.yearLabel') }}:</span>
+                <span class="metadata-value">{{ rawID3Tags.year }}</span>
+              </div>
+              <div v-if="rawID3Tags.genre" class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.genreLabel') }}:</span>
+                <span class="metadata-value">{{ rawID3Tags.genre }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 转换后的元数据显示 -->
+          <div v-if="convertedTags" class="metadata-group">
+            <label>{{ $t('tagEditor.convertedMetadata') }}</label>
+            <div class="metadata-info">
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
+                <span class="metadata-value converted">{{ convertedTags.artist || '-' }}</span>
+              </div>
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
+                <span class="metadata-value converted">{{ convertedTags.title || '-' }}</span>
+              </div>
+              <div class="metadata-item">
+                <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
+                <span class="metadata-value converted">{{ convertedTags.album || '-' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 编码转换按钮 -->
+        <div class="encoding-actions">
+          <button @click="convertFromGB2312" class="btn-convert" :disabled="loading || !rawID3Tags">
+            {{ $t('tagEditor.convertFromGB2312') }}
+          </button>
+          <button @click="convertFromGBK" class="btn-convert" :disabled="loading || !rawID3Tags">
+            {{ $t('tagEditor.convertFromGBK') }}
+          </button>
+          <button 
+            v-if="convertedTags" 
+            @click="applyConvertedTags" 
+            class="btn-save-converted" 
+            :disabled="loading"
+          >
+            {{ $t('tagEditor.saveConverted') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="loadingMetadata" class="loading-metadata">
+        {{ $t('tagEditor.loadingMetadata') }}
+      </div>
+
       <div class="form-content">
         <div class="form-group">
           <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
@@ -95,6 +168,9 @@ const formData = ref({
 })
 
 const loading = ref(false)
+const loadingMetadata = ref(false)
+const rawID3Tags = ref<{ title: string; artist: string; album: string; year?: string; genre?: string } | null>(null)
+const convertedTags = ref<{ title: string; artist: string; album: string } | null>(null)
 
 const hasChanges = computed(() => {
   if (!props.music) return false
@@ -109,6 +185,11 @@ const hasChanges = computed(() => {
 watch(() => props.show, (newVal) => {
   if (newVal && props.music) {
     loadMusicData(props.music)
+    loadRawID3Tags()
+  } else {
+    // 关闭时重置
+    rawID3Tags.value = null
+    convertedTags.value = null
   }
 })
 
@@ -124,6 +205,71 @@ const loadMusicData = (music: MusicItem) => {
     artist: parsed.artist || music.artist,
     album: parsed.artist || music.artist, // 用解析的歌手名填充专辑
     title: parsed.title || music.title
+  }
+}
+
+const loadRawID3Tags = async () => {
+  if (!props.music?.filePath) return
+
+  try {
+    loadingMetadata.value = true
+    const tags = await window.electronAPI.readRawID3Tags(props.music.filePath)
+    rawID3Tags.value = tags
+    convertedTags.value = null // 重置转换后的标签
+  } catch (error: any) {
+    console.error('加载ID3标签失败:', error)
+    rawID3Tags.value = null
+  } finally {
+    loadingMetadata.value = false
+  }
+}
+
+const convertFromGB2312 = async () => {
+  if (!rawID3Tags.value) return
+
+  try {
+    loading.value = true
+    const converted = await window.electronAPI.convertID3TagsEncoding(rawID3Tags.value, 'gb2312')
+    convertedTags.value = {
+      title: converted.title,
+      artist: converted.artist,
+      album: converted.album
+    }
+  } catch (error: any) {
+    console.error('GB2312转换失败:', error)
+    alert(t('tagEditor.saveError') + ': ' + error.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+const convertFromGBK = async () => {
+  if (!rawID3Tags.value) return
+
+  try {
+    loading.value = true
+    const converted = await window.electronAPI.convertID3TagsEncoding(rawID3Tags.value, 'gbk')
+    convertedTags.value = {
+      title: converted.title,
+      artist: converted.artist,
+      album: converted.album
+    }
+  } catch (error: any) {
+    console.error('GBK转换失败:', error)
+    alert(t('tagEditor.saveError') + ': ' + error.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+const applyConvertedTags = () => {
+  if (!convertedTags.value) return
+
+  // 将转换后的标签应用到表单
+  formData.value = {
+    artist: convertedTags.value.artist || formData.value.artist,
+    title: convertedTags.value.title || formData.value.title,
+    album: convertedTags.value.album || formData.value.album
   }
 }
 
@@ -411,5 +557,127 @@ const close = () => {
 .btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.id3-metadata-section {
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.metadata-display {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.metadata-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.metadata-group label {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.metadata-info {
+  padding: var(--spacing-sm);
+  background: var(--bg-primary);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+}
+
+.metadata-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  font-size: var(--font-size-sm);
+}
+
+.metadata-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+
+.metadata-value {
+  color: var(--text-color);
+  word-break: break-all;
+  flex: 1;
+}
+
+.metadata-value.converted {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.encoding-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.btn-convert {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-primary);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-base);
+}
+
+.btn-convert:hover:not(:disabled) {
+  background: var(--hover-bg);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-convert:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-save-converted {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-base);
+  background: var(--color-primary);
+  color: white;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--transition-base);
+}
+
+.btn-save-converted:hover:not(:disabled) {
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+}
+
+.btn-save-converted:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading-metadata {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 </style>

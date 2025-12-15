@@ -131,6 +131,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // ID3标签修复
+  readRawID3Tags: (filePath: string) =>
+    ipcRenderer.invoke('read-raw-id3-tags', filePath),
+  convertID3TagsEncoding: (rawTags: any, sourceEncoding: string) =>
+    ipcRenderer.invoke('convert-id3-tags-encoding', rawTags, sourceEncoding),
   detectID3Encoding: (filePath: string) =>
     ipcRenderer.invoke('detect-id3-encoding', filePath),
   fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) =>

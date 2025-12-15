@@ -71,6 +71,8 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>
 
   // ID3标签修复
+  readRawID3Tags: (filePath: string) => Promise<{ title: string; artist: string; album: string; year?: string; genre?: string } | null>
+  convertID3TagsEncoding: (rawTags: { title: string; artist: string; album: string; year?: string; genre?: string }, sourceEncoding: string) => Promise<{ title: string; artist: string; album: string; year?: string; genre?: string }>
   detectID3Encoding: (filePath: string) => Promise<any[]>
   fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) => Promise<any>
   fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>

@@ -1012,6 +1012,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   // ID3标签修复
   const id3Fixer = new ID3Fixer()
 
+  ipcMain.handle('read-raw-id3-tags', async (_, filePath: string) => {
+    return await id3Fixer.readRawID3Tags(filePath)
+  })
+
+  ipcMain.handle('convert-id3-tags-encoding', async (_, rawTags: any, sourceEncoding: string) => {
+    return id3Fixer.convertID3TagsEncoding(rawTags, sourceEncoding)
+  })
+
   ipcMain.handle('detect-id3-encoding', async (_, filePath: string) => {
     return await id3Fixer.detectEncoding(filePath)
   })

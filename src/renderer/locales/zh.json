@@ -286,7 +286,15 @@
     "artistPlaceholder": "输入歌手名",
     "albumPlaceholder": "输入专辑名",
     "saving": "正在保存...",
-    "saveErrorRetry": "保存失败，请重试"
+    "saveErrorRetry": "保存失败，请重试",
+    "id3Metadata": "ID3元数据信息",
+    "rawMetadata": "原始元数据（可能乱码）",
+    "convertFromGB2312": "从GB2312转换",
+    "convertFromGBK": "从GBK转换",
+    "saveConverted": "使用转换后的信息保存",
+    "loadingMetadata": "正在加载元数据...",
+    "noMetadata": "未找到ID3标签信息",
+    "convertedMetadata": "转换后的元数据"
   },
   "search": {
     "placeholder": "搜索音乐、艺术家、专辑...",

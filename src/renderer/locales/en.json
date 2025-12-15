@@ -286,7 +286,15 @@
     "artistPlaceholder": "Enter artist name",
     "albumPlaceholder": "Enter album name",
     "saving": "Saving...",
-    "saveErrorRetry": "Save failed, please try again"
+    "saveErrorRetry": "Save failed, please try again",
+    "id3Metadata": "ID3 Metadata",
+    "rawMetadata": "Raw Metadata (may contain garbled text)",
+    "convertFromGB2312": "Convert from GB2312",
+    "convertFromGBK": "Convert from GBK",
+    "saveConverted": "Save with Converted Info",
+    "loadingMetadata": "Loading metadata...",
+    "noMetadata": "No ID3 tag information found",
+    "convertedMetadata": "Converted Metadata"
   },
   "search": {
     "placeholder": "Search music, artists, albums...",
