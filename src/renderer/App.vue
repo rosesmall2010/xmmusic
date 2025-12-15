@@ -142,7 +142,7 @@ onMounted(async () => {
 // 处理快捷键
 function handleShortcutAction(action: string) {
   console.log(`🎯 [渲染进程] 收到快捷键动作: ${action} - ${new Date().toLocaleTimeString()}`)
-  
+
   switch (action) {
     case 'play-pause':
       console.log(`▶️ [播放控制] 当前状态: ${playerStore.isPlaying ? '播放中' : '暂停'}`)
@@ -185,7 +185,7 @@ function handleShortcutAction(action: string) {
     default:
       console.warn(`⚠️ [渲染进程] 未知的快捷键动作: ${action}`)
   }
-  
+
   console.log(`✅ [渲染进程] 快捷键动作处理完成: ${action}`)
 }
 

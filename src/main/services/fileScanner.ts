@@ -601,6 +601,7 @@ export default class FileScanner {
         sample_rate: metadata.sampleRate || null,
         channels: metadata.channels || null,
         cover_path: metadata.coverPath || null,
+        // VBR 信息暂时不存储到数据库，只在解析时使用
         lyrics_path: null,
         is_exists: isExists ? 1 : 0,
         is_playable: 1,
@@ -675,6 +676,8 @@ export default class FileScanner {
     sampleRate: number
     channels: number
     coverPath: string | null
+    isVBR: boolean
+    codecProfile: string | null
   }> {
     try {
       const parseFile = await getParseFile()
@@ -690,6 +693,19 @@ export default class FileScanner {
         }
       }
 
+      // 检测 VBR：通过 codecProfile 或 bitrate 模式判断
+      let isVBR = false
+      let codecProfile = null
+      if (metadata.format.codecProfile) {
+        codecProfile = metadata.format.codecProfile
+        // VBR 通常有 V0, V1, V2, VBR 等标识
+        isVBR = /VBR|V0|V1|V2|V3|V4|V5|V6|V7|V8|V9/i.test(codecProfile)
+      }
+      // 如果 bitrate 为 0 或 undefined，也可能是 VBR
+      if (!metadata.format.bitrate || metadata.format.bitrate === 0) {
+        isVBR = true
+      }
+
       return {
         title: metadata.common.title || '',
         artist: metadata.common.artist || '',
@@ -700,7 +716,9 @@ export default class FileScanner {
         bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate / 1000) : 0,
         sampleRate: metadata.format.sampleRate || 0,
         channels: metadata.format.numberOfChannels || 0,
-        coverPath
+        coverPath,
+        isVBR,
+        codecProfile: codecProfile || null
       }
     } catch (error) {
       // 返回默认值
@@ -714,7 +732,9 @@ export default class FileScanner {
         bitrate: 0,
         sampleRate: 0,
         channels: 0,
-        coverPath: null
+        coverPath: null,
+        isVBR: false,
+        codecProfile: null
       }
     }
   }

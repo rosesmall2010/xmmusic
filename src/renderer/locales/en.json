@@ -263,7 +263,11 @@
     "kbps": "kbps",
     "hz": "Hz",
     "mono": "Mono",
-    "stereo": "Stereo"
+    "stereo": "Stereo",
+    "bitrateMode": "Bitrate Mode",
+    "vbr": "VBR (Variable Bitrate)",
+    "cbr": "CBR (Constant Bitrate)",
+    "codecProfile": "Codec Profile"
   },
   "tagEditor": {
     "title": "Edit Tags",

@@ -423,6 +423,50 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getMusicById(id)
   })
 
+  // 获取音乐的详细音频信息（包括 VBR）
+  ipcMain.handle('get-music-audio-info', async (_, musicId: number) => {
+    if (!db) return null
+    const music = db.getMusicById(musicId)
+    if (!music || !music.filePath) return null
+
+    try {
+      // 动态加载 music-metadata
+      const musicMetadata = await import('music-metadata')
+      const parseFile = musicMetadata.parseFile
+      const metadata = await parseFile(music.filePath)
+
+      // 检测 VBR
+      let isVBR = false
+      let codecProfile = null
+      if (metadata.format.codecProfile) {
+        codecProfile = metadata.format.codecProfile
+        isVBR = /VBR|V0|V1|V2|V3|V4|V5|V6|V7|V8|V9/i.test(codecProfile)
+      }
+      // 如果 bitrate 为 0，也可能是 VBR
+      if (!metadata.format.bitrate || metadata.format.bitrate === 0) {
+        isVBR = true
+      }
+
+      return {
+        bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate / 1000) : music.bitrate,
+        sampleRate: metadata.format.sampleRate || music.sampleRate,
+        channels: metadata.format.numberOfChannels || music.channels,
+        isVBR,
+        codecProfile: codecProfile || null
+      }
+    } catch (error) {
+      console.error('解析音频信息失败:', error)
+      // 返回数据库中的基本信息
+      return {
+        bitrate: music.bitrate,
+        sampleRate: music.sampleRate,
+        channels: music.channels,
+        isVBR: false,
+        codecProfile: null
+      }
+    }
+  })
+
   ipcMain.handle('record-play', async (_, musicId: number) => {
     if (!db) return
     // 使用新的基于 music_id 的方法

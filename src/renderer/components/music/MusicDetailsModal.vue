@@ -42,19 +42,26 @@
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">{{ $t('music.bitrate') }}:</span>
-              <span class="info-value">{{ music.bitrate > 0 ? `${music.bitrate} ${$t('music.kbps')}` : '-' }}</span>
+              <span class="info-value">{{ formatBitrate(audioInfo?.bitrate ?? music.bitrate, audioInfo?.isVBR) }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">{{ $t('music.sampleRate') }}:</span>
-              <span class="info-value">{{ music.sampleRate > 0 ? `${music.sampleRate} ${$t('music.hz')}` : '-' }}</span>
+              <span class="info-value">{{ formatSampleRate(audioInfo?.sampleRate ?? music.sampleRate) }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">{{ $t('music.channels') }}:</span>
-              <span class="info-value">{{ formatChannels(music.channels) }}</span>
+              <span class="info-value">{{ formatChannels(audioInfo?.channels ?? music.channels) }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">{{ $t('music.codec') }}:</span>
               <span class="info-value">{{ music.fileExtension.toUpperCase().replace('.', '') }}</span>
+            </div>
+            <div v-if="audioInfo?.isVBR || audioInfo?.codecProfile" class="info-item">
+              <span class="info-label">{{ $t('music.bitrateMode') }}:</span>
+              <span class="info-value">
+                {{ audioInfo?.isVBR ? $t('music.vbr') : $t('music.cbr') }}
+                <span v-if="audioInfo?.codecProfile" class="codec-profile">({{ audioInfo.codecProfile }})</span>
+              </span>
             </div>
           </div>
         </div>
@@ -99,6 +106,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { X, Copy } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
@@ -114,9 +122,39 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+const audioInfo = ref<{
+  bitrate: number
+  sampleRate: number
+  channels: number
+  isVBR: boolean
+  codecProfile: string | null
+} | null>(null)
+
 const close = () => {
   emit('close')
 }
+
+// 当显示对话框且音乐信息存在时，获取详细的音频信息（包括 VBR）
+watch([() => props.show, () => props.music], async ([show, music]) => {
+  if (show && music) {
+    try {
+      const info = await window.electronAPI.getMusicAudioInfo(music.id)
+      audioInfo.value = info
+    } catch (error) {
+      console.error('获取音频信息失败:', error)
+      // 使用数据库中的基本信息
+      audioInfo.value = {
+        bitrate: music.bitrate,
+        sampleRate: music.sampleRate,
+        channels: music.channels,
+        isVBR: false,
+        codecProfile: null
+      }
+    }
+  } else {
+    audioInfo.value = null
+  }
+}, { immediate: true })
 
 const formatDuration = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '00:00'
@@ -133,6 +171,24 @@ const formatFileSize = (bytes: number) => {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
+const formatBitrate = (bitrate: number, isVBR?: boolean) => {
+  if (bitrate === 0) return '-'
+  const vbrLabel = isVBR ? ` (${t('music.vbr')})` : ''
+  return `${bitrate} ${t('music.kbps')}${vbrLabel}`
+}
+
+const formatSampleRate = (sampleRate: number) => {
+  if (sampleRate === 0) return '-'
+  return `${sampleRate} ${t('music.hz')}`
+}
+
+const formatChannels = (channels: number) => {
+  if (channels === 0) return '-'
+  if (channels === 1) return t('music.mono')
+  if (channels === 2) return t('music.stereo')
+  return `${channels} ${t('music.channels')}`
+}
+
 const copyDetails = () => {
   if (!props.music) return
 
@@ -146,10 +202,12 @@ ${t('music.duration')}: ${formatDuration(props.music.duration)}
 ${t('music.hasLyrics')}: ${props.music.lyricsPath ? t('common.yes') : t('common.no')}
 
 【${t('music.audioInfo')}】
-${t('music.bitrate')}: ${props.music.bitrate > 0 ? `${props.music.bitrate} ${t('music.kbps')}` : '-'}
-${t('music.sampleRate')}: ${props.music.sampleRate > 0 ? `${props.music.sampleRate} ${t('music.hz')}` : '-'}
-${t('music.channels')}: ${formatChannels(props.music.channels)}
+${t('music.bitrate')}: ${formatBitrate(audioInfo?.bitrate ?? props.music.bitrate, audioInfo?.isVBR)}
+${t('music.sampleRate')}: ${formatSampleRate(audioInfo?.sampleRate ?? props.music.sampleRate)}
+${t('music.channels')}: ${formatChannels(audioInfo?.channels ?? props.music.channels)}
 ${t('music.codec')}: ${props.music.fileExtension.toUpperCase().replace('.', '')}
+${audioInfo?.isVBR ? `${t('music.bitrateMode')}: ${t('music.vbr')}` : ''}
+${audioInfo?.codecProfile ? `${t('music.codecProfile')}: ${audioInfo.codecProfile}` : ''}
 
 【${t('music.fileInfo')}】
 ${t('music.fileType')}: ${props.music.fileExtension.toUpperCase().replace('.', '')}
@@ -289,6 +347,12 @@ ${t('music.fileSize')}: ${formatFileSize(props.music.fileSize)} (${props.music.f
   font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
   font-size: var(--font-size-sm);
   color: var(--color-primary);
+}
+
+.codec-profile {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-left: var(--spacing-xs);
 }
 
 .modal-footer {

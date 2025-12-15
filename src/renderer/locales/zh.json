@@ -263,7 +263,11 @@
     "kbps": "kbps",
     "hz": "Hz",
     "mono": "单声道",
-    "stereo": "立体声"
+    "stereo": "立体声",
+    "bitrateMode": "比特率模式",
+    "vbr": "VBR（可变比特率）",
+    "cbr": "CBR（固定比特率）",
+    "codecProfile": "编码配置"
   },
   "tagEditor": {
     "title": "编辑标签",

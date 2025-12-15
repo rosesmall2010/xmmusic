@@ -234,6 +234,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 元数据编辑功能
   updateMusicMetadata: (musicId: number, updates: any) => ipcRenderer.invoke('update-music-metadata', musicId, updates),
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => ipcRenderer.invoke('batch-update-music-metadata', musicIds, updates),
+  getMusicAudioInfo: (musicId: number) => ipcRenderer.invoke('get-music-audio-info', musicId),
   extractMusicCover: (musicId: number, outputPath: string) => ipcRenderer.invoke('extract-music-cover', musicId, outputPath),
 
   // 通用事件监听
@@ -367,6 +368,13 @@ declare global {
       updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
       batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<{ success: number; failed: number; errors: Array<{ file: string; error: string }> }>
       extractMusicCover: (musicId: number, outputPath: string) => Promise<boolean>
+      getMusicAudioInfo: (musicId: number) => Promise<{
+        bitrate: number
+        sampleRate: number
+        channels: number
+        isVBR: boolean
+        codecProfile: string | null
+      } | null>
     }
   }
 }

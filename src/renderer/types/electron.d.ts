@@ -143,6 +143,13 @@ export interface ElectronAPI {
   // 元数据
   updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<any>
+  getMusicAudioInfo: (musicId: number) => Promise<{
+    bitrate: number
+    sampleRate: number
+    channels: number
+    isVBR: boolean
+    codecProfile: string | null
+  } | null>
   extractMusicCover: (musicId: number, outputPath: string) => Promise<boolean>
 
   // 事件监听
