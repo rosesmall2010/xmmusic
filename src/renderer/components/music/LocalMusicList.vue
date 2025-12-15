@@ -378,7 +378,7 @@ const handleClearAll = async () => {
     // 刷新列表
     await musicStore.loadMusic(0, 20, true)
   } catch (error: any) {
-    alert(`清除失败: ${error.message}`)
+    alert(t('settings.clearAllError') + ': ' + error.message)
   }
 }
 
