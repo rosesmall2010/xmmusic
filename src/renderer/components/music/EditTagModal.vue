@@ -48,6 +48,48 @@
             @keyup.enter="save"
           />
         </div>
+
+        <div class="form-group">
+          <label>{{ $t('tagEditor.genreLabel') }} <span class="hint">(Genre)</span></label>
+          <div class="genre-field-wrapper">
+            <input
+              v-model="formData.genre"
+              type="text"
+              :placeholder="$t('tagEditor.genrePlaceholder')"
+              :disabled="loading"
+              @keyup.enter="save"
+              class="genre-input"
+            />
+            <div v-if="originalGenre && isGenreCorrupted" class="encoding-convert-section">
+              <div class="original-genre-display">
+                <span class="label">{{ $t('tagEditor.originalGenre') }}:</span>
+                <span class="value corrupted">{{ originalGenre }}</span>
+              </div>
+              <div class="convert-buttons">
+                <button
+                  v-for="encoding in ['GBK', 'GB2312', 'ANSI']"
+                  :key="encoding"
+                  @click="convertGenre(encoding)"
+                  class="btn-convert"
+                  :disabled="loading || converting"
+                >
+                  {{ $t('tagEditor.convertFrom', { encoding }) }}
+                </button>
+              </div>
+              <div v-if="convertedGenre" class="converted-genre-display">
+                <span class="label">{{ $t('tagEditor.convertedGenre') }}:</span>
+                <span class="value converted">{{ convertedGenre }}</span>
+                <button
+                  @click="applyConvertedGenre"
+                  class="btn-apply"
+                  :disabled="loading"
+                >
+                  {{ $t('tagEditor.applyAndSave') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="loading-overlay">
@@ -91,10 +133,14 @@ const emit = defineEmits<{
 const formData = ref({
   artist: '',
   album: '',
-  title: ''
+  title: '',
+  genre: ''
 })
 
 const loading = ref(false)
+const originalGenre = ref<string | null>(null)
+const convertedGenre = ref<string | null>(null)
+const converting = ref(false)
 
 const hasChanges = computed(() => {
   if (!props.music) return false
@@ -102,8 +148,29 @@ const hasChanges = computed(() => {
   return (
     formData.value.artist !== props.music.artist ||
     formData.value.album !== (props.music.album || '') ||
-    formData.value.title !== props.music.title
+    formData.value.title !== props.music.title ||
+    formData.value.genre !== (props.music.genre || '')
   )
+})
+
+// 检测是否为乱码（简单检测：包含无效字符或看起来像乱码）
+const isGenreCorrupted = computed(() => {
+  if (!originalGenre.value) return false
+  const genre = originalGenre.value
+  
+  // 检查是否包含替换字符（Unicode 替换字符）
+  if (/[\uFFFD]/.test(genre)) return true
+  
+  // 检查是否包含控制字符（除了常见的空白字符）
+  if (/[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(genre)) return true
+  
+  // 检查是否看起来像乱码（包含很多非ASCII且非中文的字符）
+  const nonAsciiNonChinese = genre.match(/[^\x20-\x7E\u4e00-\u9fa5]/g)
+  if (nonAsciiNonChinese && nonAsciiNonChinese.length > genre.length * 0.3) {
+    return true
+  }
+  
+  return false
 })
 
 watch(() => props.show, (newVal) => {
@@ -123,8 +190,13 @@ const loadMusicData = (music: MusicItem) => {
   formData.value = {
     artist: parsed.artist || music.artist,
     album: parsed.artist || music.artist, // 用解析的歌手名填充专辑
-    title: parsed.title || music.title
+    title: parsed.title || music.title,
+    genre: music.genre || ''
   }
+  
+  // 保存原始 genre 用于编码转换
+  originalGenre.value = music.genre || null
+  convertedGenre.value = null
 }
 
 const save = async () => {
@@ -138,7 +210,8 @@ const save = async () => {
     const updates = {
       artist: formData.value.artist.trim(),
       album: formData.value.album.trim() || null,
-      title: formData.value.title.trim()
+      title: formData.value.title.trim(),
+      genre: formData.value.genre.trim() || null
     }
 
     const success = await window.electronAPI.updateMusicMetadata(props.music.id, updates)
@@ -181,8 +254,40 @@ const swapArtistAndTitle = () => {
   formData.value.album = formData.value.artist
 }
 
+const convertGenre = async (encoding: string) => {
+  if (!originalGenre.value) return
+  
+  try {
+    converting.value = true
+    const result = await window.electronAPI.convertStringEncoding(originalGenre.value, encoding.toLowerCase())
+    
+    if (result.success) {
+      convertedGenre.value = result.result
+    } else {
+      alert(t('tagEditor.convertFailed', { encoding, error: result.error || '' }))
+    }
+  } catch (error: any) {
+    console.error('编码转换失败:', error)
+    alert(t('tagEditor.convertError') + ': ' + error.message)
+  } finally {
+    converting.value = false
+  }
+}
+
+const applyConvertedGenre = async () => {
+  if (!convertedGenre.value) return
+  
+  formData.value.genre = convertedGenre.value
+  convertedGenre.value = null
+  
+  // 自动保存
+  await save()
+}
+
 const close = () => {
   if (!loading.value) {
+    originalGenre.value = null
+    convertedGenre.value = null
     emit('close')
   }
 }
@@ -409,6 +514,101 @@ const close = () => {
 }
 
 .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.genre-field-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.genre-input {
+  width: 100%;
+}
+
+.encoding-convert-section {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+}
+
+.original-genre-display,
+.converted-genre-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.original-genre-display .label,
+.converted-genre-display .label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.original-genre-display .value.corrupted {
+  color: var(--color-error, #ef4444);
+  font-family: monospace;
+}
+
+.converted-genre-display .value.converted {
+  color: var(--color-success, #10b981);
+  font-weight: 500;
+}
+
+.convert-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
+.btn-convert {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all var(--transition-base);
+}
+
+.btn-convert:hover:not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.btn-convert:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-apply {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  transition: all var(--transition-base);
+  margin-left: var(--spacing-sm);
+}
+
+.btn-apply:hover:not(:disabled) {
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+}
+
+.btn-apply:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

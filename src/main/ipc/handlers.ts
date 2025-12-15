@@ -1016,6 +1016,30 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return await id3Fixer.detectEncoding(filePath)
   })
 
+  // 转换字符串编码
+  ipcMain.handle('convert-string-encoding', async (_, text: string, fromEncoding: string) => {
+    if (!text) return { success: false, result: text }
+    
+    try {
+      const iconv = require('iconv-lite')
+      // 将字符串转换为Buffer，然后使用指定编码解码
+      const buffer = Buffer.from(text, 'latin1') // 先按latin1读取原始字节
+      const decoded = iconv.decode(buffer, fromEncoding)
+      
+      // 检查转换结果是否包含中文字符（简单验证）
+      const hasChinese = /[\u4e00-\u9fa5]/.test(decoded)
+      const hasInvalidChars = /[\uFFFD]/.test(decoded) // 检查是否有替换字符
+      
+      return {
+        success: !hasInvalidChars && (hasChinese || decoded.length > 0),
+        result: decoded
+      }
+    } catch (error: any) {
+      console.error('编码转换失败:', error)
+      return { success: false, result: text, error: error.message }
+    }
+  })
+
   ipcMain.handle('fix-id3-tags', async (_, filePath: string, sourceEncoding: string, fields?: any) => {
     const result = await id3Fixer.fixID3Tags(filePath, sourceEncoding as any, fields)
 

@@ -285,8 +285,15 @@
     "titlePlaceholder": "Enter song title",
     "artistPlaceholder": "Enter artist name",
     "albumPlaceholder": "Enter album name",
+    "genrePlaceholder": "Enter genre",
     "saving": "Saving...",
-    "saveErrorRetry": "Save failed, please try again"
+    "saveErrorRetry": "Save failed, please try again",
+    "originalGenre": "Original Genre",
+    "convertedGenre": "Converted",
+    "convertFrom": "Convert from {encoding}",
+    "applyAndSave": "Apply and Save",
+    "convertFailed": "Failed to convert from {encoding}{error}",
+    "convertError": "Encoding conversion failed"
   },
   "search": {
     "placeholder": "Search music, artists, albums...",

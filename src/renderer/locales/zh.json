@@ -285,8 +285,15 @@
     "titlePlaceholder": "输入歌曲名",
     "artistPlaceholder": "输入歌手名",
     "albumPlaceholder": "输入专辑名",
+    "genrePlaceholder": "输入流派",
     "saving": "正在保存...",
-    "saveErrorRetry": "保存失败，请重试"
+    "saveErrorRetry": "保存失败，请重试",
+    "originalGenre": "原始标签",
+    "convertedGenre": "转换后",
+    "convertFrom": "从 {encoding} 转换",
+    "applyAndSave": "采用并保存",
+    "convertFailed": "从 {encoding} 转换失败{error}",
+    "convertError": "编码转换失败"
   },
   "search": {
     "placeholder": "搜索音乐、艺术家、专辑...",

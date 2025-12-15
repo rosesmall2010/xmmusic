@@ -74,6 +74,7 @@ export interface ElectronAPI {
   detectID3Encoding: (filePath: string) => Promise<any[]>
   fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) => Promise<any>
   fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>
+  convertStringEncoding: (text: string, fromEncoding: string) => Promise<{ success: boolean; result: string; error?: string }>
 
   // 重复音乐检测
   getDuplicateGroups: () => Promise<any[]>

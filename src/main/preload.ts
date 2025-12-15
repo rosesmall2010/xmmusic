@@ -135,8 +135,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('detect-id3-encoding', filePath),
   fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) =>
     ipcRenderer.invoke('fix-id3-tags', filePath, sourceEncoding, fields),
-  fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) =>
-    ipcRenderer.invoke('fix-id3-tags-batch', filePaths, sourceEncoding, fields),
+    fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) =>
+      ipcRenderer.invoke('fix-id3-tags-batch', filePaths, sourceEncoding, fields),
+    convertStringEncoding: (text: string, fromEncoding: string) =>
+      ipcRenderer.invoke('convert-string-encoding', text, fromEncoding),
 
   // 重复音乐检测
   getDuplicateGroups: () => ipcRenderer.invoke('get-duplicate-groups'),
