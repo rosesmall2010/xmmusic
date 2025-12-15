@@ -9,11 +9,17 @@
 
 ### 新增
 - **完整的中英文国际化支持**
-  - 扩展语言文件，添加所有界面文本的中英文翻译
+  - 扩展语言文件，添加所有界面文本的中英文翻译（400+ 翻译键）
   - 在设置页面添加语言切换功能（中文/英文）
   - 更新 i18n 配置支持动态切换语言
   - 在 settings store 中添加语言设置和持久化存储
-  - 更新主要组件使用 i18n（AppHeader、AppSidebar、SettingsView）
+  - 更新所有主要组件和视图使用 i18n：
+    - 布局组件：AppHeader、AppSidebar、PlayerBar、PlayQueueDrawer
+    - 视图组件：NowPlayingView、MiniPlayerView、SettingsView、PlaylistDetailView、PlaylistsView、FavoritesView、RecentPlayView、SearchView、DiscoverView
+    - 对话框组件：EditTagModal、CreatePlaylistModal、AddToPlaylistModal、MusicDetailsModal
+    - 列表组件：SongList、LocalMusicList
+    - 功能组件：EqualizerPanel
+  - 所有界面文本、按钮提示、对话框、alert/confirm 消息都已国际化
   - 语言设置会自动保存并在应用启动时恢复
   - 支持的语言：中文（简体）、English
 
