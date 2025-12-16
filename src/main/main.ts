@@ -249,14 +249,19 @@ app.whenReady().then(async () => {
                    !process.env.NODE_ENV ||
                    !!process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
-    const dockIconPath = join(projectRoot, 'build', 'icon.png')
+    
+    // macOS 优先使用 .icns 格式（更好的显示效果），如果不存在则回退到 .png
+    let dockIconPath = join(projectRoot, 'build', 'icon.icns')
+    if (!existsSync(dockIconPath)) {
+      dockIconPath = join(projectRoot, 'build', 'icon.png')
+    }
 
     if (existsSync(dockIconPath)) {
       try {
         const dockIcon = nativeImage.createFromPath(dockIconPath)
         if (!dockIcon.isEmpty()) {
           app.dock.setIcon(dockIcon)
-          console.log('✅ Dock 图标设置成功')
+          console.log(`✅ Dock 图标设置成功 (使用 ${dockIconPath.endsWith('.icns') ? 'ICNS' : 'PNG'} 格式)`)
         } else {
           console.warn('⚠️ Dock 图标加载为空')
         }
@@ -264,7 +269,7 @@ app.whenReady().then(async () => {
         console.error('❌ 设置 Dock 图标失败:', error)
       }
     } else {
-    console.warn('⚠️ Dock 图标文件不存在:', dockIconPath)
+      console.warn('⚠️ Dock 图标文件不存在:', dockIconPath)
     }
   }
 
