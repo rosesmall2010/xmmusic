@@ -58,8 +58,17 @@ function createWindow(): void {
     // 因为 npm run dev 会在项目根目录执行
     const projectRoot = process.cwd()
 
-    // 开发模式下统一使用 PNG（更简单，跨平台）
-    iconPath = join(projectRoot, 'build', 'icon.png')
+    // macOS 开发模式下优先使用 pic/icon.icns，否则使用 build/icon.png
+    if (process.platform === 'darwin') {
+      const picIconPath = join(projectRoot, 'pic', 'icon.icns')
+      if (existsSync(picIconPath)) {
+        iconPath = picIconPath
+      } else {
+        iconPath = join(projectRoot, 'build', 'icon.png')
+      }
+    } else {
+      iconPath = join(projectRoot, 'build', 'icon.png')
+    }
 
     // 输出详细的调试信息（确保能看到）
     console.log('='.repeat(60))
@@ -250,10 +259,13 @@ app.whenReady().then(async () => {
                    !!process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
 
-    // macOS 优先使用 .icns 格式（更好的显示效果），如果不存在则回退到 .png
-    let dockIconPath = join(projectRoot, 'build', 'icon.icns')
+    // 优先使用 pic/icon.icns，如果不存在则使用 build/icon.icns，最后回退到 build/icon.png
+    let dockIconPath = join(projectRoot, 'pic', 'icon.icns')
     if (!existsSync(dockIconPath)) {
-      dockIconPath = join(projectRoot, 'build', 'icon.png')
+      dockIconPath = join(projectRoot, 'build', 'icon.icns')
+      if (!existsSync(dockIconPath)) {
+        dockIconPath = join(projectRoot, 'build', 'icon.png')
+      }
     }
 
     if (existsSync(dockIconPath)) {

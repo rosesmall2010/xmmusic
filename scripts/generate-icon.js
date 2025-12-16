@@ -29,7 +29,7 @@ try {
   if (existsSync(iconsetDir)) {
     rmSync(iconsetDir, { recursive: true, force: true })
   }
-  
+
   // 创建 iconset 目录
   mkdirSync(iconsetDir, { recursive: true })
 
@@ -48,7 +48,7 @@ try {
   ]
 
   console.log('📐 生成各种尺寸的图标...')
-  
+
   // 使用 sips 命令调整图片大小
   for (const { name, size } of sizes) {
     const outputPath = join(iconsetDir, name)
@@ -74,14 +74,14 @@ try {
 
   console.log('✅ ICNS 图标生成成功!')
   console.log(`📦 输出文件: ${outputIcns}`)
-  
+
 } catch (error) {
   console.error('❌ 生成 ICNS 图标失败:', error.message)
-  
+
   // 清理临时目录
   if (existsSync(iconsetDir)) {
     rmSync(iconsetDir, { recursive: true, force: true })
   }
-  
+
   process.exit(1)
 }
