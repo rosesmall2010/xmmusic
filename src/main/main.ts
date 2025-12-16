@@ -249,7 +249,7 @@ app.whenReady().then(async () => {
                    !process.env.NODE_ENV ||
                    !!process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
-    
+
     // macOS 优先使用 .icns 格式（更好的显示效果），如果不存在则回退到 .png
     let dockIconPath = join(projectRoot, 'build', 'icon.icns')
     if (!existsSync(dockIconPath)) {

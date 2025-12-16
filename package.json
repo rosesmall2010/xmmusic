@@ -24,7 +24,8 @@
     "trigger:script": "./scripts/trigger-build.sh",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "generate:icon": "node scripts/generate-icon.js"
   },
   "keywords": [
     "音乐",
