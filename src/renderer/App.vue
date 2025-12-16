@@ -42,9 +42,18 @@ import PlayerBar from '@/components/layout/PlayerBar.vue'
 import PlayQueueDrawer from '@/components/layout/PlayQueueDrawer.vue'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
-const theme = ref('light')
+const settingsStore = useSettingsStore()
+const theme = computed(() => {
+  const currentTheme = settingsStore.theme
+  // 如果是 system 模式，需要根据系统主题返回实际的主题
+  if (currentTheme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return currentTheme
+})
 const showQueue = ref(false)
 const playerStore = usePlayerStore()
 const player = usePlayer()
@@ -81,22 +90,26 @@ const getTransitionDuration = (currentRoute: any) => {
 onMounted(async () => {
   // 加载设置
   const settings = await window.electronAPI.getSettings()
-  theme.value = settings?.theme || 'light'
-
+  
   // 同步窗口外观,确保红绿灯颜色正确
   try {
-    const validTheme = (theme.value === 'light' || theme.value === 'dark' || theme.value === 'system')
-      ? theme.value as 'light' | 'dark' | 'system'
+    const validTheme = (settingsStore.theme === 'light' || settingsStore.theme === 'dark' || settingsStore.theme === 'system')
+      ? settingsStore.theme as 'light' | 'dark' | 'system'
       : 'light'
     await window.electronAPI.setWindowTheme(validTheme)
   } catch (error) {
     console.error('同步窗口外观失败:', error)
   }
 
-  // 监听主题变化
-  window.addEventListener('theme-changed', ((e: CustomEvent) => {
-    theme.value = e.detail
-  }) as EventListener)
+  // 监听主题变化（从 settingsStore）
+  watch(() => settingsStore.theme, async (newTheme) => {
+    // 同步窗口外观
+    try {
+      await window.electronAPI.setWindowTheme(newTheme)
+    } catch (error) {
+      console.error('同步窗口外观失败:', error)
+    }
+  })
 
   // 初始化播放器（会恢复上次的播放状态：队列、当前音乐、播放位置）
   await playerStore.initialize(settings)

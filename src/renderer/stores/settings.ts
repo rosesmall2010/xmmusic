@@ -64,15 +64,22 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Helper to apply theme
   function applyTheme(t: Theme) {
-    const root = document.documentElement
+    const appElement = document.getElementById('app')
+    if (!appElement) {
+      console.warn('未找到 #app 元素，无法应用主题')
+      return
+    }
+
     const isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
+    // 移除所有主题类
+    appElement.classList.remove('light', 'dark')
+    
+    // 添加对应的主题类
     if (isDark) {
-      root.classList.add('dark-theme')
-      root.classList.remove('light-theme')
+      appElement.classList.add('dark')
     } else {
-      root.classList.add('light-theme')
-      root.classList.remove('dark-theme')
+      appElement.classList.add('light')
     }
   }
 
