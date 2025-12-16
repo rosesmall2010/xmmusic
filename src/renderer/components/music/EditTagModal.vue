@@ -225,11 +225,36 @@ const loadRawID3Tags = async () => {
   try {
     loadingMetadata.value = true
     const tags = await window.electronAPI.readRawID3Tags(props.music.filePath)
-    rawID3Tags.value = tags
+    
+    // 如果ID3标签为空或不存在，使用数据库中的当前值作为原始元数据
+    // 这样即使ID3标签为空，用户也能看到数据库中存储的（可能是乱码的）数据
+    if (!tags || (!tags.title && !tags.artist && !tags.album)) {
+      // ID3标签为空，使用数据库中的值
+      rawID3Tags.value = {
+        title: props.music.title || '',
+        artist: props.music.artist || '',
+        album: props.music.album || '',
+        year: props.music.year ? String(props.music.year) : undefined,
+        genre: props.music.genre || undefined
+      }
+    } else {
+      rawID3Tags.value = tags
+    }
     convertedTags.value = null // 重置转换后的标签
   } catch (error: any) {
     console.error('加载ID3标签失败:', error)
-    rawID3Tags.value = null
+    // 出错时也使用数据库中的值
+    if (props.music) {
+      rawID3Tags.value = {
+        title: props.music.title || '',
+        artist: props.music.artist || '',
+        album: props.music.album || '',
+        year: props.music.year ? String(props.music.year) : undefined,
+        genre: props.music.genre || undefined
+      }
+    } else {
+      rawID3Tags.value = null
+    }
   } finally {
     loadingMetadata.value = false
   }
