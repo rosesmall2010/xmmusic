@@ -17,6 +17,28 @@ import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData } from '../../shared/types/lyrics'
 
+// 等待数据库初始化的辅助函数
+async function waitForDatabase(maxWaitMs: number = 5000): Promise<MusicDatabase> {
+  const startTime = Date.now()
+  // 循环等待数据库初始化完成
+  while ((Date.now() - startTime) < maxWaitMs) {
+    try {
+      // 获取数据库实例
+      const instance = MusicDatabase.getInstance()
+      // 检查实例是否已初始化（db 属性不为 null）
+      if (instance && instance.isInitialized()) {
+        return instance
+      }
+    } catch (error) {
+      // 继续等待
+    }
+    // 等待 100ms 后重试
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  throw new Error('数据库初始化超时，请稍后重试')
+}
+
 export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
   const lyricsService = new LyricsService()
   const metadataEditor = new MetadataEditor()
@@ -936,11 +958,10 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   ipcMain.handle('local-music-dir:validate', async (_, path: string) => {
-    if (!db) {
-      throw new Error('数据库未初始化')
-    }
+    // 等待数据库初始化完成
+    const database = await waitForDatabase()
     try {
-      await db.validateDirectoryPath(path)
+      await database.validateDirectoryPath(path)
       return { valid: true }
     } catch (error: any) {
       return { valid: false, error: error.message || '路径验证失败' }

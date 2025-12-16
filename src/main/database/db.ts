@@ -38,6 +38,13 @@ export default class MusicDatabase {
     return MusicDatabase.instance
   }
 
+  /**
+   * 检查数据库是否已初始化
+   */
+  isInitialized(): boolean {
+    return this.db !== null
+  }
+
   initialize(dbPath?: string, skipVersionCheck: boolean = false): void {
     try {
       // 根据环境变量选择数据库文件名
