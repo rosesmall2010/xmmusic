@@ -22,7 +22,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // 如果 localStorage 中没有语言设置，则根据系统语言自动设置
   const savedLanguage = localStorage.getItem('locale') as Language | null
   const language = ref<Language>(savedLanguage || detectSystemLanguage())
-  
+
   // 如果是第一次启动（没有保存的语言），自动保存系统语言
   if (!savedLanguage) {
     const systemLang = detectSystemLanguage()
@@ -74,7 +74,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 移除所有主题类
     appElement.classList.remove('light', 'dark')
-    
+
     // 添加对应的主题类
     if (isDark) {
       appElement.classList.add('dark')

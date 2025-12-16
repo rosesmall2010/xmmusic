@@ -1,14 +1,6 @@
 <template>
   <header class="app-header">
     <div class="header-left">
-      <div class="nav-buttons">
-        <button class="nav-btn" @click="goBack" :disabled="!canGoBack" :title="$t('common.back')">
-          <ChevronLeft :size="20" />
-        </button>
-        <button class="nav-btn" @click="goForward" :disabled="!canGoForward" :title="$t('common.forward')">
-          <ChevronRight :size="20" />
-        </button>
-      </div>
     </div>
 
     <div class="header-center">
@@ -109,7 +101,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronLeft, ChevronRight, Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
+import { Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18n } from 'vue-i18n'
 
@@ -125,21 +117,6 @@ const selectedIndex = ref(-1)
 const theme = ref<'light' | 'dark'>('light')
 const isMac = ref(navigator.userAgent.includes('Mac'))
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-const canGoBack = computed(() => router.options.history.state.back !== null)
-const canGoForward = computed(() => router.options.history.state.forward !== null)
-
-const goBack = () => {
-  if (canGoBack.value) {
-    router.back()
-  }
-}
-
-const goForward = () => {
-  if (canGoForward.value) {
-    router.forward()
-  }
-}
 
 const handleSearchInput = () => {
   if (debounceTimer) {
@@ -319,7 +296,6 @@ onMounted(async () => {
 
 /* 确保所有按钮和搜索框都可以点击 */
 .header-btn,
-.nav-btn,
 .win-btn {
   -webkit-app-region: no-drag;
 }
@@ -338,10 +314,6 @@ onMounted(async () => {
 }
 
 .search-box {
-  -webkit-app-region: no-drag;
-}
-
-.nav-buttons {
   -webkit-app-region: no-drag;
 }
 
@@ -371,36 +343,6 @@ onMounted(async () => {
 
 .header-right {
   flex-shrink: 0;
-}
-
-/* 导航按钮 */
-.nav-buttons {
-  display: flex;
-  gap: var(--spacing-xs);
-  -webkit-app-region: no-drag;
-}
-
-.nav-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: var(--hover-bg);
-  border-radius: var(--radius-base);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-color);
-  transition: all var(--transition-base) var(--transition-timing);
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: var(--active-bg);
-}
-
-.nav-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
 }
 
 /* 搜索框 */

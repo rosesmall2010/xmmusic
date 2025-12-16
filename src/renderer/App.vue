@@ -90,7 +90,7 @@ const getTransitionDuration = (currentRoute: any) => {
 onMounted(async () => {
   // 加载设置
   const settings = await window.electronAPI.getSettings()
-  
+
   // 同步窗口外观,确保红绿灯颜色正确
   try {
     const validTheme = (settingsStore.theme === 'light' || settingsStore.theme === 'dark' || settingsStore.theme === 'system')
