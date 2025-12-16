@@ -285,55 +285,55 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 创建窗口 - 先创建窗口，再初始化数据库，避免阻塞UI
+  // 初始化数据库（同步执行，确保在设置 IPC 之前完成）
+  console.log('🔧 开始初始化数据库...')
+  try {
+    db = MusicDatabase.getInstance()
+    db.initialize()
+    console.log('✅ 数据库初始化成功')
+  } catch (error: any) {
+    console.error('='.repeat(60))
+    console.error('❌ 数据库初始化失败!')
+    console.error('='.repeat(60))
+    console.error('错误信息:', error?.message || error)
+    if (error?.stack) {
+      console.error('错误堆栈:', error.stack)
+    }
+    console.error('')
+    console.error('⚠️ 可能的原因:')
+    console.error('  1. @vscode/sqlite3 模块未正确安装')
+    console.error('  2. 数据库文件权限问题')
+    console.error('  3. Electron 版本与 @vscode/sqlite3 不兼容')
+    console.error('')
+    console.error('💡 解决方案:')
+    console.error('  1. 重新安装依赖: npm install')
+    console.error('  2. 检查数据库文件权限')
+    console.error('  3. 查看文档: docs/PYTHON_AND_ELECTRON_FIX.md')
+    console.error('')
+    console.error('⚠️ 应用将继续运行，但数据库功能将不可用')
+    console.error('='.repeat(60))
+    db = null
+  }
+
+  // 创建窗口
   createWindow()
 
-  // 初始化数据库 - 放在窗口创建之后，避免阻塞UI
-  console.log('🔧 开始初始化数据库...')
-  setTimeout(() => {
-    console.log('🔧 执行数据库初始化...')
+  // 立即读取并应用主题设置到窗口外观
+  if (mainWindow && db) {
     try {
-      db = MusicDatabase.getInstance()
-      console.log('🔧 获取数据库实例成功')
-      db.initialize()
-      console.log('✅ 数据库初始化成功')
-
-      // 数据库初始化完成后，执行后续操作
-      console.log('🔧 执行数据库初始化后的操作...')
-
-      // 初始化文件监控
-      fileMonitor = new FileMonitor(db)
-      console.log('✅ 文件监控服务已初始化')
-
-      // 应用主题设置
-      if (mainWindow) {
-        try {
-          const settings = db.getAllSettings()
-          const theme = settings.theme || 'light'
-          const { nativeTheme } = require('electron')
-          if (theme === 'system') {
-            nativeTheme.themeSource = 'system'
-          } else {
-            nativeTheme.themeSource = theme
-          }
-          console.log(`✅ 窗口外观已设置为: ${theme}`)
-        } catch (error) {
-          console.error('设置窗口外观失败:', error)
-        }
+      const settings = db.getAllSettings()
+      const theme = settings.theme || 'light'
+      const { nativeTheme } = require('electron')
+      if (theme === 'system') {
+        nativeTheme.themeSource = 'system'
+      } else {
+        nativeTheme.themeSource = theme
       }
-
-
-
-      console.log('✅ 数据库初始化后的操作执行完成')
-    } catch (error: any) {
-      console.error('='.repeat(60))
-      console.error('❌ 数据库初始化失败!')
-      console.error('='.repeat(60))
-      console.error('错误信息:', error?.message || error)
-      console.error('错误堆栈:', error?.stack || '无堆栈信息')
-      db = null
+      console.log(`✅ 窗口外观已设置为: ${theme}`)
+    } catch (error) {
+      console.error('设置窗口外观失败:', error)
     }
-  }, 100) // 延迟 100ms 执行，让窗口先渲染出来
+  }
 
   // 初始化系统托盘
   if (mainWindow) {
@@ -343,13 +343,10 @@ app.whenReady().then(async () => {
 
     // 监听窗口关闭事件，根据设置决定是否最小化到托盘
     mainWindow.on('close', (event) => {
-      // 数据库可能尚未初始化，所以需要检查
-      if (db) {
-        const settings = (db as any)?.getAllSettings() || {}
-        if (settings.minimizeToTray) {
-          event.preventDefault()
-          mainWindow?.hide()
-        }
+      const settings = db?.getAllSettings() || {}
+      if (settings.minimizeToTray) {
+        event.preventDefault()
+        mainWindow?.hide()
       }
     })
   }
@@ -361,11 +358,15 @@ app.whenReady().then(async () => {
     console.log('✅ 快捷键管理器已初始化')
   }
 
-  // 设置 IPC
+  // 初始化文件监控
+  if (db) {
+    fileMonitor = new FileMonitor(db)
+    console.log('✅ 文件监控服务已初始化')
+  }
+
+  // 设置 IPC（数据库已初始化完成）
   if (mainWindow) {
-    console.log('🔧 设置 IPC handlers...')
     setupIPC(db, mainWindow, fileMonitor, shortcutManager, trayService)
-    console.log('✅ IPC handlers 已设置')
 
     // 加载并注册快捷键
     if (shortcutManager) {
@@ -380,12 +381,8 @@ app.whenReady().then(async () => {
       })
     }
   } else {
-    console.error('❌ IPC 设置失败：主窗口未创建')
+    console.warn('⚠️ IPC 未设置：主窗口未创建')
   }
-
-  // 不使用 await，让数据库初始化在后台完成
-  // 界面会立即响应，数据库会在100ms后初始化完成
-  // 所有依赖数据库的初始化（主题、托盘、快捷键、IPC）都在Promise内部完成
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -410,7 +407,7 @@ app.on('will-quit', () => {
 
   if (db) {
     try {
-      (db as any).close()
+      db.close()
       console.log('✅ 数据库连接已关闭')
     } catch (error) {
       console.error('关闭数据库时出错:', error)
