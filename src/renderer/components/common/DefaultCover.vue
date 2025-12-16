@@ -1,48 +1,12 @@
 <template>
   <div class="default-cover" :class="coverClasses">
-    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-        </linearGradient>
-        <radialGradient id="vinylGradient" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:0.3" />
-          <stop offset="70%" style="stop-color:#000000;stop-opacity:0.1" />
-          <stop offset="100%" style="stop-color:#000000;stop-opacity:0" />
-        </radialGradient>
-      </defs>
-
-      <!-- Background -->
-      <rect width="100" height="100" fill="url(#bgGradient)" />
-
-      <!-- Vinyl Record Effect -->
-      <circle cx="50" cy="50" r="40" fill="url(#vinylGradient)" opacity="0.4" />
-      <circle cx="50" cy="50" r="35" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
-      <circle cx="50" cy="50" r="25" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
-      <circle cx="50" cy="50" r="15" fill="none" stroke="white" stroke-width="0.5" opacity="0.15" />
-
-      <!-- Center Music Icon -->
-      <g transform="translate(50, 50)" fill="white" opacity="0.9">
-        <!-- Music Note -->
-        <circle cx="-8" cy="8" r="4" />
-        <circle cx="0" cy="6" r="4" />
-        <rect x="0" y="-8" width="1.5" height="14" />
-        <path d="M 0 -8 Q 8 -10 8 -6 L 8 0 Q 8 -4 0 -3 Z" />
-
-        <!-- Second Note -->
-        <circle cx="10" cy="10" r="3" />
-        <rect x="13" y="-2" width="1.2" height="12" />
-      </g>
-
-      <!-- Shine Effect -->
-      <circle cx="30" cy="30" r="8" fill="white" opacity="0.1" />
-    </svg>
+    <img :src="defaultCoverImage" alt="默认封面" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import defaultCoverImage from '@/assets/default-cover.png'
 
 interface Props {
   size?: 'small' | 'medium' | 'large'
@@ -94,9 +58,10 @@ const coverClasses = computed(() => ({
   border-radius: inherit;
 }
 
-.default-cover svg {
+.default-cover img {
   width: 100%;
   height: 100%;
+  object-fit: cover;
   display: block;
   border-radius: inherit;
 }
