@@ -58,13 +58,21 @@ function createWindow(): void {
     // 因为 npm run dev 会在项目根目录执行
     const projectRoot = process.cwd()
 
-    // macOS 开发模式下优先使用 pic/icon.icns，否则使用 build/icon.png
+    // macOS 开发模式下优先使用 pic/icon.icns，否则使用 build/icon.icns 或 build/icon.png
     if (process.platform === 'darwin') {
       const picIconPath = join(projectRoot, 'pic', 'icon.icns')
+      const buildIconIcnsPath = join(projectRoot, 'build', 'icon.icns')
+      const buildIconPngPath = join(projectRoot, 'build', 'icon.png')
+      
       if (existsSync(picIconPath)) {
         iconPath = picIconPath
+        console.log(`✅ 找到 pic/icon.icns`)
+      } else if (existsSync(buildIconIcnsPath)) {
+        iconPath = buildIconIcnsPath
+        console.log(`✅ 找到 build/icon.icns`)
       } else {
-        iconPath = join(projectRoot, 'build', 'icon.png')
+        iconPath = buildIconPngPath
+        console.log(`✅ 使用 build/icon.png`)
       }
     } else {
       iconPath = join(projectRoot, 'build', 'icon.png')
@@ -85,6 +93,13 @@ function createWindow(): void {
       console.warn(`⚠️ 图标文件不存在: ${iconPath}`)
       // 尝试其他可能的路径
       const altPaths = [
+        join(projectRoot, 'pic', 'icon.icns'),  // 再次尝试 pic/icon.icns
+        join(__dirname, '../../pic/icon.icns'),
+        join(__dirname, '../../../pic/icon.icns'),
+        join(projectRoot, 'build', 'icon.icns'),
+        join(__dirname, '../../build/icon.icns'),
+        join(__dirname, '../../../build/icon.icns'),
+        join(projectRoot, 'build', 'icon.png'),
         join(__dirname, '../../build/icon.png'),
         join(__dirname, '../../../build/icon.png')
       ]
@@ -99,6 +114,8 @@ function createWindow(): void {
 
       if (!iconPath || !existsSync(iconPath)) {
         console.error(`❌ 无法找到图标文件，尝试的路径:`)
+        console.error(`   - ${join(projectRoot, 'pic', 'icon.icns')} (存在: ${existsSync(join(projectRoot, 'pic', 'icon.icns'))})`)
+        console.error(`   - ${join(projectRoot, 'build', 'icon.icns')} (存在: ${existsSync(join(projectRoot, 'build', 'icon.icns'))})`)
         console.error(`   - ${join(projectRoot, 'build', 'icon.png')} (存在: ${existsSync(join(projectRoot, 'build', 'icon.png'))})`)
         altPaths.forEach(p => console.error(`   - ${p} (存在: ${existsSync(p)})`))
         iconPath = undefined
@@ -119,25 +136,52 @@ function createWindow(): void {
   let icon: Electron.NativeImage | string | undefined
   if (iconPath && existsSync(iconPath)) {
     try {
+      // 对于 macOS 的 .icns 文件，Electron 的 nativeImage 应该能够加载
+      // 但如果加载失败，可能需要使用路径字符串
       const nativeImg = nativeImage.createFromPath(iconPath)
       console.log(`📊 图标加载详情:`)
       console.log(`  - Path: ${iconPath}`)
       console.log(`  - isEmpty: ${nativeImg.isEmpty()}`)
 
       if (!nativeImg.isEmpty()) {
-        console.log(`  - getSize: ${JSON.stringify(nativeImg.getSize())}`)
-        icon = nativeImg
-        console.log(`✅ 图标加载成功`)
+        const size = nativeImg.getSize()
+        console.log(`  - getSize: ${JSON.stringify(size)}`)
+        // 对于 macOS，确保图标有有效尺寸
+        if (size.width > 0 && size.height > 0) {
+          icon = nativeImg
+          console.log(`✅ 图标加载成功，尺寸: ${size.width}x${size.height}`)
+        } else {
+          console.warn(`⚠️ 图标尺寸无效 (${size.width}x${size.height})`)
+          // 对于 macOS，如果 nativeImage 无法正确加载 .icns，尝试使用路径字符串
+          // macOS 的 BrowserWindow 应该能够处理 .icns 文件路径
+          if (process.platform === 'darwin' && iconPath.endsWith('.icns')) {
+            icon = iconPath
+            console.log(`✅ 使用 .icns 文件路径作为图标`)
+          } else {
+            icon = iconPath
+          }
+        }
       } else {
-        // 如果 nativeImage 加载失败，直接使用路径字符串
-        console.warn(`⚠️ nativeImage 加载为空，使用路径字符串作为图标`)
-        icon = iconPath
+        // 如果 nativeImage 加载失败，对于 macOS 的 .icns 文件，尝试使用路径字符串
+        console.warn(`⚠️ nativeImage 加载为空`)
+        console.warn(`   文件路径: ${iconPath}`)
+        console.warn(`   文件存在: ${existsSync(iconPath)}`)
+        // macOS 的 BrowserWindow 应该能够处理 .icns 文件路径
+        if (process.platform === 'darwin' && iconPath.endsWith('.icns')) {
+          icon = iconPath
+          console.log(`✅ 使用 .icns 文件路径作为图标（macOS 原生支持）`)
+        } else {
+          icon = iconPath
+        }
       }
-    } catch (error) {
-      console.error(`❌ 加载图标失败: ${error}`)
-      // 出错时尝试直接使用路径
+    } catch (error: any) {
+      console.error(`❌ 加载图标失败: ${error?.message || error}`)
+      console.error(`   错误堆栈: ${error?.stack || '无堆栈信息'}`)
+      // 出错时尝试直接使用路径（macOS 应该能够处理 .icns 文件路径）
       icon = iconPath
     }
+  } else {
+    console.warn(`⚠️ 图标路径无效或文件不存在: ${iconPath}`)
   }
 
   mainWindow = new BrowserWindow({
