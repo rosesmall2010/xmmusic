@@ -23,7 +23,15 @@
 -  **极致性能** - 虚拟滚动+分批加载,轻松应对万级曲库
 - 🖥️ **跨平台** - 支持 macOS、Windows、Linux
 
-## 🎯 最新版本 v1.0.9
+## 🎯 最新版本 v1.1.0
+
+### v1.1.0 更新内容
+- **完整的中英文国际化支持** - 扩展语言文件，添加所有界面文本的中英文翻译，在设置页面添加语言切换功能（中文/英文）
+- **编辑标签对话框增强功能** - 新增ID3元数据显示区域，支持编码转换（GB2312/GBK），左右两栏布局优化
+- **设置页面关于部分显示应用 Logo** - 使用新的应用 Logo，提升视觉效果
+- **应用图标和音乐缺省封面更新** - 使用新生成的应用图标和音乐缺省封面
+- **macOS Dock 图标优化** - 开发模式下优先使用 PNG 格式，修复图标显示问题
+- **数据库初始化时序问题修复** - 修复 IPC handler 报错"数据库未初始化"的问题
 
 ### v1.0.9 更新内容
 - **正在播放界面可读性优化** - 为音乐标题、歌手和专辑名称添加黑色描边效果，提升在背景特效下的可读性
@@ -119,10 +127,10 @@
 从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
 
 - **macOS**:
-  - Intel: `xmmusic-1.0.8.dmg`
-  - Apple Silicon (M1/M2/M3): `xmmusic-1.0.8-arm64.dmg`
-- **Windows**: `xmmusic-Setup-1.0.8.exe`
-- **Linux**: `xmmusic-1.0.8.AppImage`
+  - Intel: `xmmusic-1.1.0.dmg`
+  - Apple Silicon (M1/M2/M3): `xmmusic-1.1.0-arm64.dmg`
+- **Windows**: `xmmusic-Setup-1.1.0.exe`
+- **Linux**: `xmmusic-1.1.0.AppImage`
 
 ### 从源码构建
 
