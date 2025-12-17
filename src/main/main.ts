@@ -347,16 +347,37 @@ app.whenReady().then(async () => {
   // 注册自定义协议来访问本地文件
   protocol.registerFileProtocol('local-file', (request, callback) => {
     // 移除协议前缀
-    const url = request.url.replace('local-file://', '')
+    let url = request.url.replace('local-file://', '')
     console.log('🔍 原始URL (移除协议后):', url)
+    
     try {
-      // 浏览器会自动对URL中的中文字符进行编码，所以需要解码
-      const filePath = decodeURIComponent(url)
-      // console.log('📂 解码后的文件路径:', filePath)
-      // console.log('📁 文件是否存在:', existsSync(filePath))
+      // Windows 路径处理：URL 中的正斜杠需要转换为反斜杠
+      // 但首先需要解码 URL 编码的字符
+      let filePath = decodeURIComponent(url)
+      
+      // Windows 路径规范化：如果路径以 / 开头（如 /C:/Music），移除开头的斜杠
+      if (process.platform === 'win32' && filePath.match(/^\/[A-Za-z]:/)) {
+        filePath = filePath.substring(1)
+      }
+      
+      // Windows 路径：将正斜杠转换为反斜杠（Windows 文件系统需要）
+      if (process.platform === 'win32') {
+        filePath = filePath.replace(/\//g, '\\')
+      }
+      
+      console.log('📂 解码后的文件路径:', filePath)
+      console.log('📁 文件是否存在:', existsSync(filePath))
+      
+      if (!existsSync(filePath)) {
+        console.error('❌ 文件不存在:', filePath)
+        callback({ error: -2 }) // FILE_NOT_FOUND
+        return
+      }
+      
       callback({ path: filePath })
-    } catch (error) {
-      console.error('文件访问错误:', error)
+    } catch (error: any) {
+      console.error('❌ 文件访问错误:', error?.message || error)
+      console.error('   原始URL:', url)
       callback({ error: -2 }) // FILE_NOT_FOUND
     }
   })

@@ -43,9 +43,21 @@ export function usePlayer() {
     }
 
     // 使用自定义协议访问本地文件
-    // 注意：不要使用 encodeURIComponent，因为它会把路径分隔符 / 也编码
-    const localFileUrl = `local-file://${music.filePath}`
+    // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
+    let normalizedPath = music.filePath
+    // 检测 Windows 路径（包含反斜杠或以盘符开头）
+    const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
+    if (isWindowsPath) {
+      normalizedPath = normalizedPath.replace(/\\/g, '/')
+      // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
+      if (normalizedPath.match(/^[A-Za-z]:/)) {
+        normalizedPath = '/' + normalizedPath
+      }
+    }
+    const localFileUrl = `local-file://${normalizedPath}`
     console.log('🔗 使用协议:', localFileUrl)
+    console.log('📁 原始路径:', music.filePath)
+    console.log('📁 规范化路径:', normalizedPath)
     audioElement.src = localFileUrl
     audioElement.volume = playerStore.volume / 100
 
@@ -93,7 +105,22 @@ export function usePlayer() {
     audioElement.onerror = (e) => {
       // 只在还没开始播放时才显示错误
       if (!hasStartedPlaying) {
-        console.error('❌ 原生 Audio 加载失败:', e)
+        const error = audioElement?.error
+        console.error('❌ 原生 Audio 加载失败')
+        console.error('   错误代码:', error?.code)
+        console.error('   错误消息:', error?.message)
+        console.error('   文件路径:', music.filePath)
+        console.error('   URL:', localFileUrl)
+        if (error) {
+          let errorMsg = '未知错误'
+          switch(error.code) {
+            case 1: errorMsg = 'MEDIA_ERR_ABORTED - 用户中止'; break
+            case 2: errorMsg = 'MEDIA_ERR_NETWORK - 网络错误'; break
+            case 3: errorMsg = 'MEDIA_ERR_DECODE - 解码错误'; break
+            case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - 格式不支持或文件损坏'; break
+          }
+          console.error('   错误详情:', errorMsg)
+        }
         // 不立即跳过，等待外层处理（会尝试 Howler.js）
         if (loadTimeout) clearTimeout(loadTimeout)
       }
@@ -158,7 +185,21 @@ export function usePlayer() {
       }
 
       // 备用：使用 Howler.js
-      const localFileUrl = `local-file://${music.filePath}`
+      // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
+      let normalizedPath = music.filePath
+      // 检测 Windows 路径（包含反斜杠或以盘符开头）
+      const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
+      if (isWindowsPath) {
+        normalizedPath = normalizedPath.replace(/\\/g, '/')
+        // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
+        if (normalizedPath.match(/^[A-Za-z]:/)) {
+          normalizedPath = '/' + normalizedPath
+        }
+      }
+      const localFileUrl = `local-file://${normalizedPath}`
+      console.log('🔗 Howler 使用协议:', localFileUrl)
+      console.log('📁 原始路径:', music.filePath)
+      console.log('📁 规范化路径:', normalizedPath)
       howl = new Howl({
         src: [localFileUrl],
         html5: true,
@@ -195,12 +236,16 @@ export function usePlayer() {
           }
         },
         onloaderror: async (_id, error) => {
-          console.error('❌ Howler 加载失败，错误代码:', error)
+          console.error('❌ Howler 加载失败')
+          console.error('   错误代码:', error)
+          console.error('   文件路径:', music.filePath)
+          console.error('   URL:', localFileUrl)
+          console.error('   文件扩展名:', music.fileExtension)
 
           let errorMsg = '未知错误'
           switch(error) {
             case 1: errorMsg = '中止加载'; break
-            case 2: errorMsg = '网络错误'; break
+            case 2: errorMsg = '网络错误（可能是路径问题）'; break
             case 3: errorMsg = '解码错误'; break
             case 4: errorMsg = '不支持的格式或文件损坏'; break
           }

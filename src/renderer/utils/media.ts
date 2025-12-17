@@ -17,7 +17,16 @@ export const getCoverUrl = (coverPath: string | null | undefined): string => {
   }
 
   // 否则转换为 local-file 协议
-  // 注意：Windows 下路径可能包含反斜杠，需要处理
-  // 但 local-file 协议通常只需要加上前缀即可，Electron 会处理
-  return `local-file://${coverPath}`
+  // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
+  let normalizedPath = coverPath
+  // 检测 Windows 路径（包含反斜杠或以盘符开头）
+  const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
+  if (isWindowsPath) {
+    normalizedPath = normalizedPath.replace(/\\/g, '/')
+    // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
+    if (normalizedPath.match(/^[A-Za-z]:/)) {
+      normalizedPath = '/' + normalizedPath
+    }
+  }
+  return `local-file://${normalizedPath}`
 }
