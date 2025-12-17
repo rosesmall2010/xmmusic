@@ -202,7 +202,7 @@
 
         <div class="about-card">
           <div class="app-logo">
-            <Music :size="48" />
+            <img :src="appIcon" alt="XM Music" />
           </div>
           <div class="app-info">
             <h3 class="app-name">XM Music</h3>
@@ -260,6 +260,7 @@ import { useI18n } from 'vue-i18n'
 import { Music, Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
+import appIcon from '@/assets/appicon.png'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -703,8 +704,18 @@ input:checked + .slider:before {
 }
 
 .app-logo {
-  font-size: 4rem;
   margin-bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-logo img {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .app-name {
