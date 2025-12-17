@@ -45,10 +45,11 @@
   - 恢复数据库同步初始化顺序，确保在设置 IPC handlers 之前完成数据库初始化
   - 原因：之前的提交将数据库初始化改为异步延迟执行（setTimeout 100ms），但 IPC handlers 在此之前就已经设置，导致传入的 db 参数为 null
 - **macOS Dock 图标优化**
-  - 优化 macOS Dock 图标设置，优先使用 `pic/icon.icns` 作为应用图标
-  - 窗口图标和 Dock 图标都优先使用 `pic/icon.icns`，如果不存在则回退到 `build/icon.icns` 或 `build/icon.png`
+  - 优化 macOS 开发模式下的图标加载，优先使用 PNG 格式（`pic/appicon2.png` 或 `build/icon.png`），因为 Electron 的 `nativeImage` 对 PNG 支持更好
+  - 窗口图标和 Dock 图标在开发模式下优先使用 PNG，生产环境使用 `.icns` 格式
+  - 更新 `build/icon.png` 为 `pic/appicon2.png`（生成 ICNS 的原始图片）
   - 更新 electron-builder 配置，打包时使用 `pic/icon.icns` 作为 macOS 应用图标
-  - 添加 `npm run generate:icon` 脚本，从 `pic/appicon.png` 自动生成 macOS ICNS 图标文件
+  - 添加 `npm run generate:icon` 脚本，从 `pic/appicon2.png` 自动生成 macOS ICNS 图标文件
   - 注意：macOS Dock 的圆角是系统默认行为，无法通过代码完全消除，如需更方正的显示效果需要调整图标设计本身
 - **ID3标签为空时原始元数据不显示问题**
   - 当ID3标签为空或不存在时，使用数据库中的当前值作为原始元数据显示

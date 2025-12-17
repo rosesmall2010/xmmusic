@@ -10,7 +10,7 @@ const { join } = require('path')
 const { existsSync, mkdirSync, rmSync } = require('fs')
 
 const projectRoot = process.cwd()
-const sourceIcon = join(projectRoot, 'pic', 'appicon.png')
+const sourceIcon = join(projectRoot, 'pic', 'appicon2.png')
 const iconsetDir = join(projectRoot, 'build', 'icon.iconset')
 const outputIcns = join(projectRoot, 'build', 'icon.icns')
 

@@ -58,21 +58,29 @@ function createWindow(): void {
     // 因为 npm run dev 会在项目根目录执行
     const projectRoot = process.cwd()
 
-    // macOS 开发模式下优先使用 pic/icon.icns，否则使用 build/icon.icns 或 build/icon.png
+    // macOS 开发模式下优先使用 PNG（Electron nativeImage 对 PNG 支持更好），否则使用 .icns
     if (process.platform === 'darwin') {
-      const picIconPath = join(projectRoot, 'pic', 'icon.icns')
-      const buildIconIcnsPath = join(projectRoot, 'build', 'icon.icns')
+      const picIconPngPath = join(projectRoot, 'pic', 'appicon2.png')
       const buildIconPngPath = join(projectRoot, 'build', 'icon.png')
-      
-      if (existsSync(picIconPath)) {
-        iconPath = picIconPath
-        console.log(`✅ 找到 pic/icon.icns`)
+      const picIconIcnsPath = join(projectRoot, 'pic', 'icon.icns')
+      const buildIconIcnsPath = join(projectRoot, 'build', 'icon.icns')
+
+      // 优先使用 PNG（开发模式下更可靠）
+      if (existsSync(picIconPngPath)) {
+        iconPath = picIconPngPath
+        console.log(`✅ 找到 pic/appicon2.png`)
+      } else if (existsSync(buildIconPngPath)) {
+        iconPath = buildIconPngPath
+        console.log(`✅ 找到 build/icon.png`)
+      } else if (existsSync(picIconIcnsPath)) {
+        iconPath = picIconIcnsPath
+        console.log(`✅ 使用 pic/icon.icns`)
       } else if (existsSync(buildIconIcnsPath)) {
         iconPath = buildIconIcnsPath
-        console.log(`✅ 找到 build/icon.icns`)
+        console.log(`✅ 使用 build/icon.icns`)
       } else {
         iconPath = buildIconPngPath
-        console.log(`✅ 使用 build/icon.png`)
+        console.log(`⚠️ 使用默认路径 build/icon.png（可能不存在）`)
       }
     } else {
       iconPath = join(projectRoot, 'build', 'icon.png')
@@ -91,17 +99,20 @@ function createWindow(): void {
 
     if (!existsSync(iconPath)) {
       console.warn(`⚠️ 图标文件不存在: ${iconPath}`)
-      // 尝试其他可能的路径
+      // 尝试其他可能的路径（优先 PNG）
       const altPaths = [
-        join(projectRoot, 'pic', 'icon.icns'),  // 再次尝试 pic/icon.icns
+        join(projectRoot, 'pic', 'appicon2.png'),
+        join(__dirname, '../../pic/appicon2.png'),
+        join(__dirname, '../../../pic/appicon2.png'),
+        join(projectRoot, 'build', 'icon.png'),
+        join(__dirname, '../../build/icon.png'),
+        join(__dirname, '../../../build/icon.png'),
+        join(projectRoot, 'pic', 'icon.icns'),
         join(__dirname, '../../pic/icon.icns'),
         join(__dirname, '../../../pic/icon.icns'),
         join(projectRoot, 'build', 'icon.icns'),
         join(__dirname, '../../build/icon.icns'),
-        join(__dirname, '../../../build/icon.icns'),
-        join(projectRoot, 'build', 'icon.png'),
-        join(__dirname, '../../build/icon.png'),
-        join(__dirname, '../../../build/icon.png')
+        join(__dirname, '../../../build/icon.icns')
       ]
 
       for (const altPath of altPaths) {
@@ -114,9 +125,10 @@ function createWindow(): void {
 
       if (!iconPath || !existsSync(iconPath)) {
         console.error(`❌ 无法找到图标文件，尝试的路径:`)
+        console.error(`   - ${join(projectRoot, 'pic', 'appicon2.png')} (存在: ${existsSync(join(projectRoot, 'pic', 'appicon2.png'))})`)
+        console.error(`   - ${join(projectRoot, 'build', 'icon.png')} (存在: ${existsSync(join(projectRoot, 'build', 'icon.png'))})`)
         console.error(`   - ${join(projectRoot, 'pic', 'icon.icns')} (存在: ${existsSync(join(projectRoot, 'pic', 'icon.icns'))})`)
         console.error(`   - ${join(projectRoot, 'build', 'icon.icns')} (存在: ${existsSync(join(projectRoot, 'build', 'icon.icns'))})`)
-        console.error(`   - ${join(projectRoot, 'build', 'icon.png')} (存在: ${existsSync(join(projectRoot, 'build', 'icon.png'))})`)
         altPaths.forEach(p => console.error(`   - ${p} (存在: ${existsSync(p)})`))
         iconPath = undefined
       }
@@ -303,12 +315,15 @@ app.whenReady().then(async () => {
                    !!process.env.VITE_DEV_SERVER_URL)
     const projectRoot = process.cwd()
 
-    // 优先使用 pic/icon.icns，如果不存在则使用 build/icon.icns，最后回退到 build/icon.png
-    let dockIconPath = join(projectRoot, 'pic', 'icon.icns')
+    // 优先使用 PNG（开发模式下更可靠），然后使用 .icns
+    let dockIconPath = join(projectRoot, 'pic', 'appicon2.png')
     if (!existsSync(dockIconPath)) {
-      dockIconPath = join(projectRoot, 'build', 'icon.icns')
+      dockIconPath = join(projectRoot, 'build', 'icon.png')
       if (!existsSync(dockIconPath)) {
-        dockIconPath = join(projectRoot, 'build', 'icon.png')
+        dockIconPath = join(projectRoot, 'pic', 'icon.icns')
+        if (!existsSync(dockIconPath)) {
+          dockIconPath = join(projectRoot, 'build', 'icon.icns')
+        }
       }
     }
 
