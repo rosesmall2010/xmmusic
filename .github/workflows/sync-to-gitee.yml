@@ -1,0 +1,123 @@
+name: Sync Release to Gitee
+
+# 当 GitHub Release 发布时触发
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  sync-release:
+    name: Sync Release to Gitee
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史记录，用于同步
+
+      - name: Setup Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Sync code to Gitee
+        uses: wearerequired/git-mirror-action@master
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.GITEE_SSH_PRIVATE_KEY }}
+        with:
+          source-repo: https://github.com/zdhsoft/xmmusic.git
+          destination-repo: git@gitee.com:zdhsoft/xmmusic.git
+
+      - name: Download Release Assets from GitHub
+        run: |
+          mkdir -p ./release-assets
+
+          # 从 GitHub Release 下载所有文件
+          RELEASE_ID="${{ github.event.release.id }}"
+          ASSETS_URL="https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets"
+
+          # 获取所有 assets
+          ASSETS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$ASSETS_URL")
+
+          # 下载每个文件
+          echo "$ASSETS" | jq -r '.[] | "\(.id)|\(.name)|\(.browser_download_url)"' | while IFS='|' read -r asset_id asset_name download_url; do
+            echo "Downloading $asset_name..."
+            curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/octet-stream" \
+              "$download_url" -o "./release-assets/$asset_name"
+          done
+
+          # 列出下载的文件
+          ls -lh ./release-assets/
+
+      - name: Get Release Info
+        id: release_info
+        run: |
+          echo "tag_name=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          echo "release_name=${{ github.event.release.name }}" >> $GITHUB_OUTPUT
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "${{ github.event.release.body }}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Gitee Release
+        uses: yanglbme/gitee-release-action@main
+        with:
+          gitee-token: ${{ secrets.GITEE_TOKEN }}
+          owner: zdhsoft
+          repo: xmmusic
+          tag_name: ${{ github.event.release.tag_name }}
+          release_name: ${{ github.event.release.name }}
+          release_body: ${{ github.event.release.body }}
+          draft: false
+          prerelease: ${{ github.event.release.prerelease }}
+
+      - name: Upload Release Assets to Gitee
+        run: |
+          # 等待一下，确保 Gitee Release 已创建
+          sleep 2
+
+          # 获取 Gitee Release ID
+          GITEE_RELEASE_ID=$(curl -s -X GET \
+            -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            "https://gitee.com/api/v5/repos/zdhsoft/xmmusic/releases/tags/${{ github.event.release.tag_name }}" \
+            | jq -r '.id')
+
+          if [ "$GITEE_RELEASE_ID" = "null" ] || [ -z "$GITEE_RELEASE_ID" ]; then
+            echo "Error: Failed to get Gitee Release ID"
+            exit 1
+          fi
+
+          echo "Gitee Release ID: $GITEE_RELEASE_ID"
+
+          # 上传每个文件
+          for file in ./release-assets/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              filesize=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+              echo "Uploading $filename ($filesize bytes) to Gitee Release..."
+
+              # 使用 Gitee API 上传文件
+              response=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Authorization: token ${{ secrets.GITEE_TOKEN }}" \
+                -H "Content-Type: multipart/form-data" \
+                -F "file=@$file" \
+                "https://gitee.com/api/v5/repos/zdhsoft/xmmusic/releases/$GITEE_RELEASE_ID/attach_files")
+
+              http_code=$(echo "$response" | tail -n1)
+              body=$(echo "$response" | sed '$d')
+
+              if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+                echo "✅ Successfully uploaded $filename"
+              else
+                echo "❌ Failed to upload $filename (HTTP $http_code)"
+                echo "Response: $body"
+              fi
+            fi
+          done
