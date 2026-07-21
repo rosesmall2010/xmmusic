@@ -427,6 +427,7 @@ const clearPlayHistory = async () => {
   if (!confirm(t('settings.clearPlayHistoryConfirm'))) return
   try {
     await window.electronAPI.clearPlayHistory()
+    window.dispatchEvent(new Event('recent-plays-updated'))
     alert(t('settings.clearPlayHistorySuccess'))
   } catch (error) {
     console.error('清除播放历史失败:', error)
