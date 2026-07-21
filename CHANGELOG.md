@@ -13,6 +13,10 @@
   - `dist:mac` 明确使用 `--arm64`
   - CI 构建步骤改为仅打包 macOS arm64
   - 更新 README / 跨平台构建文档中的下载与平台说明
+- **将最低 Node.js 版本要求提升到 24**
+  - `package.json` 新增 `engines.node: ">=24.0.0"`
+  - CI（macOS/Windows/Linux）的 Node.js 版本由 `20.19.0` 升级到 `24`
+  - 新增 `.nvmrc`（`24`），更新 README 环境要求说明
 
 ### 修复
 - 处理 npm audit 报告的依赖安全漏洞（由 22 个降至 0）
