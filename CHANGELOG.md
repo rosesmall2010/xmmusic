@@ -17,6 +17,11 @@
   - `package.json` 新增 `engines.node: ">=24.0.0"`
   - CI（macOS/Windows/Linux）的 Node.js 版本由 `20.19.0` 升级到 `24`
   - 新增 `.nvmrc`（`24`），更新 README 环境要求说明
+- **将 GitHub Actions 自身运行时升级到 Node.js 24**
+  - `actions/checkout` 升级到 `v7`
+  - `actions/setup-node` 和 `actions/upload-artifact` 升级到 `v7`
+  - `actions/download-artifact` 升级到 `v8`
+  - `softprops/action-gh-release` 升级到 `v3`
 
 ### 修复
 - 处理 npm audit 报告的依赖安全漏洞（由 22 个降至 0）
