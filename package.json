@@ -1,7 +1,7 @@
 {
   "name": "xmmusic",
   "productName": "xmmusic",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "音乐播放器",
   "main": "dist/electron/main/main.js",
   "scripts": {
@@ -40,42 +40,45 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
+    "@electron/rebuild": "^4.2.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^24.10.1",
-    "@vitejs/plugin-vue": "^6.0.1",
-    "@vitest/ui": "^2.1.9",
-    "concurrently": "^9.2.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/ui": "^4.1.10",
+    "concurrently": "^9.2.4",
     "cross-env": "^7.0.3",
     "electron": "^42.7.0",
-    "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9",
-    "typescript": "^5.9.3",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
     "vite": "^7.2.2",
-    "vitest": "^2.1.9",
+    "vitest": "^4.1.10",
     "vue": "^3.5.40",
-    "wait-on": "^9.0.3"
+    "wait-on": "^9.0.10"
   },
   "overrides": {
-    "node-abi": "^4.33.0"
+    "node-abi": "^4.33.0",
+    "shell-quote": "^1.10.0",
+    "rollup": "^4.62.2",
+    "axios": "^1.18.1",
+    "uuid": "^11.1.1"
   },
   "dependencies": {
     "@tanstack/vue-virtual": "^3.13.12",
-    "@vueuse/core": "^11.3.0",
+    "@vueuse/core": "^14.3.0",
     "better-sqlite3": "^12.11.1",
-    "chokidar": "^4.0.3",
-    "colorthief": "^2.4.0",
+    "chokidar": "^5.0.0",
+    "colorthief": "^3.4.0",
     "exceljs": "^4.4.0",
-    "fuse.js": "^7.0.0",
+    "fuse.js": "^7.5.0",
     "howler": "^2.2.4",
-    "iconv-lite": "^0.7.0",
+    "iconv-lite": "^0.7.3",
     "lucide-vue-next": "^0.554.0",
-    "music-metadata": "^11.10.1",
+    "music-metadata": "^11.14.0",
     "node-id3": "^0.2.9",
-    "pinia": "^3.0.4",
+    "pinia": "^4.0.2",
     "sortablejs": "^1.15.3",
     "vue-i18n": "^11.1.12",
-    "vue-router": "^4.4.5",
+    "vue-router": "^5.2.0",
     "vuedraggable": "^4.1.0"
   }
 }

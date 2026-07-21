@@ -5,6 +5,14 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2] - 2026-07-21
+
+### 修复
+- 处理 npm audit 报告的依赖安全漏洞（由 22 个降至 0）
+  - 移除未使用的 `electron-rebuild`（实际重建已使用 `electron-builder install-app-deps`）
+  - 升级 `music-metadata` 至 `^11.14.0`、`concurrently` 至 `^9.2.4`、`wait-on` 至 `^9.0.10`
+  - 通过 overrides 锁定安全版本：`shell-quote`、`rollup`、`axios`、`uuid`
+
 ## [1.1.1] - 2026-07-21
 
 ### 更新
