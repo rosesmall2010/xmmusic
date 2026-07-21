@@ -8,6 +8,12 @@
 ## [1.1.3] - 2026-07-21
 
 ### 修复
+- 修复拖动播放进度条后播放管线挂死、歌词与桌面歌词不再跟随的问题
+  - 根因：`local-file` 自定义协议不支持 Range 分段请求，拖动进度条时 Chromium 媒体解码器发起 `bytes=N-` 请求失败，触发 `FFmpegDemuxer: data source error`，音频元素进入错误状态，进度停止更新，两处歌词随之冻结
+  - `local-file` 协议从废弃的 `registerFileProtocol` 迁移到 `protocol.handle`，手动实现 Range 请求处理（206 Partial Content / Content-Range / Accept-Ranges）
+  - 通过 `registerSchemesAsPrivileged` 将协议注册为 `standard`（媒体元素可正常 seek 的必要条件，见 electron#51442）；standard 协议要求 URL 必须带 host，渲染进程统一改用 `local-file://media/<路径>` 形式
+  - 新增 `toLocalFileUrl` 工具函数统一构建协议 URL（含 Windows 路径规范化），替换播放器、封面、歌单缩略图、元数据编辑预览等 7 处手工拼接
+  - 经实测验证：拖动进度条前后播放不中断，全屏页歌词与桌面歌词均立即跳转到对应行并继续跟随
 - 修复桌面歌词功能完全无效的问题
   - 开发模式下功能被整体禁用（点击按钮只弹出占位窗口），改为加载 Vite 开发服务器的 `/desktop-lyrics` 路由，开发模式也可正常使用
   - 生产模式下窗口的 preload 与 index.html 路径计算错误（相对于 `dist/electron/main/windows/`），导致窗口白屏且 `electronAPI` 不可用；已修正为正确的相对路径

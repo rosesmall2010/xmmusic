@@ -109,6 +109,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
 
 interface Props {
@@ -169,7 +170,7 @@ watch(() => props.show, (newVal) => {
 watch(() => coverPath.value, (newPath) => {
   if (newPath) {
     // 创建预览 URL
-    coverPreview.value = `local-file://${encodeURIComponent(newPath)}`
+    coverPreview.value = toLocalFileUrl(newPath)
   } else {
     coverPreview.value = null
   }

@@ -1,4 +1,25 @@
 /**
+ * 把本地文件路径转换为 local-file 协议 URL
+ * local-file 是 standard 协议（媒体 seek 必须），URL 必须带 host，这里用固定占位 host "media"
+ * @param filePath 本地文件绝对路径
+ * @returns local-file://media/... 形式的 URL
+ */
+export const toLocalFileUrl = (filePath: string): string => {
+  // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
+  let normalizedPath = filePath
+  // 检测 Windows 路径（包含反斜杠或以盘符开头）
+  const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
+  if (isWindowsPath) {
+    normalizedPath = normalizedPath.replace(/\\/g, '/')
+  }
+  // 确保以 / 开头（Windows 绝对路径如 C:/Music -> /C:/Music）
+  if (!normalizedPath.startsWith('/')) {
+    normalizedPath = '/' + normalizedPath
+  }
+  return `local-file://media${normalizedPath}`
+}
+
+/**
  * 获取封面图片的 URL
  * @param coverPath 封面文件路径
  * @returns 可访问的 URL
@@ -17,16 +38,5 @@ export const getCoverUrl = (coverPath: string | null | undefined): string => {
   }
 
   // 否则转换为 local-file 协议
-  // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
-  let normalizedPath = coverPath
-  // 检测 Windows 路径（包含反斜杠或以盘符开头）
-  const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
-  if (isWindowsPath) {
-    normalizedPath = normalizedPath.replace(/\\/g, '/')
-    // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
-    if (normalizedPath.match(/^[A-Za-z]:/)) {
-      normalizedPath = '/' + normalizedPath
-    }
-  }
-  return `local-file://${normalizedPath}`
+  return toLocalFileUrl(coverPath)
 }

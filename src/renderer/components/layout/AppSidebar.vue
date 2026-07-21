@@ -91,6 +91,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Music, Folder, Heart, Clock, ListMusic } from 'lucide-vue-next'
+import { toLocalFileUrl } from '@/utils/media'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -170,7 +171,7 @@ const loadPlaylists = async () => {
           playlist.songCount = songs.length
           // 加载封面
           if (songs.length > 0 && songs[0].coverPath) {
-            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+            playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)
           } else {
             // 如果没有歌曲，清除封面
             playlist.firstSongCover = null

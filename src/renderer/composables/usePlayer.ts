@@ -1,5 +1,6 @@
 import { Howl } from 'howler'
 import { usePlayerStore } from '@/stores/player'
+import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
 
 // 自动播放下一首（在usePlayer函数内部定义）
@@ -43,21 +44,9 @@ export function usePlayer() {
     }
 
     // 使用自定义协议访问本地文件
-    // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
-    let normalizedPath = music.filePath
-    // 检测 Windows 路径（包含反斜杠或以盘符开头）
-    const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
-    if (isWindowsPath) {
-      normalizedPath = normalizedPath.replace(/\\/g, '/')
-      // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
-      if (normalizedPath.match(/^[A-Za-z]:/)) {
-        normalizedPath = '/' + normalizedPath
-      }
-    }
-    const localFileUrl = `local-file://${normalizedPath}`
+    const localFileUrl = toLocalFileUrl(music.filePath)
     console.log('🔗 使用协议:', localFileUrl)
     console.log('📁 原始路径:', music.filePath)
-    console.log('📁 规范化路径:', normalizedPath)
     audioElement.src = localFileUrl
     audioElement.volume = playerStore.volume / 100
 
@@ -186,21 +175,9 @@ export function usePlayer() {
       }
 
       // 备用：使用 Howler.js
-      // Windows 路径处理：将反斜杠转换为正斜杠（URL 需要）
-      let normalizedPath = music.filePath
-      // 检测 Windows 路径（包含反斜杠或以盘符开头）
-      const isWindowsPath = normalizedPath.includes('\\') || normalizedPath.match(/^[A-Za-z]:/)
-      if (isWindowsPath) {
-        normalizedPath = normalizedPath.replace(/\\/g, '/')
-        // Windows 绝对路径需要添加前导斜杠（如 C:/Music -> /C:/Music）
-        if (normalizedPath.match(/^[A-Za-z]:/)) {
-          normalizedPath = '/' + normalizedPath
-        }
-      }
-      const localFileUrl = `local-file://${normalizedPath}`
+      const localFileUrl = toLocalFileUrl(music.filePath)
       console.log('🔗 Howler 使用协议:', localFileUrl)
       console.log('📁 原始路径:', music.filePath)
-      console.log('📁 规范化路径:', normalizedPath)
       howl = new Howl({
         src: [localFileUrl],
         html5: true,

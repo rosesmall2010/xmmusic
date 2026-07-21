@@ -81,6 +81,7 @@ import SongList from '@/components/music/SongList.vue'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { Music } from 'lucide-vue-next'
+import { toLocalFileUrl } from '@/utils/media'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -327,7 +328,7 @@ const playlistCover = computed(() => {
   if (songs.value.length > 0) {
     const firstSongWithCover = songs.value.find(s => s.coverPath)
     if (firstSongWithCover) {
-      return `local-file://${firstSongWithCover.coverPath}`
+      return toLocalFileUrl(firstSongWithCover.coverPath)
     }
   }
   return null

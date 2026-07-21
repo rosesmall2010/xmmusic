@@ -69,6 +69,7 @@ import { useRouter } from 'vue-router'
 import { Play, Heart, Music } from 'lucide-vue-next'
 import draggable from 'vuedraggable'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
+import { toLocalFileUrl } from '@/utils/media'
 
 const router = useRouter()
 const playlists = ref<any[]>([])
@@ -87,7 +88,7 @@ const loadPlaylists = async () => {
         try {
           const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
           if (songs.length > 0 && songs[0].coverPath) {
-            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+            playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)
           }
         } catch (error) {
           console.error(`Failed to load cover for playlist ${playlist.id}:`, error)

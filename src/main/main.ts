@@ -1,6 +1,7 @@
 import { app, BrowserWindow, protocol, nativeImage } from 'electron'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, statSync, createReadStream } from 'fs'
+import { Readable } from 'stream'
 import MusicDatabase from './database/db'
 import { setupIPC } from './ipc/handlers'
 import FileMonitor from './services/fileMonitor'
@@ -13,6 +14,23 @@ app.name = 'xmmusic'
 // 修复 Electron 39 网络服务崩溃问题
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
 app.commandLine.appendSwitch('disable-site-isolation-trials')
+
+// 注册自定义协议特权（必须在 app ready 之前调用）
+// standard: true 是媒体元素能对该协议正常 seek 的必要条件（electron#51442），
+// 否则拖动进度条会触发 FFmpegDemuxer "data source error"，播放管线挂死、歌词不再跟随。
+// standard 协议要求 URL 必须带 host，因此渲染进程统一使用 local-file://media/<路径> 形式。
+// 注意不要加 stream: true —— Electron 37+（Chromium 137）下它会破坏媒体拖动（electron#47661）
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-file',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true
+    }
+  }
+])
 
 // 开发模式下使用独立的 userData 目录，避免与生产环境冲突
 // 这必须在 app.on('ready') 之前调用
@@ -345,15 +363,14 @@ app.whenReady().then(async () => {
   }
 
   // 注册自定义协议来访问本地文件
-  protocol.registerFileProtocol('local-file', (request, callback) => {
-    // 移除协议前缀
-    let url = request.url.replace('local-file://', '')
-    console.log('🔍 原始URL (移除协议后):', url)
-
+  // 使用 protocol.handle 并手动处理 Range 分段请求：
+  // 旧的 registerFileProtocol 不支持 Range，音频拖动进度条会触发
+  // FFmpegDemuxer "data source error"，导致播放管线挂死、进度不再更新
+  protocol.handle('local-file', (request) => {
     try {
-      // Windows 路径处理：URL 中的正斜杠需要转换为反斜杠
-      // 但首先需要解码 URL 编码的字符
-      let filePath = decodeURIComponent(url)
+      // URL 形如 local-file://media/Users/xxx.mp3（media 为固定占位 host）
+      // 用 URL 解析取 pathname，再解码 URL 编码的字符
+      let filePath = decodeURIComponent(new URL(request.url).pathname)
 
       // Windows 路径规范化：如果路径以 / 开头（如 /C:/Music），移除开头的斜杠
       if (process.platform === 'win32' && filePath.match(/^\/[A-Za-z]:/)) {
@@ -365,20 +382,52 @@ app.whenReady().then(async () => {
         filePath = filePath.replace(/\//g, '\\')
       }
 
-      console.log('📂 解码后的文件路径:', filePath)
-      console.log('📁 文件是否存在:', existsSync(filePath))
-
       if (!existsSync(filePath)) {
         console.error('❌ 文件不存在:', filePath)
-        callback({ error: -2 }) // FILE_NOT_FOUND
-        return
+        return new Response('Not Found', { status: 404 })
       }
 
-      callback({ path: filePath })
+      const { size } = statSync(filePath)
+      const rangeHeader = request.headers.get('range')
+
+      // 无 Range：整文件返回
+      if (!rangeHeader) {
+        const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            'Content-Length': String(size),
+            'Accept-Ranges': 'bytes'
+          }
+        })
+      }
+
+      // 有 Range：返回 206 分段内容（拖动进度条时媒体解码器依赖这个）
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/)
+      let start = match && match[1] ? parseInt(match[1], 10) : 0
+      let end = match && match[2] ? parseInt(match[2], 10) : size - 1
+      if (isNaN(start) || start < 0) start = 0
+      if (isNaN(end) || end >= size) end = size - 1
+      if (start > end) {
+        return new Response(null, {
+          status: 416,
+          headers: { 'Content-Range': `bytes */${size}` }
+        })
+      }
+
+      const stream = Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream
+      return new Response(stream, {
+        status: 206,
+        headers: {
+          'Content-Range': `bytes ${start}-${end}/${size}`,
+          'Content-Length': String(end - start + 1),
+          'Accept-Ranges': 'bytes'
+        }
+      })
     } catch (error: any) {
       console.error('❌ 文件访问错误:', error?.message || error)
-      console.error('   原始URL:', url)
-      callback({ error: -2 }) // FILE_NOT_FOUND
+      console.error('   原始URL:', request.url)
+      return new Response('Internal Error', { status: 500 })
     }
   })
 

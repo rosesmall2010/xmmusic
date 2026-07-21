@@ -71,6 +71,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
+import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
 
 const { t } = useI18n()
@@ -101,7 +102,7 @@ const loadPlaylists = async () => {
           playlist.songCount = songs.length
           // 加载封面
           if (songs.length > 0 && songs[0].coverPath) {
-            playlist.firstSongCover = `local-file://${songs[0].coverPath}`
+            playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)
           } else {
             // 如果没有歌曲，清除封面
             playlist.firstSongCover = null
