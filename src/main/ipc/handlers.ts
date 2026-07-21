@@ -154,6 +154,13 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
   })
 
+  // 桌面歌词窗口开/关 → 通知主窗口是否需要持续推送播放状态
+  desktopLyrics.onDesktopLyricsVisibilityChange((open) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('desktop-lyrics-visibility', open)
+    }
+  })
+
   // 文件操作（部分不依赖数据库）
   ipcMain.handle('select-music-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

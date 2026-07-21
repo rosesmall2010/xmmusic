@@ -52,6 +52,8 @@ const loadLyrics = async (musicId: number) => {
 
   try {
     const lyricsData = await window.electronAPI.loadLyrics(musicId)
+    // 请求返回时可能已切歌，丢弃过期结果，避免旧歌词覆盖新歌
+    if (currentMusic.value?.id !== musicId) return
     if (lyricsData && lyricsData.lines) {
       lyrics.value = lyricsData.lines
     }

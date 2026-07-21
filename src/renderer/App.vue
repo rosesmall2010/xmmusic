@@ -60,6 +60,10 @@ const player = usePlayer()
 
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
 
+// 桌面歌词是独立的 BrowserWindow，加载的是同一套渲染入口
+// 通过初始 hash 判断，避免在歌词窗口里执行主窗口的初始化逻辑
+const isDesktopLyricsWindow = window.location.hash.startsWith('#/desktop-lyrics')
+
 const toggleQueue = () => {
   showQueue.value = !showQueue.value
 }
@@ -88,6 +92,10 @@ const getTransitionDuration = (currentRoute: any) => {
 }
 
 onMounted(async () => {
+  // 桌面歌词窗口只负责展示歌词（由主窗口通过 IPC 推送状态），
+  // 跳过播放器初始化、托盘/快捷键监听等主窗口专属逻辑
+  if (isDesktopLyricsWindow) return
+
   // 加载设置
   const settings = await window.electronAPI.getSettings()
 
@@ -141,7 +149,8 @@ onMounted(async () => {
     }
   })
 
-  // 同步播放状态到桌面歌词窗口
+  // 同步播放状态到桌面歌词窗口（仅在歌词窗口打开时推送，避免无谓的高频 IPC）
+  let desktopLyricsOpen = false
   const sendDesktopLyricsState = () => {
     const music = playerStore.currentMusic
     window.electronAPI.sendDesktopLyricsState({
@@ -152,10 +161,23 @@ onMounted(async () => {
   }
   watch(
     () => [playerStore.currentMusic?.id, playerStore.currentTime, playerStore.isPlaying],
-    sendDesktopLyricsState
+    () => {
+      if (desktopLyricsOpen) sendDesktopLyricsState()
+    }
   )
-  // 桌面歌词窗口打开后会请求一次当前状态
-  window.electronAPI.onDesktopLyricsRequestState(sendDesktopLyricsState)
+  // 歌词窗口开/关时更新推送开关
+  window.electronAPI.onDesktopLyricsVisibility((open) => {
+    desktopLyricsOpen = open
+  })
+  // 主窗口重载时（如开发热更新）歌词窗口可能已处于打开状态
+  window.electronAPI.isDesktopLyricsOpen().then((open) => {
+    desktopLyricsOpen = open
+  })
+  // 桌面歌词窗口加载完成后会请求一次当前状态
+  window.electronAPI.onDesktopLyricsRequestState(() => {
+    desktopLyricsOpen = true
+    sendDesktopLyricsState()
+  })
 
   // 加载快捷键配置
   try {
@@ -264,8 +286,10 @@ async function handleNext() {
 }
 
 onBeforeUnmount(() => {
+  if (isDesktopLyricsWindow) return
   window.electronAPI.removeShortcutAction()
   window.electronAPI.removeTrayAction()
+  window.electronAPI.removeDesktopLyricsListeners()
   window.removeEventListener('toggle-queue', toggleQueue)
 })
 </script>

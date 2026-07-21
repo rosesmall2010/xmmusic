@@ -32,9 +32,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDesktopLyricsRequestState: (callback: () => void) => {
     ipcRenderer.on('desktop-lyrics-request-state', () => callback())
   },
+  onDesktopLyricsVisibility: (callback: (open: boolean) => void) => {
+    ipcRenderer.on('desktop-lyrics-visibility', (_, open) => callback(open))
+  },
   removeDesktopLyricsListeners: () => {
     ipcRenderer.removeAllListeners('desktop-lyrics-state')
     ipcRenderer.removeAllListeners('desktop-lyrics-request-state')
+    ipcRenderer.removeAllListeners('desktop-lyrics-visibility')
   },
 
   // 文件操作

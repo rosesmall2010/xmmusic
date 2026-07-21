@@ -18,6 +18,7 @@ export interface ElectronAPI {
   notifyDesktopLyricsReady: () => void
   onDesktopLyricsState: (callback: (state: DesktopLyricsState) => void) => void
   onDesktopLyricsRequestState: (callback: () => void) => void
+  onDesktopLyricsVisibility: (callback: (open: boolean) => void) => void
   removeDesktopLyricsListeners: () => void
 
   // 文件操作

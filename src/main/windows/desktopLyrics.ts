@@ -3,6 +3,12 @@ import { join } from 'path'
 
 let desktopLyricsWindow: BrowserWindow | null = null
 let isLocked = false
+let visibilityCallback: ((open: boolean) => void) | null = null
+
+// 注册窗口开/关回调，用于通知主窗口是否需要推送播放状态
+export function onDesktopLyricsVisibilityChange(callback: (open: boolean) => void): void {
+  visibilityCallback = callback
+}
 
 export function createDesktopLyricsWindow(): BrowserWindow | null {
   if (desktopLyricsWindow) {
@@ -52,7 +58,10 @@ export function createDesktopLyricsWindow(): BrowserWindow | null {
   desktopLyricsWindow.on('closed', () => {
     desktopLyricsWindow = null
     isLocked = false
+    visibilityCallback?.(false)
   })
+
+  visibilityCallback?.(true)
 
   return desktopLyricsWindow
 }
