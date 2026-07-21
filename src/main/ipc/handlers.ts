@@ -142,6 +142,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return desktopLyrics.isDesktopLyricsOpen()
   })
 
+  // 主窗口推送播放状态 → 转发给桌面歌词窗口
+  ipcMain.on('desktop-lyrics-state', (_, state) => {
+    desktopLyrics.sendToDesktopLyrics('desktop-lyrics-state', state)
+  })
+
+  // 桌面歌词窗口加载完成 → 通知主窗口立即推送一次当前播放状态
+  ipcMain.on('desktop-lyrics-ready', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('desktop-lyrics-request-state')
+    }
+  })
+
   // 文件操作（部分不依赖数据库）
   ipcMain.handle('select-music-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {

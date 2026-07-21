@@ -22,6 +22,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleDesktopLyrics: () => ipcRenderer.invoke('toggle-desktop-lyrics'),
   setDesktopLyricsLocked: (locked: boolean) => ipcRenderer.invoke('set-desktop-lyrics-locked', locked),
   isDesktopLyricsOpen: () => ipcRenderer.invoke('is-desktop-lyrics-open'),
+  // 桌面歌词播放状态同步
+  sendDesktopLyricsState: (state: { music: { id: number; title: string; artist: string } | null; currentTime: number; isPlaying: boolean }) =>
+    ipcRenderer.send('desktop-lyrics-state', state),
+  notifyDesktopLyricsReady: () => ipcRenderer.send('desktop-lyrics-ready'),
+  onDesktopLyricsState: (callback: (state: { music: { id: number; title: string; artist: string } | null; currentTime: number; isPlaying: boolean }) => void) => {
+    ipcRenderer.on('desktop-lyrics-state', (_, state) => callback(state))
+  },
+  onDesktopLyricsRequestState: (callback: () => void) => {
+    ipcRenderer.on('desktop-lyrics-request-state', () => callback())
+  },
+  removeDesktopLyricsListeners: () => {
+    ipcRenderer.removeAllListeners('desktop-lyrics-state')
+    ipcRenderer.removeAllListeners('desktop-lyrics-request-state')
+  },
 
   // 文件操作
   selectMusicFolder: () => ipcRenderer.invoke('select-music-folder'),

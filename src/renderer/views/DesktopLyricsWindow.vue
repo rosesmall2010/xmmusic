@@ -18,27 +18,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { usePlayerStore } from '@/stores/player'
-import { parseLrc, type LyricLine } from '@/utils/lrcParser'
 import { Lock } from 'lucide-vue-next'
+import type { LyricLine } from '@shared/types/lyrics'
+import type { DesktopLyricsState } from '@/types/electron'
 
 const { t } = useI18n()
-const playerStore = usePlayerStore()
 const locked = ref(false)
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
+const currentMusic = ref<DesktopLyricsState['music']>(null)
 
 const currentLine = computed(() => {
   if (currentLyricIndex.value >= 0 && lyrics.value[currentLyricIndex.value]) {
     return lyrics.value[currentLyricIndex.value].text
   }
-  return playerStore.currentMusic?.title || t('player.noMusic')
+  return currentMusic.value?.title || t('player.noMusic')
 })
-
-const currentMusic = computed(() => playerStore.currentMusic)
-const currentTime = computed(() => playerStore.currentTime)
 
 const toggleLock = async () => {
   locked.value = !locked.value
@@ -49,31 +46,21 @@ const closeWindow = async () => {
   await window.electronAPI.toggleDesktopLyrics()
 }
 
-const loadLyrics = async () => {
+const loadLyrics = async (musicId: number) => {
   lyrics.value = []
   currentLyricIndex.value = -1
 
-  if (!currentMusic.value) return
-
   try {
-    const lrcContent = await window.electronAPI.loadLyrics(currentMusic.value.id)
-    if (lrcContent) {
-      lyrics.value = parseLrc(lrcContent)
+    const lyricsData = await window.electronAPI.loadLyrics(musicId)
+    if (lyricsData && lyricsData.lines) {
+      lyrics.value = lyricsData.lines
     }
   } catch (error) {
-    console.error('Failed to load lyrics:', error)
+    console.error('加载歌词失败:', error)
   }
 }
 
-// 监听当前音乐变化
-watch(currentMusic, async (music) => {
-  if (music) {
-    await loadLyrics()
-  }
-}, { immediate: true })
-
-// 监听播放进度更新歌词
-watch(currentTime, (time) => {
+const updateLyricIndex = (time: number) => {
   if (lyrics.value.length === 0) return
 
   let index = lyrics.value.findIndex(line => line.time > time)
@@ -87,6 +74,30 @@ watch(currentTime, (time) => {
   if (index !== currentLyricIndex.value) {
     currentLyricIndex.value = index
   }
+}
+
+// 播放状态由主窗口通过 IPC 推送（本窗口的 Pinia store 与主窗口相互独立）
+const handleState = (state: DesktopLyricsState) => {
+  if (state.music?.id !== currentMusic.value?.id) {
+    currentMusic.value = state.music
+    if (state.music) {
+      loadLyrics(state.music.id)
+    } else {
+      lyrics.value = []
+      currentLyricIndex.value = -1
+    }
+  }
+  updateLyricIndex(state.currentTime)
+}
+
+onMounted(() => {
+  window.electronAPI.onDesktopLyricsState(handleState)
+  // 通知主进程本窗口已就绪，让主窗口立即推送一次当前状态
+  window.electronAPI.notifyDesktopLyricsReady()
+})
+
+onUnmounted(() => {
+  window.electronAPI.removeDesktopLyricsListeners()
 })
 </script>
 

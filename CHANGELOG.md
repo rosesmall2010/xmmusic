@@ -8,6 +8,13 @@
 ## [1.1.3] - 2026-07-21
 
 ### 修复
+- 修复桌面歌词功能完全无效的问题
+  - 开发模式下功能被整体禁用（点击按钮只弹出占位窗口），改为加载 Vite 开发服务器的 `/desktop-lyrics` 路由，开发模式也可正常使用
+  - 生产模式下窗口的 preload 与 index.html 路径计算错误（相对于 `dist/electron/main/windows/`），导致窗口白屏且 `electronAPI` 不可用；已修正为正确的相对路径
+  - 加载页面时 hash 缺少前导 `/`（`#desktop-lyrics`），无法匹配 vue-router 的 hash 路由；改为 `#/desktop-lyrics`
+  - 歌词窗口原先直接读取本窗口的 Pinia store，但它与主窗口的 store 相互独立，永远拿不到播放状态；新增 IPC 通道，由主窗口实时推送当前歌曲、播放进度到歌词窗口，窗口打开时会立即请求一次当前状态
+  - 修正歌词解析：`loadLyrics` 返回的是 `LyricsData` 对象而非 LRC 文本，原先误用 `parseLrc` 二次解析导致歌词永远为空；改为直接使用 `lyricsData.lines`
+  - 移除按钮提示文案中的“仅生产模式可用”说明
 - 修复最近播放列表重复记录与滚动异常
   - 写入时同一 `music_id` 只保留一条：再次播放先删除旧记录再插入，实现置顶
   - 查询时按 `music_id` 取最新一条，并清理历史重复；避免 SongList 虚拟列表因重复 `key` 导致滚轮滚动异常

@@ -141,6 +141,22 @@ onMounted(async () => {
     }
   })
 
+  // 同步播放状态到桌面歌词窗口
+  const sendDesktopLyricsState = () => {
+    const music = playerStore.currentMusic
+    window.electronAPI.sendDesktopLyricsState({
+      music: music ? { id: music.id, title: music.title, artist: music.artist } : null,
+      currentTime: playerStore.currentTime,
+      isPlaying: playerStore.isPlaying
+    })
+  }
+  watch(
+    () => [playerStore.currentMusic?.id, playerStore.currentTime, playerStore.isPlaying],
+    sendDesktopLyricsState
+  )
+  // 桌面歌词窗口打开后会请求一次当前状态
+  window.electronAPI.onDesktopLyricsRequestState(sendDesktopLyricsState)
+
   // 加载快捷键配置
   try {
     await window.electronAPI.loadShortcuts()

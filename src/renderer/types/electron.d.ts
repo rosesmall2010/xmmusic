@@ -1,3 +1,9 @@
+export interface DesktopLyricsState {
+  music: { id: number; title: string; artist: string } | null
+  currentTime: number
+  isPlaying: boolean
+}
+
 export interface ElectronAPI {
   // 窗口控制
   minimizeWindow: () => Promise<void>
@@ -8,6 +14,11 @@ export interface ElectronAPI {
   toggleDesktopLyrics: () => Promise<boolean>
   setDesktopLyricsLocked: (locked: boolean) => Promise<void>
   isDesktopLyricsOpen: () => Promise<boolean>
+  sendDesktopLyricsState: (state: DesktopLyricsState) => void
+  notifyDesktopLyricsReady: () => void
+  onDesktopLyricsState: (callback: (state: DesktopLyricsState) => void) => void
+  onDesktopLyricsRequestState: (callback: () => void) => void
+  removeDesktopLyricsListeners: () => void
 
   // 文件操作
   selectMusicFolder: () => Promise<string[]>
