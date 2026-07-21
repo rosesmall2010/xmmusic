@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
@@ -114,7 +114,13 @@ const showDropdown = ref(false)
 const searchSuggestions = ref<string[]>([])
 const searchHistory = ref<any[]>([])
 const selectedIndex = ref(-1)
-const theme = ref<'light' | 'dark'>('light')
+// 当前生效的主题（把 system 解析为实际的 light/dark），来源统一为 settingsStore
+const theme = computed<'light' | 'dark'>(() => {
+  if (settingsStore.theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return settingsStore.theme
+})
 const isMac = ref(navigator.userAgent.includes('Mac'))
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -236,12 +242,13 @@ const handleSearchKeydown = (e: KeyboardEvent) => {
 }
 
 const toggleTheme = async () => {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
-  document.getElementById('app')?.setAttribute('class', theme.value)
-  await window.electronAPI.saveSettings({ theme: theme.value })
+  const next = theme.value === 'dark' ? 'light' : 'dark'
+  // 通过 settingsStore 统一切换，App.vue 的 :class 绑定会自动更新界面主题
+  settingsStore.setTheme(next)
+  await window.electronAPI.saveSettings({ theme: next })
   // 同步窗口外观,确保红绿灯颜色正确
-  await window.electronAPI.setWindowTheme(theme.value)
-  window.dispatchEvent(new CustomEvent('theme-changed', { detail: theme.value }))
+  await window.electronAPI.setWindowTheme(next)
+  window.dispatchEvent(new CustomEvent('theme-changed', { detail: next }))
 }
 
 const toggleMiniMode = async () => {
@@ -272,11 +279,6 @@ const closeWindow = () => {
   window.electronAPI.closeWindow()
 }
 
-// 初始化主题
-onMounted(async () => {
-  const settings = await window.electronAPI.getSettings()
-  theme.value = settings?.theme || 'light'
-})
 </script>
 
 <style scoped>
