@@ -42,10 +42,13 @@ onMounted(async () => {
   await loadRecent()
   // 监听元数据更新事件，只更新被修改的歌曲
   window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  // 播放记录更新后刷新列表（同曲置顶、去重后的顺序）
+  window.addEventListener('recent-plays-updated', loadRecent)
 })
 
 onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  window.removeEventListener('recent-plays-updated', loadRecent)
 })
 
 const loadRecent = async () => {

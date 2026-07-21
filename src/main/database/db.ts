@@ -1443,24 +1443,52 @@ export default class MusicDatabase {
 
   /**
    * recent_plays 表操作（基于 music_id）
+   * 同一首歌只保留一条记录：再次播放时删除旧记录并重新插入，使其置顶
    */
   addToRecentPlaysByMusicId(musicId: number): void {
-    const stmt = this.db!.prepare('INSERT INTO recent_plays (music_id) VALUES (?)')
-    stmt.run(musicId)
-
-    // 限制最近播放记录数量（保留最近1000条）
+    const deleteStmt = this.db!.prepare('DELETE FROM recent_plays WHERE music_id = ?')
+    const insertStmt = this.db!.prepare('INSERT INTO recent_plays (music_id) VALUES (?)')
+    // SQLite 要求 DELETE ... NOT IN (SELECT ...) 再套一层，避免同表修改限制
     const limitStmt = this.db!.prepare(`
       DELETE FROM recent_plays
       WHERE id NOT IN (
-        SELECT id FROM recent_plays
-        ORDER BY played_at DESC
-        LIMIT 1000
+        SELECT id FROM (
+          SELECT id FROM recent_plays
+          ORDER BY played_at DESC, id DESC
+          LIMIT 1000
+        )
       )
     `)
-    limitStmt.run()
+
+    const tx = this.db!.transaction((id: number) => {
+      deleteStmt.run(id)
+      insertStmt.run(id)
+      // 清理其他歌曲的历史重复记录，并限制总量
+      this.dedupeRecentPlays()
+      limitStmt.run()
+    })
+    tx(musicId)
   }
 
-  getRecentPlaysByMusicId(limit: number = 50): Array<MusicItem & { fullPath: string; playedAt: string }> {
+  /**
+   * 清理 recent_plays 中同一 music_id 的历史重复记录，只保留最新一条
+   */
+  dedupeRecentPlays(): void {
+    const stmt = this.db!.prepare(`
+      DELETE FROM recent_plays
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT MAX(id) as id
+          FROM recent_plays
+          GROUP BY music_id
+        )
+      )
+    `)
+    stmt.run()
+  }
+
+  getRecentPlaysByMusicId(limit: number = 1000): Array<MusicItem & { fullPath: string; playedAt: string }> {
+    // 按 music_id 只取最新一条，避免历史重复记录导致列表出现重复项/虚拟滚动 key 冲突
     const stmt = this.db!.prepare(`
       SELECT
         am.*,
@@ -1469,11 +1497,16 @@ export default class MusicDatabase {
         CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
         CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
       FROM recent_plays rp
+      JOIN (
+        SELECT music_id, MAX(id) AS max_id
+        FROM recent_plays
+        GROUP BY music_id
+      ) latest ON rp.id = latest.max_id
       JOIN all_music am ON rp.music_id = am.id
       JOIN music_dir md ON am.dir_id = md.id
       LEFT JOIN favorites f ON am.id = f.music_id
       LEFT JOIN play_queue pq ON am.id = pq.music_id
-      ORDER BY rp.played_at DESC
+      ORDER BY rp.played_at DESC, rp.id DESC
       LIMIT ?
     `)
     const rows = stmt.all(limit) as any[]
@@ -2744,7 +2777,7 @@ export default class MusicDatabase {
    * 获取最近播放总数
    */
   getRecentPlaysCount(): number {
-    const stmt = this.db!.prepare('SELECT COUNT(*) as count FROM recent_plays')
+    const stmt = this.db!.prepare('SELECT COUNT(DISTINCT music_id) as count FROM recent_plays')
     const result = stmt.get() as { count: number }
     return result.count
   }
