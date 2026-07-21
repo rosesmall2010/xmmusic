@@ -8,6 +8,10 @@
 ## [1.1.3] - 2026-07-21
 
 ### 修复
+- 修复桌面歌词窗口背景不透明的问题
+  - `BrowserWindow` 虽已设置 `transparent: true`，但页面的 `body` 和 `#app` 被全局主题样式涂上了不透明背景色，窗口仍显示一块实色底；歌词窗口内强制这三层背景为透明
+  - 移除歌词容器自身的半透明黑底与毛玻璃效果，仅保留未锁定时顶部的半透明控制条（用于拖动/锁定/关闭）
+  - 歌词文字增加黑色描边（`-webkit-text-stroke` + `paint-order: stroke fill`，并以 8 方向文字阴影兜底），确保在任意桌面背景上清晰可读
 - 修复拖动播放进度条后播放管线挂死、歌词与桌面歌词不再跟随的问题
   - 根因：`local-file` 自定义协议不支持 Range 分段请求，拖动进度条时 Chromium 媒体解码器发起 `bytes=N-` 请求失败，触发 `FFmpegDemuxer: data source error`，音频元素进入错误状态，进度停止更新，两处歌词随之冻结
   - `local-file` 协议从废弃的 `registerFileProtocol` 迁移到 `protocol.handle`，手动实现 Range 请求处理（206 Partial Content / Content-Range / Accept-Ranges）

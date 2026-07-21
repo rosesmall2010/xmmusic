@@ -103,24 +103,28 @@ onUnmounted(() => {
 })
 </script>
 
+<style>
+/* 本组件只在独立的桌面歌词窗口中挂载：
+   body 与 #app 默认涂有不透明的主题背景色，这里强制透明，
+   否则透明 BrowserWindow 仍会显示一块实色背景 */
+html,
+body,
+#app {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+</style>
+
 <style scoped>
 .desktop-lyrics-window {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: transparent;
   border-radius: 16px;
   overflow: hidden;
   transition: all 0.3s ease;
-}
-
-.desktop-lyrics-window.locked {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .control-bar {
@@ -128,7 +132,8 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px 8px 0 0;
   -webkit-app-region: drag;
 }
 
@@ -136,7 +141,7 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   color: white;
   cursor: pointer;
@@ -174,20 +179,18 @@ onUnmounted(() => {
   font-weight: 700;
   color: white;
   text-align: center;
+  /* 黑色描边：先画描边再填充文字，描边不会侵蚀字形内部 */
+  -webkit-text-stroke: 4px rgba(0, 0, 0, 0.9);
+  paint-order: stroke fill;
+  /* 8 方向阴影作为描边的兜底，同时增强透明背景下的可读性 */
   text-shadow:
-    0 0 20px rgba(0, 0, 0, 0.8),
-    0 2px 10px rgba(0, 0, 0, 0.6),
-    0 0 40px rgba(255, 255, 255, 0.3);
+    -1px -1px 0 rgba(0, 0, 0, 0.9),
+    1px -1px 0 rgba(0, 0, 0, 0.9),
+    -1px 1px 0 rgba(0, 0, 0, 0.9),
+    1px 1px 0 rgba(0, 0, 0, 0.9),
+    0 2px 8px rgba(0, 0, 0, 0.8);
   line-height: 1.5;
   animation: fadeIn 0.3s ease;
-}
-
-.desktop-lyrics-window.locked .current-line {
-  text-shadow:
-    0 0 30px rgba(0, 0, 0, 0.9),
-    0 3px 15px rgba(0, 0, 0, 0.8),
-    0 0 60px rgba(255, 255, 255, 0.4),
-    2px 2px 4px rgba(0, 0, 0, 1);
 }
 
 @keyframes fadeIn {
