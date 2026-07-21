@@ -40,7 +40,7 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Package macOS (x64 + arm64)
+      - name: Package macOS (arm64)
         run: npm run dist:mac
         env:
           NODE_ENV: production

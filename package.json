@@ -16,7 +16,7 @@
     "copy:migrations": "node scripts/copy-migrations.js",
     "pack": "cross-env NODE_ENV=production electron-builder",
     "dist": "npm run build && cross-env NODE_ENV=production electron-builder",
-    "dist:mac": "npm run build && cross-env NODE_ENV=production electron-builder --mac",
+    "dist:mac": "npm run build && cross-env NODE_ENV=production electron-builder --mac --arm64",
     "dist:win": "npm run build && cross-env NODE_ENV=production electron-builder --win --x64",
     "trigger:build": "gh workflow run build.yml",
     "trigger:watch": "gh run watch",

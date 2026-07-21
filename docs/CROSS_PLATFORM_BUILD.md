@@ -159,7 +159,7 @@ npm run dist:win
 ## 当前构建状态
 
 ### ✅ macOS 版本
-- **平台**: macOS (x64, arm64)
+- **平台**: macOS (arm64，Apple Silicon)
 - **构建命令**: `npm run dist:mac`
 - **输出**: `dist/xmmusic-*.dmg`
 

@@ -126,9 +126,7 @@
 
 从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
 
-- **macOS**:
-  - Intel: `xmmusic-1.1.0.dmg`
-  - Apple Silicon (M1/M2/M3): `xmmusic-1.1.0-arm64.dmg`
+- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.1.2-arm64.dmg`
 - **Windows**: `xmmusic-Setup-1.1.0.exe`
 - **Linux**: `xmmusic-1.1.0.AppImage`
 

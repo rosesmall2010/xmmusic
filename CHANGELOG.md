@@ -7,6 +7,13 @@
 
 ## [1.1.2] - 2026-07-21
 
+### 变更
+- **移除 macOS Intel（x64）支持**，macOS 打包仅保留 Apple Silicon（arm64）
+  - `electron-builder.yml` 的 mac 架构仅保留 `arm64`
+  - `dist:mac` 明确使用 `--arm64`
+  - CI 构建步骤改为仅打包 macOS arm64
+  - 更新 README / 跨平台构建文档中的下载与平台说明
+
 ### 修复
 - 处理 npm audit 报告的依赖安全漏洞（由 22 个降至 0）
   - 移除未使用的 `electron-rebuild`（实际重建已使用 `electron-builder install-app-deps`）
