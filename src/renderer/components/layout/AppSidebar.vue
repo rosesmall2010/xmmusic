@@ -96,12 +96,15 @@ const router = useRouter()
 const { t } = useI18n()
 const totalCount = ref(0)
 const playlists = ref<any[]>([])
+// 数量必须用独立的 ref 保存：直接修改 computed 返回的普通对象不具备响应式，界面不会更新
+const favoritesCount = ref(0)
+const recentPlaysCount = ref(0)
 
 const navItems = computed(() => [
   { path: '/discover', icon: Music, label: t('sidebar.recommendations') },
   { path: '/local', icon: Folder, label: t('sidebar.local') },
-  { path: '/favorites', icon: Heart, label: t('sidebar.favorites'), count: 0 },
-  { path: '/recent', icon: Clock, label: t('sidebar.recent'), count: 0 },
+  { path: '/favorites', icon: Heart, label: t('sidebar.favorites'), count: favoritesCount.value },
+  { path: '/recent', icon: Clock, label: t('sidebar.recent'), count: recentPlaysCount.value },
 ])
 
 const mainNavItems = computed(() => navItems.value.slice(0, 2))
@@ -140,8 +143,7 @@ const refreshCounts = async () => {
 const refreshFavoritesCount = async () => {
   try {
     const favorites = await window.electronAPI.getFavorites()
-    const favItem = navItems.value.find(item => item.path === '/favorites')
-    if (favItem) favItem.count = favorites.length
+    favoritesCount.value = favorites.length
   } catch (error) {
     console.error('Failed to load favorites count:', error)
   }
@@ -150,8 +152,7 @@ const refreshFavoritesCount = async () => {
 const refreshRecentPlaysCount = async () => {
   try {
     const recentPlays = await window.electronAPI.getRecentPlays()
-    const recentItem = navItems.value.find(item => item.path === '/recent')
-    if (recentItem) recentItem.count = recentPlays.length
+    recentPlaysCount.value = recentPlays.length
   } catch (error) {
     console.error('Failed to load recent plays count:', error)
   }

@@ -166,8 +166,9 @@ export function usePlayer() {
       stopProgressUpdate()
       playerStore.isPlaying = false
 
-      // 记录播放
+      // 记录播放，并通知侧边栏等刷新最近播放数量
       await window.electronAPI.recordPlay(music.id)
+      window.dispatchEvent(new Event('recent-plays-updated'))
 
       console.log('🎵 播放音乐:', music.title)
       console.log('📁 原始路径:', music.filePath)
