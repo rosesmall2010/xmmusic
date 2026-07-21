@@ -1213,10 +1213,7 @@ watch(
   transition: transform var(--transition-base);
 }
 
-.btn-control:hover {
-  transform: scale(1.1);
-}
-
+/* 悬停时只加亮不放大，避免按钮溢出容器导致抖动和滚动条 */
 .btn-control:active {
   transform: scale(0.95);
 }
@@ -1245,7 +1242,6 @@ watch(
 
 .btn-primary:hover {
   background: var(--color-primary-light);
-  transform: scale(1.05);
   box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.45);
 }
 
