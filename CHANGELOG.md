@@ -12,6 +12,9 @@
   - 移除未使用的 `electron-rebuild`（实际重建已使用 `electron-builder install-app-deps`）
   - 升级 `music-metadata` 至 `^11.14.0`、`concurrently` 至 `^9.2.4`、`wait-on` 至 `^9.0.10`
   - 通过 overrides 锁定安全版本：`shell-quote`、`rollup`、`axios`、`uuid`
+- 适配 TypeScript 7：更新 `tsconfig.electron.json` / `tsconfig.json`
+  - `moduleResolution` 由已移除的 `node` 改为 `bundler`
+  - 移除 `baseUrl`，将 `paths` 改为相对于配置文件的路径（如 `./src/shared/*`）
 
 ## [1.1.1] - 2026-07-21
 
