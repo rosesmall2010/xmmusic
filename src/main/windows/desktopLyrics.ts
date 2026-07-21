@@ -30,6 +30,11 @@ export function createDesktopLyricsWindow(): BrowserWindow | null {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
+    // 毛玻璃背景：CSS backdrop-filter 无法模糊窗口后面的桌面内容，
+    // 必须用系统级材质（macOS vibrancy / Windows 11 acrylic）
+    vibrancy: 'hud',
+    visualEffectState: 'active',
+    backgroundMaterial: 'acrylic',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -89,11 +94,17 @@ export function setDesktopLyricsLocked(locked: boolean): void {
 
   isLocked = locked
   if (locked) {
-    // 锁定：鼠标事件穿透窗口
+    // 锁定：鼠标事件穿透窗口，去掉毛玻璃背景（纯透明悬浮文字）
     desktopLyricsWindow.setIgnoreMouseEvents(true, { forward: true })
+    if (process.platform === 'darwin') {
+      desktopLyricsWindow.setVibrancy(null)
+    }
   } else {
-    // 解锁：恢复鼠标交互
+    // 解锁：恢复鼠标交互与毛玻璃背景
     desktopLyricsWindow.setIgnoreMouseEvents(false)
+    if (process.platform === 'darwin') {
+      desktopLyricsWindow.setVibrancy('hud')
+    }
   }
 }
 

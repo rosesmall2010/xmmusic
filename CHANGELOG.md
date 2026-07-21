@@ -10,8 +10,10 @@
 ### 修复
 - 修复桌面歌词窗口背景不透明的问题
   - `BrowserWindow` 虽已设置 `transparent: true`，但页面的 `body` 和 `#app` 被全局主题样式涂上了不透明背景色，窗口仍显示一块实色底；歌词窗口内强制这三层背景为透明
-  - 移除歌词容器自身的半透明黑底与毛玻璃效果，仅保留未锁定时顶部的半透明控制条（用于拖动/锁定/关闭）
-  - 歌词文字增加黑色描边（`-webkit-text-stroke` + `paint-order: stroke fill`，并以 8 方向文字阴影兜底），确保在任意桌面背景上清晰可读
+  - 移除歌词容器自身的半透明黑底与 CSS 毛玻璃（`backdrop-filter` 只能模糊页面内内容，无法模糊窗口后面的桌面，原先看起来就是一块实色板）
+  - 改用系统级毛玻璃材质实现真正的磨砂背景：macOS 使用 `vibrancy: 'hud'`，Windows 11 使用 `backgroundMaterial: 'acrylic'`
+  - 锁定歌词时移除毛玻璃（`setVibrancy(null)`），呈现纯透明悬浮文字；解锁后恢复
+  - 歌词文字增加黑色描边（`-webkit-text-stroke` + `paint-order: stroke fill`，并以 8 方向文字阴影兜底），确保在任意背景上清晰可读
 - 修复拖动播放进度条后播放管线挂死、歌词与桌面歌词不再跟随的问题
   - 根因：`local-file` 自定义协议不支持 Range 分段请求，拖动进度条时 Chromium 媒体解码器发起 `bytes=N-` 请求失败，触发 `FFmpegDemuxer: data source error`，音频元素进入错误状态，进度停止更新，两处歌词随之冻结
   - `local-file` 协议从废弃的 `registerFileProtocol` 迁移到 `protocol.handle`，手动实现 Range 请求处理（206 Partial Content / Content-Range / Accept-Ranges）
@@ -21,7 +23,8 @@
 - 修复桌面歌词功能完全无效的问题
   - 开发模式下功能被整体禁用（点击按钮只弹出占位窗口），改为加载 Vite 开发服务器的 `/desktop-lyrics` 路由，开发模式也可正常使用
   - 生产模式下窗口的 preload 与 index.html 路径计算错误（相对于 `dist/electron/main/windows/`），导致窗口白屏且 `electronAPI` 不可用；已修正为正确的相对路径
-  - 加载页面时 hash 缺少前导 `/`（`#desktop-lyrics`），无法匹配 vue-router 的 hash 路由；改为 `#/desktop-lyrics`
+  - 加载页面时 hash 缺少前导 `/`（`#desktop-lyrics`），无法匹配 vue-router 的 hash 路由；改为 `#/desktop-lyrics`×
+  
   - 歌词窗口原先直接读取本窗口的 Pinia store，但它与主窗口的 store 相互独立，永远拿不到播放状态；新增 IPC 通道，由主窗口实时推送当前歌曲、播放进度到歌词窗口，窗口打开时会立即请求一次当前状态
   - 修正歌词解析：`loadLyrics` 返回的是 `LyricsData` 对象而非 LRC 文本，原先误用 `parseLrc` 二次解析导致歌词永远为空；改为直接使用 `lyricsData.lines`
   - 移除按钮提示文案中的“仅生产模式可用”说明
