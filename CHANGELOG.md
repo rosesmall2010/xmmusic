@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-07-21
+
+### 更新
+- 将 Vue 从 `3.5.24` 升级到 `3.5.40`
+
 ## [1.1.0] - 2025-12-17
 
 ### 新增
