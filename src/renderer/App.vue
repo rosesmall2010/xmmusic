@@ -96,6 +96,35 @@ onMounted(async () => {
   // 跳过播放器初始化、托盘/快捷键监听等主窗口专属逻辑
   if (isDesktopLyricsWindow) return
 
+  // 尽早注册桌面歌词 IPC，避免初始化 await 期间丢失 ready / request-state
+  let desktopLyricsOpen = false
+  const sendDesktopLyricsState = () => {
+    const music = playerStore.currentMusic
+    window.electronAPI.sendDesktopLyricsState({
+      music: music ? { id: music.id, title: music.title, artist: music.artist } : null,
+      currentTime: playerStore.currentTime,
+      isPlaying: playerStore.isPlaying
+    })
+  }
+  watch(
+    () => [playerStore.currentMusic?.id, playerStore.currentTime, playerStore.isPlaying],
+    () => {
+      if (desktopLyricsOpen) sendDesktopLyricsState()
+    }
+  )
+  window.electronAPI.onDesktopLyricsVisibility((open) => {
+    desktopLyricsOpen = open
+    if (open) sendDesktopLyricsState()
+  })
+  window.electronAPI.isDesktopLyricsOpen().then((open) => {
+    desktopLyricsOpen = open
+    if (open) sendDesktopLyricsState()
+  })
+  window.electronAPI.onDesktopLyricsRequestState(() => {
+    desktopLyricsOpen = true
+    sendDesktopLyricsState()
+  })
+
   // 加载设置
   const settings = await window.electronAPI.getSettings()
 
@@ -125,6 +154,9 @@ onMounted(async () => {
   // 注意：不自动播放，只恢复状态
   // 用户可以通过点击播放按钮手动继续播放
 
+  // 初始化完成后若歌词窗已开，再推一次完整状态（初始化前可能 music 仍为空）
+  if (desktopLyricsOpen) sendDesktopLyricsState()
+
   // 监听快捷键
   console.log('🎧 [渲染进程] 注册快捷键监听器')
   window.electronAPI.onShortcutAction(handleShortcutAction)
@@ -147,36 +179,6 @@ onMounted(async () => {
     } else {
       window.electronAPI.updateTrayCurrentMusic(null)
     }
-  })
-
-  // 同步播放状态到桌面歌词窗口（仅在歌词窗口打开时推送，避免无谓的高频 IPC）
-  let desktopLyricsOpen = false
-  const sendDesktopLyricsState = () => {
-    const music = playerStore.currentMusic
-    window.electronAPI.sendDesktopLyricsState({
-      music: music ? { id: music.id, title: music.title, artist: music.artist } : null,
-      currentTime: playerStore.currentTime,
-      isPlaying: playerStore.isPlaying
-    })
-  }
-  watch(
-    () => [playerStore.currentMusic?.id, playerStore.currentTime, playerStore.isPlaying],
-    () => {
-      if (desktopLyricsOpen) sendDesktopLyricsState()
-    }
-  )
-  // 歌词窗口开/关时更新推送开关
-  window.electronAPI.onDesktopLyricsVisibility((open) => {
-    desktopLyricsOpen = open
-  })
-  // 主窗口重载时（如开发热更新）歌词窗口可能已处于打开状态
-  window.electronAPI.isDesktopLyricsOpen().then((open) => {
-    desktopLyricsOpen = open
-  })
-  // 桌面歌词窗口加载完成后会请求一次当前状态
-  window.electronAPI.onDesktopLyricsRequestState(() => {
-    desktopLyricsOpen = true
-    sendDesktopLyricsState()
   })
 
   // 加载快捷键配置

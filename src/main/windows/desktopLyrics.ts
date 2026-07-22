@@ -38,6 +38,7 @@ export function createDesktopLyricsWindow(): BrowserWindow | null {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       // 编译后本文件位于 dist/electron/main/windows/，preload.js 在上一级目录
       preload: join(__dirname, '../preload.js')
     }
@@ -98,12 +99,16 @@ export function setDesktopLyricsLocked(locked: boolean): void {
     desktopLyricsWindow.setIgnoreMouseEvents(true, { forward: true })
     if (process.platform === 'darwin') {
       desktopLyricsWindow.setVibrancy(null)
+    } else if (process.platform === 'win32') {
+      desktopLyricsWindow.setBackgroundMaterial('none')
     }
   } else {
     // 解锁：恢复鼠标交互与毛玻璃背景
     desktopLyricsWindow.setIgnoreMouseEvents(false)
     if (process.platform === 'darwin') {
       desktopLyricsWindow.setVibrancy('hud')
+    } else if (process.platform === 'win32') {
+      desktopLyricsWindow.setBackgroundMaterial('acrylic')
     }
   }
 }

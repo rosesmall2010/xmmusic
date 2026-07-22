@@ -202,9 +202,13 @@ const hasChanges = computed(() => {
   )
 })
 
-// 同步到数据库：表单有有效标题即可（允许与库内值相同，用于覆盖乱码）
+// 同步到数据库：标题与歌手均需非空（允许与库内值相同，用于覆盖乱码）
 const canSync = computed(() => {
-  return !!props.music && formData.value.title.trim().length > 0
+  return (
+    !!props.music &&
+    formData.value.title.trim().length > 0 &&
+    formData.value.artist.trim().length > 0
+  )
 })
 
 watch(() => props.show, (newVal) => {
@@ -219,8 +223,9 @@ watch(() => props.show, (newVal) => {
 })
 
 const loadMusicData = (music: MusicItem) => {
-  // 使用智能解析从文件名中提取信息
-  const parsed = parseFilenameForTags(music.fileName, {
+  // 与主进程批量同步一致：fileName 为空时从路径取 basename
+  const fileName = music.fileName || music.filePath.split(/[/\\]/).pop() || ''
+  const parsed = parseFilenameForTags(fileName, {
     artist: music.artist,
     title: music.title,
     album: music.album || ''

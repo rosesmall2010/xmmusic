@@ -243,6 +243,8 @@
     "batchOperation": "Batch Operation",
     "batchSyncToDatabase": "Sync to Database",
     "batchSyncing": "Syncing...",
+    "batchSyncConfirm": "Sync {count} selected song(s) to the database? This updates display info only and does not modify file tags.",
+    "batchSyncNoMatch": "No matching songs to sync. Please reselect and try again.",
     "batchSyncSuccess": "Successfully synced {count} song(s) to database",
     "batchSyncPartial": "Sync finished: {success} succeeded, {failed} failed",
     "batchSyncError": "Batch sync failed",

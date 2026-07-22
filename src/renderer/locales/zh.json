@@ -243,6 +243,8 @@
     "batchOperation": "批量操作",
     "batchSyncToDatabase": "同步到数据库",
     "batchSyncing": "正在同步...",
+    "batchSyncConfirm": "确定将选中的 {count} 首同步到数据库？仅更新数据库显示信息，不修改文件内的标签。",
+    "batchSyncNoMatch": "未能匹配到可同步的歌曲，请重新选择后重试",
     "batchSyncSuccess": "已成功同步 {count} 首到数据库",
     "batchSyncPartial": "同步完成：成功 {success} 首，失败 {failed} 首",
     "batchSyncError": "批量同步失败",

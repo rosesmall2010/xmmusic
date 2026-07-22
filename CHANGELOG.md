@@ -11,6 +11,16 @@
 - 新增 [docs/1.1.3/README.md](docs/1.1.3/README.md) 功能与技术说明
 - 同步更新 README 最新版本、特性、技术栈与安装包文件名说明
 - 同步更新 REQUIREMENTS / DEVELOPMENT / CROSS_PLATFORM_BUILD 中的版本与协议说明
+- 明确批量「同步到数据库」仅对 MP3 读取 ID3，非 MP3 仅文件名解析；专辑无可靠来源时不写歌手名
+
+### 修复
+- 代码审核修复（今日上午功能与昨晚桌面歌词相关改动）
+  - 批量同步：乱码 ID3 经编码检测/转换后仍异常时降级文件名，避免把乱码写回数据库
+  - 批量同步：专辑字段不再用歌手名兜底；失败错误项补全文件名/路径
+  - 批量同步：增加确认对话框；选中项无法映射 musicId 时提示用户
+  - 单曲同步：校验标题与歌手均非空；编辑弹窗文件名解析与主进程一致（`fileName` 空时用路径 basename）
+  - 桌面歌词：Windows 锁定时关闭 acrylic；窗口启用 `sandbox: true`
+  - 桌面歌词：主窗口尽早注册 IPC，窗口已打开或可见时立即推送播放状态
 
 ### 新增
 - 新增「同步到数据库」功能，修复列表显示乱码但文件名/ID3 正确的问题
@@ -19,7 +29,7 @@
   - 播放列表/收藏/最近播放/发现页/播放队列均通过 `music_id` JOIN `all_music`，写库后派发 `music-metadata-updated` 即可就地刷新，无需再改关联表
   - 文件名解析工具抽到 `shared/utils/parseFilename`，主进程批量同步与编辑弹窗共用同一套规则
 
-### 修复
+### 修复（播放与歌词）
 - 修复播放进度正常但完全没有声音的问题
   - 根因：`local-file` 协议改为 `standard` 后，媒体 URL 源变成 `local-file://media`，与页面 `http://localhost` 跨域；均衡器 `createMediaElementSource` 接管元素输出后，在跨域且 CORS 未真正生效时会输出全 0 静音，表现为「进度条在走、完全没声音」
   - 协议特权增加 `corsEnabled: true`，响应补充 `Access-Control-Allow-Origin` / `Content-Type` 等头

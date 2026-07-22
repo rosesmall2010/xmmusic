@@ -28,9 +28,67 @@ function pickNonEmpty(...values: Array<string | null | undefined>): string {
   return ''
 }
 
+/** 粗略判断字符串是否像乱码（替换符、控制符、无 CJK 却大量 Latin-1 扩展） */
+function looksGarbled(value: string | null | undefined): boolean {
+  if (!value || !value.trim()) return false
+  const s = value.trim()
+  if (/[\uFFFD\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(s)) return true
+  const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length
+  const latinExt = (s.match(/[\u0080-\u024F]/g) || []).length
+  // 常见：GBK 被当 Latin1/UTF-8 读出，呈现一串扩展拉丁字母而无汉字
+  if (latinExt >= 2 && cjk === 0 && /[À-ÿ]/.test(s)) return true
+  return false
+}
+
+/**
+ * 读取并尽量纠正 ID3（仅 MP3）。乱码或无法纠正时对应字段返回空，交给文件名兜底。
+ */
+async function resolveId3Fields(
+  filePath: string
+): Promise<{ title?: string; artist?: string; album?: string; year?: string; genre?: string } | null> {
+  let raw: { title: string; artist: string; album: string; year?: string; genre?: string } | null = null
+  try {
+    raw = await id3Fixer.readRawID3Tags(filePath)
+  } catch (error) {
+    console.warn('读取 ID3 失败，回退到文件名解析:', filePath, error)
+    return null
+  }
+  if (!raw) return null
+
+  let tags = { ...raw }
+
+  try {
+    const detections = await id3Fixer.detectEncoding(filePath)
+    const best = detections[0]
+    if (best && best.confidence > 0.4 && best.encoding !== 'utf8') {
+      tags = id3Fixer.convertID3TagsEncoding(
+        {
+          title: raw.title || '',
+          artist: raw.artist || '',
+          album: raw.album || '',
+          year: raw.year,
+          genre: raw.genre
+        },
+        best.encoding
+      )
+    }
+  } catch (error) {
+    console.warn('检测 ID3 编码失败，使用原始标签:', filePath, error)
+  }
+
+  return {
+    title: looksGarbled(tags.title) ? undefined : tags.title || undefined,
+    artist: looksGarbled(tags.artist) ? undefined : tags.artist || undefined,
+    album: looksGarbled(tags.album) ? undefined : tags.album || undefined,
+    year: tags.year,
+    genre: tags.genre
+  }
+}
+
 /**
  * 根据文件名 + ID3 推导应写入数据库的元数据
- * 优先使用正确的 ID3 / 文件名，覆盖库中可能乱码的旧值
+ * MP3：优先用编码纠正后的 ID3；乱码字段降级到文件名解析，再回退库内值
+ * 非 MP3：仅文件名 + 库内值（当前未读 FLAC/M4A 等内嵌标签）
  */
 export async function resolveMetadataForSync(music: MusicItem): Promise<SyncMetadataUpdates> {
   const fileName = music.fileName || basename(music.filePath)
@@ -43,18 +101,13 @@ export async function resolveMetadataForSync(music: MusicItem): Promise<SyncMeta
   let id3: { title?: string; artist?: string; album?: string; year?: string; genre?: string } | null = null
   const ext = (music.fileExtension || extname(music.filePath)).toLowerCase().replace(/^\./, '')
   if (ext === 'mp3') {
-    try {
-      id3 = await id3Fixer.readRawID3Tags(music.filePath)
-    } catch (error) {
-      console.warn('读取 ID3 失败，回退到文件名解析:', music.filePath, error)
-    }
+    id3 = await resolveId3Fields(music.filePath)
   }
 
-  // 标题/歌手：ID3 有值优先，否则用文件名解析，最后才保留库内值
   const title = pickNonEmpty(id3?.title, parsed.title, music.title) || music.title
   const artist = pickNonEmpty(id3?.artist, parsed.artist, music.artist) || music.artist
-  // 专辑：ID3 优先；文件名解析通常无专辑，回退库内值或歌手名
-  const albumRaw = pickNonEmpty(id3?.album, music.album || undefined, parsed.album, artist)
+  // 专辑：无可靠来源时写 null，不要用歌手名兜底污染专辑维度
+  const albumRaw = pickNonEmpty(id3?.album, music.album || undefined, parsed.album)
   const album = albumRaw || null
 
   const updates: SyncMetadataUpdates = { title, artist, album }
@@ -129,10 +182,17 @@ export async function batchSyncMusicMetadataToDb(
       result.success++
       result.updated.push(updated)
     } catch (error: any) {
+      let file = ''
+      try {
+        const failedMusic = db.getMusicById(id)
+        file = failedMusic?.fileName || failedMusic?.filePath || ''
+      } catch {
+        // 忽略二次查询失败
+      }
       result.failed++
       result.errors.push({
         id,
-        file: '',
+        file,
         error: error?.message || String(error)
       })
     }

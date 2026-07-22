@@ -434,6 +434,9 @@ const handleBatchAddToQueue = () => {
 const handleBatchSyncToDatabase = async () => {
   if (selectedSongs.value.size === 0 || batchSyncing.value) return
 
+  const count = selectedSongs.value.size
+  if (!confirm(t('music.batchSyncConfirm', { count }))) return
+
   try {
     batchSyncing.value = true
     const filePaths = Array.from(selectedSongs.value)
@@ -441,7 +444,10 @@ const handleBatchSyncToDatabase = async () => {
       .map(filePath => props.songs.find(s => s.filePath === filePath)?.id)
       .filter((id): id is number => id !== undefined)
 
-    if (musicIds.length === 0) return
+    if (musicIds.length === 0) {
+      alert(t('music.batchSyncNoMatch'))
+      return
+    }
 
     const result = await window.electronAPI.batchSyncMusicMetadataToDb(musicIds)
 
