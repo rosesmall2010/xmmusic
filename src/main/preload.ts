@@ -256,6 +256,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 元数据编辑功能
   updateMusicMetadata: (musicId: number, updates: any) => ipcRenderer.invoke('update-music-metadata', musicId, updates),
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => ipcRenderer.invoke('batch-update-music-metadata', musicIds, updates),
+  // 仅同步到数据库（不写文件 ID3）
+  syncMusicMetadataToDb: (musicId: number, updates: any) => ipcRenderer.invoke('sync-music-metadata-to-db', musicId, updates),
+  batchSyncMusicMetadataToDb: (musicIds: number[]) => ipcRenderer.invoke('batch-sync-music-metadata-to-db', musicIds),
   getMusicAudioInfo: (musicId: number) => ipcRenderer.invoke('get-music-audio-info', musicId),
   extractMusicCover: (musicId: number, outputPath: string) => ipcRenderer.invoke('extract-music-cover', musicId, outputPath),
 
@@ -389,6 +392,13 @@ declare global {
       getArtistStatistics: (limit?: number) => Promise<Array<{ artist: string; playCount: number; songCount: number }>>
       updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
       batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<{ success: number; failed: number; errors: Array<{ file: string; error: string }> }>
+      syncMusicMetadataToDb: (musicId: number, updates: any) => Promise<MusicItem>
+      batchSyncMusicMetadataToDb: (musicIds: number[]) => Promise<{
+        success: number
+        failed: number
+        updated: MusicItem[]
+        errors: Array<{ id: number; file: string; error: string }>
+      }>
       extractMusicCover: (musicId: number, outputPath: string) => Promise<boolean>
       getMusicAudioInfo: (musicId: number) => Promise<{
         bitrate: number

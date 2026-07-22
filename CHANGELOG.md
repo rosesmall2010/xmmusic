@@ -7,6 +7,13 @@
 
 ## [1.1.3] - 2026-07-21
 
+### 新增
+- 新增「同步到数据库」功能，修复列表显示乱码但文件名/ID3 正确的问题
+  - 编辑标签对话框增加「同步到数据库」按钮：把当前表单中的歌手/标题/专辑仅写入 `all_music`，不改写文件 ID3
+  - 本地列表（及共用 SongList 的歌单等）批量操作栏增加「同步到数据库」：自动从文件名与 ID3 解析后批量写库
+  - 播放列表/收藏/最近播放/发现页/播放队列均通过 `music_id` JOIN `all_music`，写库后派发 `music-metadata-updated` 即可就地刷新，无需再改关联表
+  - 文件名解析工具抽到 `shared/utils/parseFilename`，主进程批量同步与编辑弹窗共用同一套规则
+
 ### 修复
 - 修复播放进度正常但完全没有声音的问题
   - 根因：`local-file` 协议改为 `standard` 后，媒体 URL 源变成 `local-file://media`，与页面 `http://localhost` 跨域；均衡器 `createMediaElementSource` 接管元素输出后，在跨域且 CORS 未真正生效时会输出全 0 静音，表现为「进度条在走、完全没声音」

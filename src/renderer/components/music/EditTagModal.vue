@@ -137,11 +137,19 @@
       <div v-if="loading" class="loading-overlay">
         <div class="loading-content">
           <div class="spinner"></div>
-          <p>{{ $t('tagEditor.saving') }}</p>
+          <p>{{ loadingMessage }}</p>
         </div>
       </div>
 
       <div class="dialog-actions">
+        <button
+          @click="syncToDatabase"
+          class="btn-sync"
+          :disabled="loading || !canSync"
+          :title="$t('tagEditor.syncToDatabaseHint')"
+        >
+          {{ $t('tagEditor.syncToDatabase') }}
+        </button>
         <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
           {{ $t('tagEditor.save') }}
         </button>
@@ -179,6 +187,7 @@ const formData = ref({
 })
 
 const loading = ref(false)
+const loadingMessage = ref('')
 const loadingMetadata = ref(false)
 const rawID3Tags = ref<{ title: string; artist: string; album: string; year?: string; genre?: string } | null>(null)
 const convertedTags = ref<{ title: string; artist: string; album: string } | null>(null)
@@ -191,6 +200,11 @@ const hasChanges = computed(() => {
     formData.value.album !== (props.music.album || '') ||
     formData.value.title !== props.music.title
   )
+})
+
+// 同步到数据库：表单有有效标题即可（允许与库内值相同，用于覆盖乱码）
+const canSync = computed(() => {
+  return !!props.music && formData.value.title.trim().length > 0
 })
 
 watch(() => props.show, (newVal) => {
@@ -325,6 +339,37 @@ const applyConvertedTags = () => {
   }
 }
 
+/**
+ * 仅把当前表单信息写入数据库（不改文件 ID3）
+ * 用于列表显示乱码、但文件名/ID3/表单内容正确的场景
+ */
+const syncToDatabase = async () => {
+  if (!canSync.value || !props.music) return
+
+  try {
+    loading.value = true
+    loadingMessage.value = t('tagEditor.syncing')
+    const updates = {
+      artist: formData.value.artist.trim(),
+      album: formData.value.album.trim() || null,
+      title: formData.value.title.trim()
+    }
+    const updatedMusic = await window.electronAPI.syncMusicMetadataToDb(props.music.id, updates)
+    window.dispatchEvent(new CustomEvent('music-metadata-updated', {
+      detail: updatedMusic
+    }))
+    emit('saved')
+    setTimeout(() => {
+      loading.value = false
+      close()
+    }, 300)
+  } catch (error: any) {
+    console.error('同步到数据库失败:', error)
+    alert(t('tagEditor.syncError') + ': ' + (error?.message || error))
+    loading.value = false
+  }
+}
+
 const save = async () => {
   if (!hasChanges.value || !props.music) {
     return
@@ -332,6 +377,7 @@ const save = async () => {
 
   try {
     loading.value = true
+    loadingMessage.value = t('tagEditor.saving')
 
     const updates = {
       artist: formData.value.artist.trim(),
@@ -631,6 +677,28 @@ const close = () => {
 }
 
 .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-sync {
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  transition: all var(--transition-base);
+  margin-right: auto;
+}
+
+.btn-sync:hover:not(:disabled) {
+  background: var(--color-primary-alpha-10, rgba(49, 194, 124, 0.1));
+}
+
+.btn-sync:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

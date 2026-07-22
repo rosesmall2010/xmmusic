@@ -13,6 +13,7 @@ import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
 import scanManager from '../services/scanManager'
 import * as desktopLyrics from '../windows/desktopLyrics'
+import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/metadataSync'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData } from '../../shared/types/lyrics'
@@ -1587,6 +1588,36 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return result
     } catch (error: any) {
       throw new Error(`批量更新元数据失败: ${error.message}`)
+    }
+  })
+
+  // 仅同步元数据到数据库（不改写文件 ID3）
+  // 用于列表显示乱码、但文件名/ID3 本身正确的场景
+  ipcMain.handle('sync-music-metadata-to-db', async (_, musicId: number, updates: any) => {
+    if (!db) throw new Error('数据库未初始化')
+    try {
+      return syncMusicMetadataToDb(db, musicId, {
+        title: updates?.title,
+        artist: updates?.artist,
+        album: updates?.album,
+        year: updates?.year,
+        genre: updates?.genre
+      })
+    } catch (error: any) {
+      throw new Error(`同步到数据库失败: ${error.message}`)
+    }
+  })
+
+  // 批量：自动从文件名/ID3 解析后写入数据库
+  ipcMain.handle('batch-sync-music-metadata-to-db', async (_, musicIds: number[]) => {
+    if (!db) throw new Error('数据库未初始化')
+    if (!Array.isArray(musicIds) || musicIds.length === 0) {
+      throw new Error('没有可同步的音乐')
+    }
+    try {
+      return await batchSyncMusicMetadataToDb(db, musicIds)
+    } catch (error: any) {
+      throw new Error(`批量同步到数据库失败: ${error.message}`)
     }
   })
 

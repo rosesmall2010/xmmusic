@@ -18,6 +18,10 @@
         <ListMusic :size="16" />
         {{ $t('music.addToQueue') }}
       </button>
+      <button class="batch-btn" @click="handleBatchSyncToDatabase" :disabled="batchSyncing">
+        <Database :size="16" />
+        {{ batchSyncing ? $t('music.batchSyncing') : $t('music.batchSyncToDatabase') }}
+      </button>
       <button v-if="showRemoveFromPlaylist" class="batch-btn danger" @click="handleBatchRemove">
         <Trash2 :size="16" />
         {{ $t('music.batchDelete') }}
@@ -227,7 +231,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
@@ -325,6 +329,7 @@ const contextMenu = reactive({
 // 批量选择状态
 const selectionMode = ref(false)
 const selectedSongs = ref<Set<string>>(new Set())
+const batchSyncing = ref(false)
 
 // 全选状态
 const isAllSelected = computed(() => {
@@ -419,6 +424,50 @@ const handleBatchAddToQueue = () => {
     cancelSelection()
   } catch (error) {
     console.error('Failed to batch add to queue:', error)
+  }
+}
+
+/**
+ * 批量同步元数据到数据库（从文件名/ID3 解析，不改写文件）
+ * 歌单等列表通过 music_id JOIN，事件派发后会就地刷新显示
+ */
+const handleBatchSyncToDatabase = async () => {
+  if (selectedSongs.value.size === 0 || batchSyncing.value) return
+
+  try {
+    batchSyncing.value = true
+    const filePaths = Array.from(selectedSongs.value)
+    const musicIds = filePaths
+      .map(filePath => props.songs.find(s => s.filePath === filePath)?.id)
+      .filter((id): id is number => id !== undefined)
+
+    if (musicIds.length === 0) return
+
+    const result = await window.electronAPI.batchSyncMusicMetadataToDb(musicIds)
+
+    // 逐条通知各列表/播放器 patch 显示
+    for (const updated of result.updated) {
+      window.dispatchEvent(new CustomEvent('music-metadata-updated', {
+        detail: updated
+      }))
+    }
+
+    emit('songs-updated')
+    cancelSelection()
+
+    if (result.failed > 0) {
+      alert(t('music.batchSyncPartial', {
+        success: result.success,
+        failed: result.failed
+      }))
+    } else {
+      alert(t('music.batchSyncSuccess', { count: result.success }))
+    }
+  } catch (error: any) {
+    console.error('批量同步到数据库失败:', error)
+    alert(t('music.batchSyncError') + ': ' + (error?.message || error))
+  } finally {
+    batchSyncing.value = false
   }
 }
 
@@ -776,6 +825,12 @@ watch(() => playerStore.queue, updateQueueStatus, { deep: true })
 .batch-btn:hover {
   background: var(--bg-tertiary);
   transform: translateY(-1px);
+}
+
+.batch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .batch-btn.danger {

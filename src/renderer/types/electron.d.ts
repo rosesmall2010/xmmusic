@@ -1,3 +1,5 @@
+import type { MusicItem } from '@shared/types/music'
+
 export interface DesktopLyricsState {
   music: { id: number; title: string; artist: string } | null
   currentTime: number
@@ -157,6 +159,21 @@ export interface ElectronAPI {
   // 元数据
   updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<any>
+  /** 仅把元数据写入数据库，不改文件 ID3 */
+  syncMusicMetadataToDb: (musicId: number, updates: {
+    title?: string
+    artist?: string
+    album?: string | null
+    year?: number | null
+    genre?: string | null
+  }) => Promise<MusicItem>
+  /** 批量：从文件名/ID3 自动解析后写入数据库 */
+  batchSyncMusicMetadataToDb: (musicIds: number[]) => Promise<{
+    success: number
+    failed: number
+    updated: MusicItem[]
+    errors: Array<{ id: number; file: string; error: string }>
+  }>
   getMusicAudioInfo: (musicId: number) => Promise<{
     bitrate: number
     sampleRate: number
