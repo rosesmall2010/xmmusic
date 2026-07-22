@@ -27,7 +27,10 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
-      bypassCSP: true
+      bypassCSP: true,
+      // 必须开启：否则即使响应带 Access-Control-Allow-Origin，
+      // Chromium 也不会把它当 CORS 成功，MediaElementSource 会输出静音
+      corsEnabled: true
     }
   }
 ])
@@ -51,6 +54,29 @@ let fileMonitor: FileMonitor | null = null
 let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 let isMainWindowReady = false // 跟踪主窗口是否就绪
+
+/** 根据扩展名返回媒体/图片 MIME，缺省用 octet-stream */
+function getLocalFileContentType(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase() || ''
+  const map: Record<string, string> = {
+    mp3: 'audio/mpeg',
+    flac: 'audio/flac',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    m4a: 'audio/mp4',
+    aac: 'audio/aac',
+    wma: 'audio/x-ms-wma',
+    ape: 'audio/ape',
+    opus: 'audio/opus',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp'
+  }
+  return map[ext] || 'application/octet-stream'
+}
 
 export function isMainWindowLoaded(): boolean {
   return isMainWindowReady
@@ -389,6 +415,18 @@ app.whenReady().then(async () => {
 
       const { size } = statSync(filePath)
       const rangeHeader = request.headers.get('range')
+      const contentType = getLocalFileContentType(filePath)
+
+      // CORS 必须放开：页面源是 http://localhost / file，媒体源是 local-file://media，
+      // 属于跨域。均衡器 createMediaElementSource 在跨域且无 CORS 时会输出全 0 静音，
+      // 而元素本身的输出已被 MediaElementSource 接管，结果就是「进度在走但没声音」。
+      const commonHeaders: Record<string, string> = {
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Range',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
+      }
 
       // 无 Range：整文件返回
       if (!rangeHeader) {
@@ -396,8 +434,8 @@ app.whenReady().then(async () => {
         return new Response(stream, {
           status: 200,
           headers: {
-            'Content-Length': String(size),
-            'Accept-Ranges': 'bytes'
+            ...commonHeaders,
+            'Content-Length': String(size)
           }
         })
       }
@@ -411,7 +449,10 @@ app.whenReady().then(async () => {
       if (start > end) {
         return new Response(null, {
           status: 416,
-          headers: { 'Content-Range': `bytes */${size}` }
+          headers: {
+            ...commonHeaders,
+            'Content-Range': `bytes */${size}`
+          }
         })
       }
 
@@ -419,9 +460,9 @@ app.whenReady().then(async () => {
       return new Response(stream, {
         status: 206,
         headers: {
+          ...commonHeaders,
           'Content-Range': `bytes ${start}-${end}/${size}`,
-          'Content-Length': String(end - start + 1),
-          'Accept-Ranges': 'bytes'
+          'Content-Length': String(end - start + 1)
         }
       })
     } catch (error: any) {

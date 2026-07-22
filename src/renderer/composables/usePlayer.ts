@@ -44,9 +44,11 @@ export function usePlayer() {
     }
 
     // 使用自定义协议访问本地文件
+    // crossOrigin 必须在设置 src 之前指定，否则 MediaElementSource 拿不到跨域 PCM（输出静音）
     const localFileUrl = toLocalFileUrl(music.filePath)
     console.log('🔗 使用协议:', localFileUrl)
     console.log('📁 原始路径:', music.filePath)
+    audioElement.crossOrigin = 'anonymous'
     audioElement.src = localFileUrl
     audioElement.volume = playerStore.volume / 100
 

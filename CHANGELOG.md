@@ -8,6 +8,11 @@
 ## [1.1.3] - 2026-07-21
 
 ### 修复
+- 修复播放进度正常但完全没有声音的问题
+  - 根因：`local-file` 协议改为 `standard` 后，媒体 URL 源变成 `local-file://media`，与页面 `http://localhost` 跨域；均衡器 `createMediaElementSource` 接管元素输出后，在跨域且 CORS 未真正生效时会输出全 0 静音，表现为「进度条在走、完全没声音」
+  - 协议特权增加 `corsEnabled: true`，响应补充 `Access-Control-Allow-Origin` / `Content-Type` 等头
+  - 音频元素在设置 `src` 前声明 `crossOrigin = 'anonymous'`，让 MediaElementSource 能拿到解码后的 PCM
+  - `toLocalFileUrl` 对路径分段做 URL 编码，避免中文/空格导致加载异常
 - 修复桌面歌词窗口背景不透明的问题
   - `BrowserWindow` 虽已设置 `transparent: true`，但页面的 `body` 和 `#app` 被全局主题样式涂上了不透明背景色，窗口仍显示一块实色底；歌词窗口内强制这三层背景为透明
   - 移除歌词容器自身的半透明黑底与 CSS 毛玻璃（`backdrop-filter` 只能模糊页面内内容，无法模糊窗口后面的桌面，原先看起来就是一块实色板）

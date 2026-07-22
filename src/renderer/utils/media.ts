@@ -16,7 +16,12 @@ export const toLocalFileUrl = (filePath: string): string => {
   if (!normalizedPath.startsWith('/')) {
     normalizedPath = '/' + normalizedPath
   }
-  return `local-file://media${normalizedPath}`
+  // 分段编码路径，保留斜杠；避免中文/空格导致协议解析或 CORS 校验异常
+  const encodedPath = normalizedPath
+    .split('/')
+    .map((seg, i) => (i === 0 ? seg : encodeURIComponent(seg)))
+    .join('/')
+  return `local-file://media${encodedPath}`
 }
 
 /**
