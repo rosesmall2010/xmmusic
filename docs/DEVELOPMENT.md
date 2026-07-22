@@ -95,48 +95,48 @@ xmmusic/
    - 搜索功能
 
 7. **播放器**
-   - Howler.js 音频播放
-   - 播放控制
-   - 进度条
-   - 音量控制
+   - Howler.js / 原生 Audio API
+   - 播放控制、进度条、音量、均衡器
+   - 播放模式（顺序 / 随机 / 单曲循环）
 
-## 📝 下一步开发
+8. **桌面歌词**
+   - 独立窗口 + IPC 状态推送
+   - 系统毛玻璃（macOS vibrancy / Windows acrylic）
+   - 锁定穿透与描边文字
 
-### 待实现功能
+9. **元数据同步**
+   - 编辑标签写 ID3 + 数据库
+   - 「同步到数据库」仅写 `all_music`（单曲 / 批量）
 
-1. **文件监控**
-   - chokidar 实时监控
-   - 文件变化同步
+## 🔌 关键实现说明（v1.1.3）
 
-2. **ID3 修复**
-   - 编码检测
-   - 标签修复
-   - 文件备份
+### `local-file` 媒体协议
 
-3. **去重功能**
-   - 重复文件检测
-   - 重复文件管理
+播放本地音频必须支持 Range seek，并兼容 Web Audio（均衡器）：
 
-4. **播放列表**
-   - 创建/编辑播放列表
-   - 播放列表管理
+1. `registerSchemesAsPrivileged`：`standard` + `secure` + `supportFetchAPI` + `corsEnabled`（不要加 `stream: true`）
+2. `protocol.handle` 手动返回 Range 206
+3. URL 形如 `local-file://media/<绝对路径>`（`toLocalFileUrl`）
+4. 音频元素设置 `crossOrigin = 'anonymous'`
 
-5. **导出功能**
-   - Excel 导出
-   - 文件导出
+详见 [1.1.3 功能说明](./1.1.3/README.md)。
 
-6. **相似音乐**
-   - 相似度计算
-   - 推荐算法
+### 桌面歌词
 
-## 🐛 已知问题
+主窗口在歌词窗口打开时通过 IPC 推送播放状态；歌词窗口不跑主窗口初始化，避免双端互相推送。
 
-1. 文件扫描中的重复检测需要优化
-2. 虚拟滚动需要处理动态高度
-3. 播放器需要实现播放模式（顺序/随机/单曲循环）
+## 📝 后续方向
+
+可继续打磨的方向（详见根目录 `TODO.md`）：
+
+1. 重复文件检测与管理
+2. 相似音乐推荐
+3. ESLint / 测试与发布流程完善
 
 ## 📚 相关文档
 
-- [README.md](./README.md) - 项目概述
+- [../README.md](../README.md) - 项目概述
+- [1.1.3/README.md](./1.1.3/README.md) - v1.1.3 功能与技术说明
+- [CROSS_PLATFORM_BUILD.md](./CROSS_PLATFORM_BUILD.md) - 跨平台打包
 - [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) - 实现指南
 - [MODULE_DESIGN.md](./MODULE_DESIGN.md) - 模块设计

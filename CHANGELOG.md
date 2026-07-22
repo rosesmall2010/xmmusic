@@ -7,6 +7,11 @@
 
 ## [1.1.3] - 2026-07-21
 
+### 文档
+- 新增 [docs/1.1.3/README.md](docs/1.1.3/README.md) 功能与技术说明
+- 同步更新 README 最新版本、特性、技术栈与安装包文件名说明
+- 同步更新 REQUIREMENTS / DEVELOPMENT / CROSS_PLATFORM_BUILD 中的版本与协议说明
+
 ### 新增
 - 新增「同步到数据库」功能，修复列表显示乱码但文件名/ID3 正确的问题
   - 编辑标签对话框增加「同步到数据库」按钮：把当前表单中的歌手/标题/专辑仅写入 `all_music`，不改写文件 ID3
@@ -35,8 +40,7 @@
 - 修复桌面歌词功能完全无效的问题
   - 开发模式下功能被整体禁用（点击按钮只弹出占位窗口），改为加载 Vite 开发服务器的 `/desktop-lyrics` 路由，开发模式也可正常使用
   - 生产模式下窗口的 preload 与 index.html 路径计算错误（相对于 `dist/electron/main/windows/`），导致窗口白屏且 `electronAPI` 不可用；已修正为正确的相对路径
-  - 加载页面时 hash 缺少前导 `/`（`#desktop-lyrics`），无法匹配 vue-router 的 hash 路由；改为 `#/desktop-lyrics`×
-  
+  - 加载页面时 hash 缺少前导 `/`（`#desktop-lyrics`），无法匹配 vue-router 的 hash 路由；改为 `#/desktop-lyrics`
   - 歌词窗口原先直接读取本窗口的 Pinia store，但它与主窗口的 store 相互独立，永远拿不到播放状态；新增 IPC 通道，由主窗口实时推送当前歌曲、播放进度到歌词窗口，窗口打开时会立即请求一次当前状态
   - 修正歌词解析：`loadLyrics` 返回的是 `LyricsData` 对象而非 LRC 文本，原先误用 `parseLrc` 二次解析导致歌词永远为空；改为直接使用 `lyricsData.lines`
   - 移除按钮提示文案中的“仅生产模式可用”说明

@@ -178,7 +178,7 @@ npm run dist:win
 1. **better-sqlite3** - SQLite 数据库驱动
    - 用于音乐元数据存储
    - 需要为每个平台编译
-   - v12.5.0 已提供 Electron 39/40 预编译二进制
+   - v12.11.x 配合 Electron 42；安装依赖时会按当前 Electron ABI 拉取/编译原生二进制
 
 ### electron-builder 配置
 
