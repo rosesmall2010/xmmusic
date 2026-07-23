@@ -21,6 +21,7 @@
   - 单曲同步：校验标题与歌手均非空；编辑弹窗文件名解析与主进程一致（`fileName` 空时用路径 basename）
   - 桌面歌词：Windows 锁定时关闭 acrylic；窗口启用 `sandbox: true`
   - 桌面歌词：主窗口尽早注册 IPC，窗口已打开或可见时立即推送播放状态
+- 修复主进程启动失败：`metadataSync` 对 `@shared/utils/parseFilename` 的运行时路径解析错误（`tsc` 不转换路径别名），改为相对路径导入
 
 ### 新增
 - 新增「同步到数据库」功能，修复列表显示乱码但文件名/ID3 正确的问题

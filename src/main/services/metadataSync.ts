@@ -1,6 +1,6 @@
 import { basename, extname } from 'path'
 import type { MusicItem } from '@shared/types/music'
-import { parseFilenameForTags } from '@shared/utils/parseFilename'
+import { parseFilenameForTags } from '../../shared/utils/parseFilename'
 import ID3Fixer from './id3Fixer'
 import type MusicDatabase from '../database/db'
 
