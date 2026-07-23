@@ -14,6 +14,7 @@ import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsSt
 import scanManager from '../services/scanManager'
 import * as desktopLyrics from '../windows/desktopLyrics'
 import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/metadataSync'
+import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playlistCover'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData } from '../../shared/types/lyrics'
@@ -204,6 +205,15 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       ]
     })
     return result.filePaths && result.filePaths.length > 0 ? result.filePaths[0] : null
+  })
+
+  // 选择单个目录（复制歌单文件等到指定路径）
+  ipcMain.handle('select-folder', async (_, title?: string) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+      title: title || '选择目录'
+    })
+    return result.canceled || !result.filePaths?.length ? null : result.filePaths[0]
   })
 
   // 文件读写（用于快捷键配置导入/导出）
@@ -515,6 +525,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('update-playlist', async (_, id: number, updates: any) => {
     if (!db) return
     db.updatePlaylist(id, updates)
+  })
+
+  // 设置歌单封面：本地图片 / 歌曲封面 / 默认
+  ipcMain.handle('set-playlist-cover', async (_, playlistId: number, source: any) => {
+    if (!db) throw new Error('数据库未初始化')
+    return setPlaylistCover(db, playlistId, source)
+  })
+
+  // 获取歌单内可作为封面的歌曲列表（有封面图）
+  ipcMain.handle('get-playlist-cover-candidates', async (_, playlistId: number) => {
+    if (!db) return []
+    return getPlaylistCoverCandidates(db, playlistId)
   })
 
   ipcMain.handle('delete-playlist', async (_, id: number) => {
@@ -1237,19 +1259,31 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('export-music-files', async (_, musicIds: number[], options?: any) => {
     if (!db) throw new Error('数据库未初始化')
 
-    // 选择目标目录
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openDirectory'],
-      title: '选择导出目录'
-    })
+    let targetDir = options?.targetDir as string | undefined
 
-    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
-      return null
+    // 未指定目录时弹出选择框
+    if (!targetDir) {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory'],
+        title: '选择导出目录'
+      })
+
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return null
+      }
+      targetDir = result.filePaths[0]
     }
 
-    const targetDir = result.filePaths[0]
     const exporter = new FileExporter(db)
-    const exportResult = await exporter.exportMusicFiles(musicIds, targetDir, options)
+    const exportResult = await exporter.exportMusicFiles(musicIds, targetDir, {
+      organizeBy: options?.organizeBy,
+      conflictAction: options?.conflictAction ?? 'overwrite',
+      onProgress: (progress) => {
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('export-music-progress', progress)
+        }
+      }
+    })
 
     return exportResult
   })

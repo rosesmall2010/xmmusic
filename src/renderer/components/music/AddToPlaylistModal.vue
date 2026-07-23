@@ -97,15 +97,19 @@ const loadPlaylists = async () => {
     playlists.value = await Promise.all(
       playlistData.map(async (playlist) => {
         try {
+          if (playlist.coverPath) {
+            playlist.firstSongCover = toLocalFileUrl(playlist.coverPath)
+          }
           const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
           // 更新歌曲数量（确保是最新的）
           playlist.songCount = songs.length
-          // 加载封面
-          if (songs.length > 0 && songs[0].coverPath) {
-            playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)
-          } else {
-            // 如果没有歌曲，清除封面
-            playlist.firstSongCover = null
+          // 无自定义封面时回退首曲封面
+          if (!playlist.coverPath) {
+            if (songs.length > 0 && songs[0].coverPath) {
+              playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)
+            } else {
+              playlist.firstSongCover = null
+            }
           }
         } catch (error) {
           console.error(`Failed to load cover for playlist ${playlist.id}:`, error)

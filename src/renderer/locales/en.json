@@ -211,7 +211,20 @@
     "allSongsExist": "All songs already exist in this playlist",
     "addedToPlaylist": "Added to playlist \"{name}\"",
     "songAlreadyExists": "This song already exists in playlist \"{name}\"",
-    "addError": "Add failed, please try again"
+    "addError": "Add failed, please try again",
+    "setCover": "Set Cover",
+    "coverFromImage": "Choose Image",
+    "coverFromSong": "Choose from playlist songs",
+    "coverDefault": "Use Default Cover",
+    "coverNoSongCovers": "No songs with covers in this playlist",
+    "coverSetError": "Failed to set cover",
+    "copyToFolder": "Copy to Folder",
+    "selectCopyFolder": "Select destination folder",
+    "copying": "Copying song files...",
+    "copyStats": "Success {success}, failed {failed}",
+    "copyComplete": "Copy finished: {success} succeeded, {failed} failed\nFolder: {dir}",
+    "copyEmpty": "No songs to copy",
+    "copyError": "Copy failed"
   },
   "music": {
     "title": "Title",

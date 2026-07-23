@@ -86,6 +86,11 @@ const loadPlaylists = async () => {
     playlists.value = await Promise.all(
       playlistData.map(async (playlist) => {
         try {
+          // 优先使用自定义封面
+          if (playlist.coverPath) {
+            playlist.firstSongCover = toLocalFileUrl(playlist.coverPath)
+            return playlist
+          }
           const songs = await window.electronAPI.getPlaylistSongs(playlist.id)
           if (songs.length > 0 && songs[0].coverPath) {
             playlist.firstSongCover = toLocalFileUrl(songs[0].coverPath)

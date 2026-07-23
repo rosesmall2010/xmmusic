@@ -1,12 +1,21 @@
-import { dialog } from 'electron'
 import { copyFileSync, mkdirSync, existsSync } from 'fs'
 import { join, dirname, basename } from 'path'
 import MusicDatabase from '../database/db'
-import type { MusicItem } from '@shared/types/music'
+import type { MusicItem } from '../../shared/types/music'
 
-interface ExportOptions {
+export interface ExportOptions {
   organizeBy?: 'none' | 'artist' | 'album' | 'original'
   conflictAction?: 'skip' | 'overwrite' | 'rename'
+  onProgress?: (progress: ExportProgress) => void
+}
+
+export interface ExportProgress {
+  current: number
+  total: number
+  fileName: string
+  success: number
+  failed: number
+  skipped: number
 }
 
 export default class FileExporter {
@@ -26,7 +35,8 @@ export default class FileExporter {
   ): Promise<{ success: number; failed: number; skipped: number; errors: string[] }> {
     const {
       organizeBy = 'none',
-      conflictAction = 'skip'
+      conflictAction = 'skip',
+      onProgress
     } = options
 
     const result = {
@@ -52,8 +62,11 @@ export default class FileExporter {
       mkdirSync(targetDir, { recursive: true })
     }
 
+    const total = musicList.length
+
     // 导出每个文件
-    for (const music of musicList) {
+    for (let i = 0; i < musicList.length; i++) {
+      const music = musicList[i]
       try {
         let targetPath = this.getTargetPath(music, targetDir, organizeBy)
 
@@ -61,6 +74,15 @@ export default class FileExporter {
         if (existsSync(targetPath)) {
           if (conflictAction === 'skip') {
             result.skipped++
+            onProgress?.({
+              current: i + 1,
+              total,
+              fileName: music.fileName,
+              success: result.success,
+              failed: result.failed,
+              skipped: result.skipped
+            })
+            await yieldEventLoop()
             continue
           } else if (conflictAction === 'rename') {
             targetPath = this.generateUniquePath(targetPath)
@@ -81,6 +103,17 @@ export default class FileExporter {
         result.failed++
         result.errors.push(`${music.fileName}: ${error.message}`)
       }
+
+      onProgress?.({
+        current: i + 1,
+        total,
+        fileName: music.fileName,
+        success: result.success,
+        failed: result.failed,
+        skipped: result.skipped
+      })
+      // 让出事件循环，保证进度 IPC 能及时送达渲染进程
+      await yieldEventLoop()
     }
 
     return result
@@ -93,14 +126,16 @@ export default class FileExporter {
     const fileName = basename(music.filePath)
 
     switch (organizeBy) {
-      case 'artist':
+      case 'artist': {
         const artistDir = music.artist || '未知艺术家'
         return join(targetDir, this.sanitizePath(artistDir), fileName)
+      }
 
-      case 'album':
+      case 'album': {
         const albumDir = music.album || '未知专辑'
         const artistDir2 = music.artist || '未知艺术家'
         return join(targetDir, this.sanitizePath(artistDir2), this.sanitizePath(albumDir), fileName)
+      }
 
       case 'original':
         // 保持原始目录结构（相对于某个根目录）
@@ -137,4 +172,8 @@ export default class FileExporter {
 
     return newPath
   }
+}
+
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
 }

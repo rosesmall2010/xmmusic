@@ -14,13 +14,19 @@
         <div class="playlist-info">
           <h1 class="page-title">{{ playlist.name }}</h1>
           <div class="stats">
-            <span>{{ $t('playlist.songs', { count: songs.length }) }}</span>
+            <span>{{ $t('playlist.songs', { count: totalSongs || songs.length }) }}</span>
             <span class="separator">•</span>
             <span>{{ $t('playlist.createdAt') }} {{ formatDate(playlist.createdAt) }}</span>
           </div>
           <div class="actions">
             <button class="btn-primary" @click="playAll" :disabled="totalSongs === 0">
               {{ $t('player.playAll') }}
+            </button>
+            <button class="btn-secondary" @click="showCoverModal = true">
+              {{ $t('playlist.setCover') }}
+            </button>
+            <button class="btn-secondary" @click="copySongsToFolder" :disabled="totalSongs === 0 || copying">
+              {{ $t('playlist.copyToFolder') }}
             </button>
             <button class="btn-secondary" @click="clearPlaylist" :disabled="totalSongs === 0">
               {{ $t('playlist.clear') }}
@@ -37,29 +43,28 @@
     </div>
 
     <div class="content">
-        <!-- 加载状态 -->
-        <div v-if="loading" class="loading-container">
-          <div class="loading-spinner"></div>
-          <p>{{ $t('common.loading') }} ({{ songs.length }} / {{ totalSongs }})</p>
-        </div>
+      <div v-if="loading" class="loading-container">
+        <div class="loading-spinner"></div>
+        <p>{{ $t('common.loading') }} ({{ songs.length }} / {{ totalSongs }})</p>
+      </div>
 
-        <SongList
-          v-else-if="playlist"
-          :songs="songs"
-          :show-remove-from-playlist="true"
-          :playlist-id="playlist.id"
-          @play="playMusic"
-          @remove-from-playlist="removeSong"
-          @songs-updated="loadPlaylist"
-        >
-          <template #empty>
-            <div class="empty-placeholder">
-              <Music :size="64" class="icon" />
-              <p>{{ $t('playlist.empty') }}</p>
-              <p class="sub-text">{{ $t('playlist.addSongsHint') }}</p>
-            </div>
-          </template>
-        </SongList>
+      <SongList
+        v-else-if="playlist"
+        :songs="songs"
+        :show-remove-from-playlist="true"
+        :playlist-id="playlist.id"
+        @play="playMusic"
+        @remove-from-playlist="removeSong"
+        @songs-updated="loadPlaylist"
+      >
+        <template #empty>
+          <div class="empty-placeholder">
+            <Music :size="64" class="icon" />
+            <p>{{ $t('playlist.empty') }}</p>
+            <p class="sub-text">{{ $t('playlist.addSongsHint') }}</p>
+          </div>
+        </template>
+      </SongList>
     </div>
 
     <CreatePlaylistModal
@@ -68,6 +73,33 @@
       :is-edit="true"
       @confirm="handleRename"
     />
+
+    <SetPlaylistCoverModal
+      v-if="playlist"
+      :show="showCoverModal"
+      :playlist-id="playlist.id"
+      @close="showCoverModal = false"
+      @updated="handleCoverUpdated"
+    />
+
+    <div v-if="copying" class="copy-progress-overlay">
+      <div class="copy-progress-panel">
+        <div class="progress-text">{{ $t('playlist.copying') }}</div>
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: copyPercent + '%' }"></div>
+        </div>
+        <div class="progress-info">
+          {{ copyProgress.current }} / {{ copyProgress.total }}
+          <span v-if="copyProgress.fileName"> · {{ copyProgress.fileName }}</span>
+        </div>
+        <div class="progress-stats">
+          {{ $t('playlist.copyStats', {
+            success: copyProgress.success,
+            failed: copyProgress.failed
+          }) }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -79,6 +111,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
+import SetPlaylistCoverModal from '@/components/music/SetPlaylistCoverModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { Music } from 'lucide-vue-next'
 import { toLocalFileUrl } from '@/utils/media'
@@ -94,31 +127,47 @@ const songs = ref<MusicItem[]>([])
 const totalSongs = ref(0)
 const loading = ref(false)
 const showEditModal = ref(false)
+const showCoverModal = ref(false)
+const coverBroken = ref(false)
 const PAGE_SIZE = 50
+
+const copying = ref(false)
+const copyProgress = ref({
+  current: 0,
+  total: 0,
+  fileName: '',
+  success: 0,
+  failed: 0,
+  skipped: 0
+})
+const copyPercent = computed(() => {
+  if (!copyProgress.value.total) return 0
+  return Math.min(100, Math.round((copyProgress.value.current / copyProgress.value.total) * 100))
+})
 
 let currentOffset = 0
 let hasMore = true
+let exportProgressHandler: any = null
 
 onMounted(async () => {
   await loadPlaylist()
-  // 监听元数据更新事件
   window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
-  // 监听歌曲添加到歌单事件，刷新当前歌单
   window.addEventListener('song-added-to-playlist', handleSongAddedToPlaylist)
 })
 
 onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
   window.removeEventListener('song-added-to-playlist', handleSongAddedToPlaylist)
+  if (exportProgressHandler) {
+    window.electronAPI.offExportMusicProgress(exportProgressHandler)
+    exportProgressHandler = null
+  }
 })
 
-// 处理歌曲添加到歌单事件
 const handleSongAddedToPlaylist = () => {
-  // 重置分页状态并重新加载
   currentOffset = 0
   hasMore = true
   loadPlaylist()
-  // 封面会自动更新（因为 playlistCover 是 computed，依赖于 songs.value）
 }
 
 const handleMetadataUpdate = (event: CustomEvent) => {
@@ -127,49 +176,42 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 
   const index = songs.value.findIndex(m => m.id === updatedMusic.id)
   if (index !== -1) {
-    // 重新赋值整个数组以触发响应式更新
     const updatedList = [...songs.value]
     updatedList[index] = { ...updatedList[index], ...updatedMusic }
     songs.value = updatedList
   }
 }
 
-// 监听路由参数变化，切换歌单时重新加载
 watch(() => route.params.id as string, async (newId: string, oldId: string) => {
   if (newId !== oldId) {
-    // 重置数据防止旧数据残留
     playlist.value = null
     songs.value = []
     totalSongs.value = 0
     currentOffset = 0
     hasMore = true
+    coverBroken.value = false
     await loadPlaylist()
   }
 })
 
-let currentLoadId = 0 // 用于追踪当前的加载任务，防止切换歌单时数据错乱
+let currentLoadId = 0
 
 const loadPlaylist = async () => {
   const id = route.params.id as string
   if (!id) return
 
   const playlistId = Number(id)
-
-  // 增加加载ID，立即使之前的加载任务失效
   currentLoadId++
   const thisLoadId = currentLoadId
 
   try {
-    // 首次加载：获取歌单详情
     if (currentOffset === 0) {
       loading.value = true
-      songs.value = [] // 清空列表
-      hasMore = true // 重置 hasMore，确保可以加载数据
+      songs.value = []
+      hasMore = true
+      coverBroken.value = false
 
-      // 获取歌单详情（每次都重新获取，确保数量是最新的）
       const playlists = await window.electronAPI.getPlaylists()
-
-      // 如果任务已过时，直接返回
       if (thisLoadId !== currentLoadId) return
 
       playlist.value = playlists.find((p: any) => p.id === playlistId)
@@ -180,40 +222,30 @@ const loadPlaylist = async () => {
         return
       }
 
-      // 获取总数（每次都重新获取，确保数量是最新的）
       totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
 
-      // 如果总数为0，直接返回，不加载歌曲
       if (totalSongs.value === 0) {
         loading.value = false
         hasMore = false
         return
       }
 
-      // 重置 loading，准备加载歌曲列表
       loading.value = false
     }
 
-    // 如果没有更多数据或正在加载，直接返回
     if (!hasMore || loading.value) return
 
     loading.value = true
 
-    // 分页加载歌曲
     const newSongs = await window.electronAPI.getPlaylistSongsPaginated(playlistId, currentOffset, PAGE_SIZE)
-
-    // 如果任务已过时，直接返回
     if (thisLoadId !== currentLoadId) return
 
     if (newSongs.length < PAGE_SIZE) {
       hasMore = false
     }
 
-    // 追加到列表
     songs.value = [...songs.value, ...newSongs]
     currentOffset += newSongs.length
-
-    console.log(`加载歌单歌曲: offset=${currentOffset - newSongs.length}, limit=${PAGE_SIZE}, 返回=${newSongs.length}, 总数=${totalSongs.value}`)
   } catch (error) {
     console.error('加载歌单失败:', error)
   } finally {
@@ -222,28 +254,23 @@ const loadPlaylist = async () => {
 }
 
 const playMusic = async (music: MusicItem) => {
-  // 检查歌曲是否已在队列中
   const existingIndex = playerStore.queue.findIndex(m => m.id === music.id)
 
   if (existingIndex >= 0) {
-    // 如果已在队列中，直接切换到该歌曲并播放
     playerStore.setCurrentQueueIndex(existingIndex)
     await play(music)
   } else {
-    // 如果不在队列中，只添加这一首歌曲到队列并播放
     playerStore.addToQueue(music)
     const newIndex = playerStore.queue.length - 1
     playerStore.setCurrentQueueIndex(newIndex)
-    // 更新 music 对象的 inQueue 状态
     music.inQueue = true
-  await play(music)
+    await play(music)
   }
 }
 
 const playAll = async () => {
   if (totalSongs.value === 0) return
 
-  // 如果还有未加载的歌曲，先全部加载
   if (hasMore) {
     loading.value = true
     try {
@@ -269,18 +296,29 @@ const handleRename = async (newName: string) => {
   if (!playlist.value) return
   try {
     await window.electronAPI.updatePlaylist(playlist.value.id, { name: newName })
+    currentOffset = 0
+    hasMore = true
     await loadPlaylist()
   } catch (error) {
     console.error('Failed to rename playlist:', error)
   }
 }
 
+const handleCoverUpdated = (coverPath: string | null) => {
+  if (playlist.value) {
+    playlist.value = { ...playlist.value, coverPath }
+  }
+  coverBroken.value = false
+  window.dispatchEvent(new CustomEvent('playlist-updated'))
+}
+
 const removeSong = async (music: MusicItem) => {
   if (!playlist.value) return
   try {
     await window.electronAPI.removeFromPlaylistByPath(playlist.value.id, music.id)
+    currentOffset = 0
+    hasMore = true
     await loadPlaylist()
-    // 触发事件通知其他组件更新封面
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to remove song:', error)
@@ -296,13 +334,11 @@ const clearPlaylist = async () => {
 
   try {
     await window.electronAPI.clearPlaylist(playlist.value.id)
-    // 重新加载
     songs.value = []
     totalSongs.value = 0
     currentOffset = 0
     hasMore = true
     await loadPlaylist()
-    // 触发事件通知其他组件更新
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('清空歌单失败:', error)
@@ -310,7 +346,7 @@ const clearPlaylist = async () => {
 }
 
 const deletePlaylist = async () => {
-  if (!confirm(t('playlist.deleteConfirm', { name: playlist.value?.name || '' }))) return
+  if (!confirm(t('playlist.deleteConfirm', { name: playlist.value?.name || '' })) return
 
   try {
     await window.electronAPI.deletePlaylist(playlist.value.id)
@@ -320,23 +356,89 @@ const deletePlaylist = async () => {
   }
 }
 
+const copySongsToFolder = async () => {
+  if (!playlist.value || totalSongs.value === 0 || copying.value) return
+
+  try {
+    const targetDir = await window.electronAPI.selectFolder(t('playlist.selectCopyFolder'))
+    if (!targetDir) return
+
+    let musicIds = songs.value.map(s => s.id)
+    if (hasMore || musicIds.length < totalSongs.value) {
+      const allSongs = await window.electronAPI.getPlaylistSongs(playlist.value.id)
+      musicIds = allSongs.map((s: MusicItem) => s.id)
+    }
+
+    if (musicIds.length === 0) {
+      alert(t('playlist.copyEmpty'))
+      return
+    }
+
+    copying.value = true
+    copyProgress.value = {
+      current: 0,
+      total: musicIds.length,
+      fileName: '',
+      success: 0,
+      failed: 0,
+      skipped: 0
+    }
+
+    exportProgressHandler = window.electronAPI.onExportMusicProgress((progress) => {
+      copyProgress.value = { ...progress }
+    })
+
+    const result = await window.electronAPI.exportMusicFiles(musicIds, {
+      targetDir,
+      organizeBy: 'none',
+      conflictAction: 'overwrite'
+    })
+
+    if (exportProgressHandler) {
+      window.electronAPI.offExportMusicProgress(exportProgressHandler)
+      exportProgressHandler = null
+    }
+
+    copying.value = false
+
+    if (!result) return
+
+    alert(t('playlist.copyComplete', {
+      success: result.success,
+      failed: result.failed,
+      dir: targetDir
+    }))
+  } catch (error: any) {
+    console.error('复制歌单歌曲失败:', error)
+    if (exportProgressHandler) {
+      window.electronAPI.offExportMusicProgress(exportProgressHandler)
+      exportProgressHandler = null
+    }
+    copying.value = false
+    alert(t('playlist.copyError') + ': ' + (error?.message || error))
+  }
+}
+
 const formatDate = (dateStr: string) => {
   return new Date(dateStr).toLocaleDateString()
 }
 
 const playlistCover = computed(() => {
+  if (coverBroken.value) return null
+  if (playlist.value?.coverPath) {
+    return toLocalFileUrl(playlist.value.coverPath)
+  }
   if (songs.value.length > 0) {
     const firstSongWithCover = songs.value.find(s => s.coverPath)
-    if (firstSongWithCover) {
+    if (firstSongWithCover?.coverPath) {
       return toLocalFileUrl(firstSongWithCover.coverPath)
     }
   }
   return null
 })
 
-const handleCoverError = (e: Event) => {
-  const target = e.target as HTMLImageElement
-  target.style.display = 'none'
+const handleCoverError = () => {
+  coverBroken.value = true
 }
 </script>
 
@@ -370,6 +472,7 @@ const handleCoverError = (e: Event) => {
   overflow: hidden;
   position: relative;
   color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
 .cover-image {
@@ -383,6 +486,7 @@ const handleCoverError = (e: Event) => {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
 }
 
 .page-title {
@@ -407,6 +511,7 @@ const handleCoverError = (e: Event) => {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
 }
 
@@ -431,7 +536,8 @@ const handleCoverError = (e: Event) => {
   transform: translateY(-1px);
 }
 
-.btn-primary:disabled {
+.btn-primary:disabled,
+.btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -442,7 +548,7 @@ const handleCoverError = (e: Event) => {
   border: 1px solid var(--border-color);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--hover-bg);
 }
 
@@ -467,7 +573,6 @@ const handleCoverError = (e: Event) => {
   margin-top: var(--spacing-xs);
 }
 
-/* 加载状态样式 */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -494,5 +599,53 @@ const handleCoverError = (e: Event) => {
 .loading-container p {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.copy-progress-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.copy-progress-panel {
+  width: min(420px, 90vw);
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.progress-text {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  margin-bottom: var(--spacing-md);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--spacing-sm);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #31c48d, #0e9f6e);
+  transition: width 0.2s ease;
+}
+
+.progress-info,
+.progress-stats {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+  word-break: break-all;
 }
 </style>

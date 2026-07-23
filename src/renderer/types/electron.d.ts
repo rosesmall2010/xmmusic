@@ -28,6 +28,7 @@ export interface ElectronAPI {
   selectMusicFile: () => Promise<string | null>
   selectMusicFiles: () => Promise<string[]>
   selectImageFile: () => Promise<string | null>
+  selectFolder: (title?: string) => Promise<string | null>
   scanMusicFolder: (path: string) => Promise<any>
   pauseScan: () => Promise<boolean>
   resumeScan: () => Promise<boolean>
@@ -51,6 +52,8 @@ export interface ElectronAPI {
   // 播放列表
   createPlaylist: (name: string, description?: string) => Promise<number>
   updatePlaylist: (id: number, updates: any) => Promise<void>
+  setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) => Promise<string | null>
+  getPlaylistCoverCandidates: (playlistId: number) => Promise<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>
   deletePlaylist: (id: number) => Promise<void>
   getPlaylists: () => Promise<any[]>
   updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
@@ -61,6 +64,9 @@ export interface ElectronAPI {
   getPlaylistsForFile: (musicId: number) => Promise<number[]>
   removeFromPlaylistByPath: (playlistId: number, musicId: number) => Promise<void>
   getPlaylistSongs: (playlistId: number) => Promise<any[]>
+  getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) => Promise<any[]>
+  getPlaylistSongsCount: (playlistId: number) => Promise<number>
+  clearPlaylist: (playlistId: number) => Promise<void>
   exportPlaylistJSON: (playlistId: number) => Promise<string | null>
   importPlaylistJSON: () => Promise<any>
 
@@ -100,6 +106,15 @@ export interface ElectronAPI {
   // Excel导出
   exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
   exportMusicFiles: (musicIds: number[], options?: any) => Promise<any>
+  onExportMusicProgress: (callback: (progress: {
+    current: number
+    total: number
+    fileName: string
+    success: number
+    failed: number
+    skipped: number
+  }) => void) => any
+  offExportMusicProgress: (handler: any) => void
 
   // 文件监控
   startFileMonitor: (directoryPath: string, options?: any) => Promise<boolean>

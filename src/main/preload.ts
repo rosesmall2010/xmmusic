@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectMusicFile: () => ipcRenderer.invoke('select-music-file'),
   selectMusicFiles: () => ipcRenderer.invoke('select-music-files'),
   selectImageFile: () => ipcRenderer.invoke('select-image-file'),
+  selectFolder: (title?: string) => ipcRenderer.invoke('select-folder', title),
   openInFileExplorer: (filePath: string) => ipcRenderer.invoke('open-in-file-explorer', filePath),
         scanMusicFolder: (path: string) => ipcRenderer.invoke('scan-music-folder', path),
         pauseScan: () => ipcRenderer.invoke('pause-scan'),
@@ -72,6 +73,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('create-playlist', name, description),
   updatePlaylist: (id: number, updates: any) =>
     ipcRenderer.invoke('update-playlist', id, updates),
+  setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) =>
+    ipcRenderer.invoke('set-playlist-cover', playlistId, source),
+  getPlaylistCoverCandidates: (playlistId: number) =>
+    ipcRenderer.invoke('get-playlist-cover-candidates', playlistId),
   deletePlaylist: (id: number) =>
     ipcRenderer.invoke('delete-playlist', id),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
@@ -178,6 +183,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 导出音乐文件
   exportMusicFiles: (musicIds: number[], options?: any) =>
     ipcRenderer.invoke('export-music-files', musicIds, options),
+  onExportMusicProgress: (callback: (progress: {
+    current: number
+    total: number
+    fileName: string
+    success: number
+    failed: number
+    skipped: number
+  }) => void) => {
+    const handler = (_: any, progress: any) => callback(progress)
+    ipcRenderer.on('export-music-progress', handler)
+    return handler
+  },
+  offExportMusicProgress: (handler: any) => {
+    ipcRenderer.removeListener('export-music-progress', handler)
+  },
 
   // 文件监控
   startFileMonitor: (directoryPath: string, options?: any) =>
@@ -288,6 +308,7 @@ declare global {
       selectMusicFile: () => Promise<string | null>
       selectMusicFiles: () => Promise<string[]>
       selectImageFile: () => Promise<string | null>
+      selectFolder: (title?: string) => Promise<string | null>
       openInFileExplorer: (filePath: string) => Promise<void>
       scanMusicFolder: (path: string) => Promise<ScanResult>
       getMusicList: (offset: number, limit: number) => Promise<MusicItem[]>
@@ -303,6 +324,8 @@ declare global {
       recordPlay: (filePath: string) => Promise<void>
       createPlaylist: (name: string, description?: string) => Promise<number>
       updatePlaylist: (id: number, updates: any) => Promise<void>
+      setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) => Promise<string | null>
+      getPlaylistCoverCandidates: (playlistId: number) => Promise<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>
       deletePlaylist: (id: number) => Promise<void>
       getPlaylists: () => Promise<any[]>
       updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
@@ -351,6 +374,15 @@ declare global {
       getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) => Promise<Array<MusicItem & { similarity?: number }>>
       exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
       exportMusicFiles: (musicIds: number[], options?: any) => Promise<any>
+      onExportMusicProgress: (callback: (progress: {
+        current: number
+        total: number
+        fileName: string
+        success: number
+        failed: number
+        skipped: number
+      }) => void) => any
+      offExportMusicProgress: (handler: any) => void
       startFileMonitor: (directoryPath: string, options?: any) => Promise<boolean>
       stopFileMonitor: (directoryPath: string) => Promise<boolean>
       stopAllFileMonitors: () => Promise<boolean>

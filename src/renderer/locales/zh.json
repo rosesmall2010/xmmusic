@@ -211,7 +211,20 @@
     "allSongsExist": "所有歌曲已存在于该歌单中",
     "addedToPlaylist": "已添加到歌单 \"{name}\"",
     "songAlreadyExists": "该歌曲已存在于歌单 \"{name}\" 中",
-    "addError": "添加失败，请重试"
+    "addError": "添加失败，请重试",
+    "setCover": "设置封面",
+    "coverFromImage": "选择图片",
+    "coverFromSong": "从歌单歌曲中选择封面",
+    "coverDefault": "设为默认封面",
+    "coverNoSongCovers": "当前歌单内没有带封面的歌曲",
+    "coverSetError": "设置封面失败",
+    "copyToFolder": "复制到目录",
+    "selectCopyFolder": "选择复制目标目录",
+    "copying": "正在复制歌曲文件...",
+    "copyStats": "成功 {success}，失败 {failed}",
+    "copyComplete": "复制完成：成功 {success} 首，失败 {failed} 首\n目录：{dir}",
+    "copyEmpty": "没有可复制的歌曲",
+    "copyError": "复制失败"
   },
   "music": {
     "title": "标题",
