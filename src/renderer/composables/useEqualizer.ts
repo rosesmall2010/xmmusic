@@ -412,13 +412,22 @@ export function useEqualizer() {
       limiterNode.attack.value = 0.002
       limiterNode.release.value = 0.1
 
-      filters = EQUALIZER_FREQUENCIES.map((freq) => {
+      filters = EQUALIZER_FREQUENCIES.map((freq, index) => {
         const filter = audioContext!.createBiquadFilter()
-        filter.type = 'peaking'
+        // 专业图示 EQ 惯例：最低段用低搁架、最高段用高搁架，中间用 peaking。
+        // 31Hz peaking 在普通音箱上听不见却白白吃掉动态余量；
+        // 16kHz peaking 靠近奈奎斯特频率会因频率弯折变形，搁架更平滑自然
+        if (index === 0) {
+          filter.type = 'lowshelf'
+        } else if (index === EQUALIZER_FREQUENCIES.length - 1) {
+          filter.type = 'highshelf'
+        } else {
+          filter.type = 'peaking'
+          // 倍频程间隔的 10 段 EQ 标准带宽为 1 个倍频程，对应 Q≈1.41；
+          // Q 过小（如 0.7）会让相邻频段大面积叠加，低频预设实际提升远超面板数值，导致发糊
+          filter.Q.value = 1.414
+        }
         filter.frequency.value = freq
-        // 倍频程间隔的 10 段 EQ 标准带宽为 1 个倍频程，对应 Q≈1.41；
-        // Q 过小（如 0.7）会让相邻频段大面积叠加，低频预设实际提升远超面板数值，导致发糊
-        filter.Q.value = 1.414
         filter.gain.value = 0
         return filter
       })

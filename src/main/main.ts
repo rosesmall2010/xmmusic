@@ -15,6 +15,10 @@ app.name = 'xmmusic'
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
 app.commandLine.appendSwitch('disable-site-isolation-trials')
 
+// 加大音频输出缓冲：音乐播放器不需要低延迟，更大的缓冲可避免
+// UI 重绘（全屏频谱等）挤占 CPU 时出现的爆音 / 卡顿
+app.commandLine.appendSwitch('audio-buffer-size', '2048')
+
 // 注册自定义协议特权（必须在 app ready 之前调用）
 // standard: true 是媒体元素能对该协议正常 seek 的必要条件（electron#51442），
 // 否则拖动进度条会触发 FFmpegDemuxer "data source error"，播放管线挂死、歌词不再跟随。

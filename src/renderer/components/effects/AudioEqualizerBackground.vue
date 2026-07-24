@@ -106,9 +106,13 @@ const roundRect = (c: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 let lastTs = 0
 let time = 0
+// 限帧 30fps：全屏频谱大量 shadowBlur 绘制开销大，满帧渲染会挤占 CPU
+// 影响音频解码流畅度（爆音/卡顿），30fps 视觉上已足够顺滑
+const FRAME_INTERVAL_MS = 1000 / 30
 const tick = (ts: number) => {
   rafId = requestAnimationFrame(tick)
   if (!ctx) return
+  if (ts - lastTs < FRAME_INTERVAL_MS) return
 
   const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0)
   lastTs = ts
