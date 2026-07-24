@@ -28,16 +28,56 @@ function pickNonEmpty(...values: Array<string | null | undefined>): string {
   return ''
 }
 
+/** 是否基本为可打印 ASCII（英文歌名/歌手常见情况） */
+function isMostlyPrintableAscii(value: string | null | undefined): boolean {
+  if (!value || !value.trim()) return true
+  const s = value.trim()
+  const ascii = (s.match(/[\x20-\x7E]/g) || []).length
+  return ascii / s.length >= 0.85
+}
+
 /** 粗略判断字符串是否像乱码（替换符、控制符、无 CJK 却大量 Latin-1 扩展） */
 function looksGarbled(value: string | null | undefined): boolean {
   if (!value || !value.trim()) return false
   const s = value.trim()
   if (/[\uFFFD\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(s)) return true
+  // 纯英文/ASCII 绝不是乱码
+  if (isMostlyPrintableAscii(s)) return false
   const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length
   const latinExt = (s.match(/[\u0080-\u024F]/g) || []).length
   // 常见：GBK 被当 Latin1/UTF-8 读出，呈现一串扩展拉丁字母而无汉字
   if (latinExt >= 2 && cjk === 0 && /[À-ÿ]/.test(s)) return true
   return false
+}
+
+/**
+ * 是否值得尝试编码转换：
+ * - 英文/ASCII 标签禁止转码（utf16le/gbk 误转会把英文变成汉字乱码）
+ * - 已有正常汉字且不乱码：禁止转码
+ * - 仅当字段疑似乱码时才尝试
+ */
+function shouldAttemptEncodingFix(raw: {
+  title?: string
+  artist?: string
+  album?: string
+}): boolean {
+  const fields = [raw.title, raw.artist, raw.album]
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+
+  if (fields.length === 0) return false
+  if (fields.every(isMostlyPrintableAscii)) return false
+
+  const hasCleanCjk = fields.some(
+    (f) => /[\u4e00-\u9fa5]/.test(f) && !looksGarbled(f)
+  )
+  if (hasCleanCjk && !fields.some(looksGarbled)) return false
+
+  return fields.some(looksGarbled)
+}
+
+function countCjk(value: string | null | undefined): number {
+  if (!value) return 0
+  return (value.match(/[\u4e00-\u9fa5]/g) || []).length
 }
 
 /**
@@ -57,23 +97,40 @@ async function resolveId3Fields(
 
   let tags = { ...raw }
 
-  try {
-    const detections = await id3Fixer.detectEncoding(filePath)
-    const best = detections[0]
-    if (best && best.confidence > 0.4 && best.encoding !== 'utf8') {
-      tags = id3Fixer.convertID3TagsEncoding(
-        {
-          title: raw.title || '',
-          artist: raw.artist || '',
-          album: raw.album || '',
-          year: raw.year,
-          genre: raw.genre
-        },
-        best.encoding
+  // 仅在疑似乱码时尝试编码转换；英文标签绝不转码
+  if (shouldAttemptEncodingFix(raw)) {
+    try {
+      const detections = await id3Fixer.detectEncoding(filePath)
+      // 排除 utf16le：对 ASCII 英文误转极易变成「像汉字的乱码」
+      const best = detections.find(
+        (d) => d.encoding !== 'utf8' && d.encoding !== 'utf16le' && d.confidence > 0.5
       )
+      if (best) {
+        const converted = id3Fixer.convertID3TagsEncoding(
+          {
+            title: raw.title || '',
+            artist: raw.artist || '',
+            album: raw.album || '',
+            year: raw.year,
+            genre: raw.genre
+          },
+          best.encoding
+        )
+        const rawGarbledCount = [raw.title, raw.artist, raw.album].filter(looksGarbled).length
+        const convertedGarbledCount = [converted.title, converted.artist, converted.album].filter(looksGarbled).length
+        const rawCjk = countCjk(raw.title) + countCjk(raw.artist) + countCjk(raw.album)
+        const convertedCjk = countCjk(converted.title) + countCjk(converted.artist) + countCjk(converted.album)
+        // 仅当转换后更干净（乱码更少，或汉字明显增加且自身不乱码）才采纳
+        const improved =
+          convertedGarbledCount < rawGarbledCount ||
+          (convertedCjk > rawCjk && convertedGarbledCount === 0)
+        if (improved) {
+          tags = converted
+        }
+      }
+    } catch (error) {
+      console.warn('检测 ID3 编码失败，使用原始标签:', filePath, error)
     }
-  } catch (error) {
-    console.warn('检测 ID3 编码失败，使用原始标签:', filePath, error)
   }
 
   return {
