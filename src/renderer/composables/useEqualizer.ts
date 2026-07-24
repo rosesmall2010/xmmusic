@@ -55,6 +55,7 @@ type EqualizerRuntime = {
   audioContext: AudioContext | null
   sourceNode: MediaElementAudioSourceNode | null
   gainNode: GainNode | null
+  limiterNode: DynamicsCompressorNode | null
   filters: BiquadFilterNode[]
   analyserNode: AnalyserNode | null
   timeAnalyserNode: AnalyserNode | null
@@ -70,6 +71,7 @@ const getRuntime = (): EqualizerRuntime | null => {
       audioContext: null,
       sourceNode: null,
       gainNode: null,
+      limiterNode: null,
       filters: [],
       analyserNode: null,
       timeAnalyserNode: null,
@@ -85,6 +87,7 @@ const runtime = getRuntime()
 let audioContext: AudioContext | null = null
 let sourceNode: MediaElementAudioSourceNode | null = null
 let gainNode: GainNode | null = null
+let limiterNode: DynamicsCompressorNode | null = null
 let filters: BiquadFilterNode[] = []
 let analyserNode: AnalyserNode | null = null
 let timeAnalyserNode: AnalyserNode | null = null
@@ -96,6 +99,7 @@ if (runtime) {
   audioContext = runtime.audioContext
   sourceNode = runtime.sourceNode
   gainNode = runtime.gainNode
+  limiterNode = runtime.limiterNode
   filters = runtime.filters
   analyserNode = runtime.analyserNode
   timeAnalyserNode = runtime.timeAnalyserNode
@@ -108,6 +112,7 @@ const syncRuntime = () => {
   runtime.audioContext = audioContext
   runtime.sourceNode = sourceNode
   runtime.gainNode = gainNode
+  runtime.limiterNode = limiterNode
   runtime.filters = filters
   runtime.analyserNode = analyserNode
   runtime.timeAnalyserNode = timeAnalyserNode
@@ -293,19 +298,20 @@ export function useEqualizer() {
   /**
    * 路由音频图：
    * - 音效关闭：source → destination（直通，尽量保真；分析器仅并联旁听）
-   * - 音效开启：source → 10 段 peaking → gain → destination
+   * - 音效开启：source → 10 段 peaking → gain（余量）→ limiter（防削波）→ destination
    *
    * 注意：一旦 createMediaElementSource，媒体元素就只能经 AudioContext 出声，
    * 无法再回到「原生直出」；因此未开音效时也应避免无谓接管（见 PlayerBar）。
    */
   const routeAudioGraph = () => {
-    if (!audioContext || !sourceNode || !gainNode || !analyserNode || !timeAnalyserNode) {
+    if (!audioContext || !sourceNode || !gainNode || !limiterNode || !analyserNode || !timeAnalyserNode) {
       return
     }
 
     safeDisconnect(sourceNode)
     filters.forEach(safeDisconnect)
     safeDisconnect(gainNode)
+    safeDisconnect(limiterNode)
     // Analyser 是叶子节点，一般无需 disconnect；重新从 tap 点连接即可
 
     if (!enabled.value) {
@@ -326,7 +332,8 @@ export function useEqualizer() {
       currentNode = filter
     })
     currentNode.connect(gainNode)
-    gainNode.connect(audioContext.destination)
+    gainNode.connect(limiterNode)
+    limiterNode.connect(audioContext.destination)
     gainNode.connect(analyserNode)
     gainNode.connect(timeAnalyserNode)
 
@@ -349,6 +356,7 @@ export function useEqualizer() {
       safeDisconnect(sourceNode)
       filters.forEach(safeDisconnect)
       safeDisconnect(gainNode)
+      safeDisconnect(limiterNode)
       safeDisconnect(analyserNode)
       safeDisconnect(timeAnalyserNode)
       isInitialized = false
@@ -396,12 +404,21 @@ export function useEqualizer() {
       gainNode = audioContext.createGain()
       gainNode.gain.value = 1
 
+      // 尾部限幅器：EQ 正增益超 0dBFS 时避免硬削波（数字失真是音质发糊的主因）
+      limiterNode = audioContext.createDynamicsCompressor()
+      limiterNode.threshold.value = -1
+      limiterNode.knee.value = 0
+      limiterNode.ratio.value = 20
+      limiterNode.attack.value = 0.002
+      limiterNode.release.value = 0.1
+
       filters = EQUALIZER_FREQUENCIES.map((freq) => {
         const filter = audioContext!.createBiquadFilter()
         filter.type = 'peaking'
         filter.frequency.value = freq
-        // 略宽的 Q，减少开音效时尖刺感
-        filter.Q.value = 0.7
+        // 倍频程间隔的 10 段 EQ 标准带宽为 1 个倍频程，对应 Q≈1.41；
+        // Q 过小（如 0.7）会让相邻频段大面积叠加，低频预设实际提升远超面板数值，导致发糊
+        filter.Q.value = 1.414
         filter.gain.value = 0
         return filter
       })
@@ -427,31 +444,41 @@ export function useEqualizer() {
     }
   }
 
+  /** 平滑设置 AudioParam，避免直接赋值产生「拉链」爆音 */
+  const smoothSet = (param: AudioParam, value: number) => {
+    if (audioContext) {
+      param.setTargetAtTime(value, audioContext.currentTime, 0.02)
+    } else {
+      param.value = value
+    }
+  }
+
   /** 按最大正向增益留一点主音量余量，减轻削波发糊 */
   const applyMasterHeadroom = () => {
-    if (!gainNode || !enabled.value) {
-      if (gainNode) gainNode.gain.value = 1
+    if (!gainNode) return
+    if (!enabled.value) {
+      smoothSet(gainNode.gain, 1)
       return
     }
     const maxBoost = Math.max(0, ...gains.value)
-    // 约抵消一半最大提升（dB→线性），避免重低音等预设严重削波
+    // 约抵消一半最大提升（dB→线性），剩余峰值交给尾部 limiter 兜底
     const headroomDb = maxBoost * 0.5
-    gainNode.gain.value = Math.pow(10, -headroomDb / 20)
+    smoothSet(gainNode.gain, Math.pow(10, -headroomDb / 20))
   }
 
   // 应用均衡器增益
   const applyGains = () => {
     if (!enabled.value || filters.length === 0) {
       filters.forEach((filter) => {
-        filter.gain.value = 0
+        smoothSet(filter.gain, 0)
       })
-      if (gainNode) gainNode.gain.value = 1
+      if (gainNode) smoothSet(gainNode.gain, 1)
       return
     }
 
     gains.value.forEach((gain, index) => {
       if (filters[index]) {
-        filters[index].gain.value = gain
+        smoothSet(filters[index].gain, gain)
       }
     })
     applyMasterHeadroom()
@@ -493,6 +520,7 @@ export function useEqualizer() {
     safeDisconnect(sourceNode)
     filters.forEach(safeDisconnect)
     safeDisconnect(gainNode)
+    safeDisconnect(limiterNode)
     safeDisconnect(analyserNode)
     safeDisconnect(timeAnalyserNode)
 
@@ -507,6 +535,7 @@ export function useEqualizer() {
     audioContext = null
     sourceNode = null
     gainNode = null
+    limiterNode = null
     filters = []
     analyserNode = null
     timeAnalyserNode = null

@@ -13,6 +13,7 @@
 - 降低全屏白屏频率：普通页恢复 `out-in`（避免叠层透底）；进出 NowPlaying 仍用 instant；去掉会触发重挂载的 route key；封面预加载后再替换；去掉进场 opacity:0 动画；背景色与渐变拆开写
 - 改善播放音质：未开音效时不再强制走 Web Audio 滤波链（PlayerBar 仅在开启时接管）；音效关闭时音频图直通 destination；开启时按最大提升留主音量余量减轻削波
 - 进一步提升音质：全屏频谱不再劫持 Audio；仅开启音效才 createMediaElementSource；关闭音效时释放 Web Audio 并重建原生元素直出；未开音效不设 crossOrigin
+- 修复开音效后音质发糊：滤波器 Q 修正为倍频程标准 1.414（过宽会导致相邻频段叠加、低频实际提升远超面板值）；尾部加限幅器防 0dBFS 硬削波；增益改用 setTargetAtTime 平滑过渡消除爆音
 ## [1.1.4] - 2026-07-23
 
 ### 文档
