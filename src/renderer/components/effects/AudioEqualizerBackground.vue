@@ -106,21 +106,20 @@ const roundRect = (c: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 let lastTs = 0
 let time = 0
-// 限帧 30fps：全屏频谱大量 shadowBlur 绘制开销大，满帧渲染会挤占 CPU
-// 影响音频解码流畅度（爆音/卡顿），30fps 视觉上已足够顺滑
-const FRAME_INTERVAL_MS = 1000 / 30
+// 满帧渲染（60fps）保证跟手；绘制成本已通过去掉 shadowBlur 大幅降低，
+// 不会再挤占音频解码（此前限帧 30fps 反而造成明显延迟感）
 const tick = (ts: number) => {
   rafId = requestAnimationFrame(tick)
   if (!ctx) return
-  if (ts - lastTs < FRAME_INTERVAL_MS) return
 
   const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0)
   lastTs = ts
   time += dt
 
-  // 背景拖尾（类似示例图的“光带残影”）
+  // 背景拖尾（类似示例图的“光带残影”）；按帧时长换算，帧率无关
   ctx.globalCompositeOperation = 'source-over'
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.26)'
+  const trailAlpha = 1 - Math.exp(-dt / 0.055)
+  ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.4, trailAlpha).toFixed(3)})`
   ctx.fillRect(0, 0, width, height)
 
   const data = getFrequency()
@@ -176,9 +175,12 @@ const tick = (ts: number) => {
       v01 = v
     }
 
-    // 平滑（让柱子更“音乐感”，不会抖动太碎）
+    // 平滑（基于帧时长的指数趋近，帧率无关；上升快、回落稍慢，跟手又不碎）
     const target = clamp01(v01 * 1.35) * activeFactor
-    const smooth = smoothed[i] = smoothed[i] + (target - smoothed[i]) * (0.18 + (props.active ? 0.18 : 0.06))
+    const rising = target > smoothed[i]
+    const tau = props.active ? (rising ? 0.045 : 0.12) : 0.3
+    const k = 1 - Math.exp(-dt / tau)
+    const smooth = smoothed[i] = smoothed[i] + (target - smoothed[i]) * k
 
     const centerFocus = 1 - Math.abs(i / (bars - 1) - 0.5) * 2
     const perspective = 0.55 + centerFocus * 0.55
@@ -204,17 +206,21 @@ const tick = (ts: number) => {
     grad.addColorStop(0.55, mid)
     grad.addColorStop(1, bottom)
 
-    // 发光阴影（同色系）
-    ctx.shadowColor = hsla(hue, 92, 56, 0.55 * smooth)
-    ctx.shadowBlur = 18 + smooth * 32
-    ctx.fillStyle = grad
+    // 廉价发光：不用 shadowBlur（每根柱子模糊渲染极贵，是掉帧主因），
+    // 改为在柱子后面叠一层加宽的低透明度同色矩形，'lighter' 混合下效果接近
+    if (smooth > 0.05) {
+      const glowPad = 4 + smooth * 8
+      ctx.fillStyle = hsla(hue, 92, 50, 0.10 * smooth)
+      roundRect(ctx, xx - glowPad, y - glowPad, barW + glowPad * 2, h + glowPad * 2, glowPad)
+      ctx.fill()
+    }
 
+    ctx.fillStyle = grad
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
 
     // 顶部高光线
     if (smooth > 0.08) {
-      ctx.shadowBlur = 0
       ctx.strokeStyle = hsla(hue, 92, 66, 0.14 + smooth * 0.22)
       ctx.lineWidth = 1
       ctx.beginPath()

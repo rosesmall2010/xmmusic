@@ -434,7 +434,9 @@ export function useEqualizer() {
 
       analyserNode = audioContext.createAnalyser()
       analyserNode.fftSize = 512
-      analyserNode.smoothingTimeConstant = 0.8
+      // 0.8 的时间平滑会让频谱数据滞后音乐节拍，可视化「跟不上」；
+      // 0.5 更跟手，画面层再做上升/回落不对称平滑即可保持顺滑
+      analyserNode.smoothingTimeConstant = 0.5
 
       timeAnalyserNode = audioContext.createAnalyser()
       timeAnalyserNode.fftSize = 1024
