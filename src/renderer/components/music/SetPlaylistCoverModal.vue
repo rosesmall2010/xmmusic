@@ -28,7 +28,7 @@
             :key="item.musicId + '-' + item.coverPath"
             class="candidate-item"
             :disabled="saving"
-            @click="pickSongCover(item.musicId)"
+            @click="pickSongCover(item)"
           >
             <img :src="toLocalFileUrl(item.coverPath)" :alt="item.title" />
             <div class="candidate-meta">
@@ -104,12 +104,14 @@ const pickImage = async () => {
   }
 }
 
-const pickSongCover = async (musicId: number) => {
+const pickSongCover = async (item: { musicId: number; coverPath: string }) => {
   try {
     saving.value = true
+    // 直接带上候选封面路径，避免主进程二次查库时路径不一致
     const coverPath = await window.electronAPI.setPlaylistCover(props.playlistId, {
       type: 'music',
-      musicId
+      musicId: item.musicId,
+      filePath: item.coverPath
     })
     emit('updated', coverPath)
     emit('close')

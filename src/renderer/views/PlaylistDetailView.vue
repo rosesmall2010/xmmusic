@@ -5,6 +5,7 @@
         <div class="playlist-cover">
           <img
             v-if="playlistCover"
+            :key="playlistCover"
             :src="playlistCover"
             class="cover-image"
             @error="handleCoverError"
