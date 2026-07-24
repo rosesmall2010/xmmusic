@@ -3,8 +3,10 @@ import { join, extname } from 'path'
 import { app } from 'electron'
 import type MusicDatabase from '../database/db'
 
-/** 设置封面弹窗候选上限，避免超大歌单全量扫描卡死主进程 */
+/** 设置封面弹窗最终返回的候选上限 */
 export const PLAYLIST_COVER_CANDIDATE_LIMIT = 200
+/** SQL 拉取与 existsSync 扫描硬顶（允许重复/失效路径缓冲） */
+export const PLAYLIST_COVER_SCAN_LIMIT = 500
 
 export type PlaylistCoverSource =
   | { type: 'file'; filePath: string }
@@ -105,15 +107,20 @@ function getCoversDir(): string {
   return coversDir
 }
 
-/** 清理该歌单旧的自定义封面文件（playlist-{id}.* / playlist-{id}-*.*） */
-function cleanupPlaylistCoverFiles(playlistId: number): void {
+/**
+ * 清理该歌单旧的自定义封面文件（playlist-{id}.* / playlist-{id}-*.*）
+ * @param keepPath 保留路径（通常是刚写入的新封面），避免误删
+ */
+function cleanupPlaylistCoverFiles(playlistId: number, keepPath?: string): void {
   const coversDir = getCoversDir()
   const prefix = `playlist-${playlistId}`
   try {
     for (const name of readdirSync(coversDir)) {
       if (name === prefix || name.startsWith(`${prefix}.`) || name.startsWith(`${prefix}-`)) {
+        const fullPath = join(coversDir, name)
+        if (keepPath && fullPath === keepPath) continue
         try {
-          unlinkSync(join(coversDir, name))
+          unlinkSync(fullPath)
         } catch {
           // 忽略单个文件删除失败
         }
@@ -136,11 +143,11 @@ function copyCoverToPlaylistDir(playlistId: number, sourcePath: string): string 
     ext = '.png'
   }
 
-  // 使用时间戳生成唯一文件名，避免同路径导致浏览器缓存旧封面
-  cleanupPlaylistCoverFiles(playlistId)
+  // 先写入新文件，成功后再清理旧封面，避免复制失败导致封面断裂
   const destPath = join(coversDir, `playlist-${playlistId}-${Date.now()}${ext}`)
   // asar 内资源 copyFileSync 常失败；读+写对磁盘与 asar 路径都可用
   writeFileSync(destPath, readFileSync(sourcePath))
+  cleanupPlaylistCoverFiles(playlistId, destPath)
   return destPath
 }
 
@@ -148,13 +155,16 @@ export function getPlaylistCoverCandidates(
   db: MusicDatabase,
   playlistId: number
 ): Array<{ musicId: number; title: string; artist: string; coverPath: string }> {
-  // 仅拉有 cover_path 的轻量行，避免超大歌单全量 MusicItem
-  const songs = db.getPlaylistSongsWithCoverPath(Number(playlistId))
+  // SQL 侧 LIMIT + 扫描硬顶，避免超大歌单 / 大量失效路径卡死主进程
+  const songs = db.getPlaylistSongsWithCoverPath(Number(playlistId), PLAYLIST_COVER_SCAN_LIMIT)
   const seen = new Set<string>()
   const candidates: Array<{ musicId: number; title: string; artist: string; coverPath: string }> = []
+  let scanned = 0
 
   for (const song of songs) {
     if (candidates.length >= PLAYLIST_COVER_CANDIDATE_LIMIT) break
+    if (scanned >= PLAYLIST_COVER_SCAN_LIMIT) break
+    scanned++
     if (!song.coverPath || !existsSync(song.coverPath)) continue
     if (seen.has(song.coverPath)) continue
     seen.add(song.coverPath)

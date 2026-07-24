@@ -1413,10 +1413,13 @@ export default class MusicDatabase {
 
   /**
    * 获取歌单内已有封面路径的歌曲（轻量字段，用于设置封面候选）
+   * @param limit SQL 侧硬顶，避免超大歌单全量拉取
    */
   getPlaylistSongsWithCoverPath(
-    playlistId: number
+    playlistId: number,
+    limit: number = 500
   ): Array<{ id: number; title: string; artist: string; coverPath: string }> {
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 500, 2000))
     const stmt = this.db!.prepare(`
       SELECT
         am.id,
@@ -1429,8 +1432,9 @@ export default class MusicDatabase {
         AND am.cover_path IS NOT NULL
         AND TRIM(am.cover_path) != ''
       ORDER BY pi.position ASC
+      LIMIT ?
     `)
-    const rows = stmt.all(playlistId) as Array<{
+    const rows = stmt.all(playlistId, safeLimit) as Array<{
       id: number
       title: string
       artist: string
