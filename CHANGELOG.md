@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.5] - 2026-07-24
+
+### 修复
+- 修复音效（均衡器）设置退出后丢失：开关/预设立即落盘，关闭面板与退出前 flush；localStorage 同步镜像兜底
+
 ## [1.1.4] - 2026-07-23
 
 ### 文档

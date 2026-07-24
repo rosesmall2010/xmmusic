@@ -72,14 +72,6 @@ import { ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
 import { useEqualizer, EQUALIZER_PRESETS } from '@/composables/useEqualizer'
 
-defineProps<{
-  modelValue: boolean
-}>()
-
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean]
-}>()
-
 const {
   enabled,
   gains,
@@ -87,10 +79,29 @@ const {
   setGain,
   applyPreset,
   reset,
-  toggle
+  toggle,
+  flushSaveSettings
 } = useEqualizer()
 
+const props = defineProps<{
+  modelValue: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+}>()
+
 const selectedPreset = ref('flat')
+
+watch(
+  () => props.modelValue,
+  (visible, wasVisible) => {
+    // 关闭面板时立即落盘，避免拖动滑块后的防抖尚未完成
+    if (wasVisible && !visible) {
+      void flushSaveSettings()
+    }
+  }
+)
 
 const handlePresetChange = () => {
   const preset = EQUALIZER_PRESETS[selectedPreset.value as keyof typeof EQUALIZER_PRESETS]

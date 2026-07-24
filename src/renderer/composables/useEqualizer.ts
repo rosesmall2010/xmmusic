@@ -120,64 +120,165 @@ const enabled = ref(false)
 const gains = ref<number[]>([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 const customPresets = ref<EqualizerPreset[]>([])
 
-// 持久化定时器
-let saveTimer: number | null = null
+// 持久化定时器（滑块拖动防抖；退出前必须 flush）
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+let settingsLoaded = false
+let loadSettingsPromise: Promise<void> | null = null
+let didBindLoadApply = false
 
-// 加载设置
-const loadSettings = async () => {
-  if (typeof window === 'undefined' || !window.electronAPI) return
+const EQ_LOCAL_KEY = 'xmmusic-equalizer'
+
+const buildPlainEqualizer = () => ({
+  enabled: !!enabled.value,
+  gains: Array.isArray(gains.value) ? [...toRaw(gains.value)] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  customPresets: Array.isArray(customPresets.value)
+    ? toRaw(customPresets.value).map((p: any) => ({
+        name: String(p?.name ?? ''),
+        gains: Array.isArray(p?.gains) ? [...p.gains] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      }))
+    : []
+})
+
+const mirrorEqualizerToLocal = (plain: ReturnType<typeof buildPlainEqualizer>) => {
   try {
-    const settings = await window.electronAPI.getSettings()
-    if (settings.equalizer) {
-      enabled.value = settings.equalizer.enabled ?? false
-      if (settings.equalizer.gains && Array.isArray(settings.equalizer.gains)) {
-        gains.value = settings.equalizer.gains
-      }
-      if (settings.equalizer.customPresets && Array.isArray(settings.equalizer.customPresets)) {
-        customPresets.value = settings.equalizer.customPresets
-      }
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(EQ_LOCAL_KEY, JSON.stringify(plain))
     }
-  } catch (error) {
-    console.warn('加载均衡器设置失败:', error)
+  } catch {
+    // 忽略配额等错误
   }
 }
 
-// 保存设置
-const saveSettings = () => {
-  if (typeof window === 'undefined' || !window.electronAPI) {
-    console.warn('⚠️ 无法保存均衡器设置：window.electronAPI 不可用')
+const readEqualizerFromLocal = (): ReturnType<typeof buildPlainEqualizer> | null => {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(EQ_LOCAL_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      enabled: !!parsed.enabled,
+      gains: Array.isArray(parsed.gains) ? [...parsed.gains] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      customPresets: Array.isArray(parsed.customPresets) ? parsed.customPresets : []
+    }
+  } catch {
+    return null
+  }
+}
+
+const applyEqualizerState = (eq: {
+  enabled?: boolean
+  gains?: number[]
+  customPresets?: EqualizerPreset[]
+}) => {
+  enabled.value = eq.enabled ?? false
+  if (eq.gains && Array.isArray(eq.gains) && eq.gains.length > 0) {
+    gains.value = [...eq.gains]
+  }
+  if (eq.customPresets && Array.isArray(eq.customPresets)) {
+    customPresets.value = eq.customPresets
+  }
+}
+
+/** 立即写入磁盘（取消未完成的防抖）；同时同步写 localStorage 作退出兜底 */
+const flushSaveSettings = async (): Promise<void> => {
+  if (typeof window === 'undefined') return
+
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  const plainEqualizer = buildPlainEqualizer()
+  // 同步镜像：进程被立刻杀掉时 IPC 可能来不及完成，localStorage 仍可恢复
+  mirrorEqualizerToLocal(plainEqualizer)
+
+  if (!window.electronAPI) {
+    console.warn('⚠️ 无法保存均衡器设置到数据库：window.electronAPI 不可用（已写入 localStorage）')
+    return
+  }
+
+  try {
+    await window.electronAPI.saveSettings({
+      equalizer: plainEqualizer
+    })
+    console.log('✅ 均衡器设置已保存')
+  } catch (error) {
+    console.error('❌ 保存均衡器设置失败:', error)
+  }
+}
+
+/**
+ * 保存设置
+ * @param immediate true=立刻落盘（开关/预设/退出）；false=短防抖（拖动滑块）
+ */
+const saveSettings = (immediate = false) => {
+  if (typeof window === 'undefined') return
+
+  if (immediate) {
+    void flushSaveSettings()
     return
   }
 
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = window.setTimeout(async () => {
-    try {
-      // ⚠️ ipcRenderer.invoke 会进行 structured clone
-      // Vue 的响应式对象/Proxy 无法被 clone，会报 “An object could not be cloned.”
-      // 所以这里必须把要保存的数据转换为“纯 JSON”结构
-      const plainEqualizer = {
-        enabled: !!toRaw(enabled.value),
-        gains: Array.isArray(gains.value) ? [...toRaw(gains.value)] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        customPresets: Array.isArray(customPresets.value)
-          ? toRaw(customPresets.value).map((p: any) => ({
-              name: String(p?.name ?? ''),
-              gains: Array.isArray(p?.gains) ? [...p.gains] : [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            }))
-          : []
-      }
-
-      await window.electronAPI.saveSettings({
-        equalizer: plainEqualizer
-      })
-      console.log('✅ 均衡器设置已保存')
-    } catch (error) {
-      console.error('❌ 保存均衡器设置失败:', error)
-    }
-  }, 1000) // 1秒防抖
+  // 滑块拖动：300ms 防抖；退出时由 flush / beforeunload 兜底
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    void flushSaveSettings()
+  }, 300)
 }
 
-// 初始化加载
-loadSettings()
+// 加载设置：优先数据库，缺失时回退 localStorage
+const loadSettings = async () => {
+  if (typeof window === 'undefined') return
+  try {
+    let loadedFromDb = false
+    if (window.electronAPI) {
+      const settings = await window.electronAPI.getSettings()
+      if (settings.equalizer) {
+        applyEqualizerState(settings.equalizer)
+        mirrorEqualizerToLocal(buildPlainEqualizer())
+        loadedFromDb = true
+      }
+    }
+    if (!loadedFromDb) {
+      const local = readEqualizerFromLocal()
+      if (local) {
+        applyEqualizerState(local)
+        // 回写数据库，修复此前仅落在 local / 未完成 IPC 的情况
+        if (window.electronAPI) {
+          try {
+            await window.electronAPI.saveSettings({ equalizer: local })
+          } catch {
+            // 忽略
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('加载均衡器设置失败:', error)
+    const local = readEqualizerFromLocal()
+    if (local) applyEqualizerState(local)
+  } finally {
+    settingsLoaded = true
+  }
+}
+
+loadSettingsPromise = loadSettings()
+
+// 退出 / 隐藏页面前强制落盘，避免防抖未完成导致设置丢失
+if (typeof window !== 'undefined') {
+  const flushOnExit = () => {
+    void flushSaveSettings()
+  }
+  window.addEventListener('beforeunload', flushOnExit)
+  window.addEventListener('pagehide', flushOnExit)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      void flushSaveSettings()
+    }
+  })
+}
 
 export function useEqualizer() {
   // 初始化音频上下文
@@ -325,7 +426,7 @@ export function useEqualizer() {
     if (index >= 0 && index < gains.value.length) {
       gains.value[index] = Math.max(-12, Math.min(12, gain))
       applyGains()
-      saveSettings()
+      saveSettings(false) // 拖动防抖
     }
   }
 
@@ -333,21 +434,21 @@ export function useEqualizer() {
   const applyPreset = (preset: EqualizerPreset) => {
     gains.value = [...preset.gains]
     applyGains()
-    saveSettings()
+    saveSettings(true)
   }
 
   // 重置为平坦
   const reset = () => {
     gains.value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     applyGains()
-    saveSettings()
+    saveSettings(true)
   }
 
   // 启用/禁用均衡器
   const toggle = (value: boolean) => {
     enabled.value = value
     applyGains()
-    saveSettings()
+    saveSettings(true)
   }
 
   // 保存自定义预设
@@ -357,7 +458,7 @@ export function useEqualizer() {
       gains: [...gains.value]
     }
     customPresets.value.push(preset)
-    saveSettings()
+    saveSettings(true)
     return preset
   }
 
@@ -365,8 +466,18 @@ export function useEqualizer() {
   const deletePreset = (index: number) => {
     if (index >= 0 && index < customPresets.value.length) {
       customPresets.value.splice(index, 1)
-      saveSettings()
+      saveSettings(true)
     }
+  }
+
+  // 设置加载完成后，若音频图已初始化则再应用一次增益（仅绑定一次）
+  if (!didBindLoadApply) {
+    didBindLoadApply = true
+    void loadSettingsPromise?.then(() => {
+      if (settingsLoaded && isInitialized) {
+        applyGains()
+      }
+    })
   }
 
   // 监听增益变化（用于拖动滑块时的实时应用，但不频繁保存，保存由 setGain 触发）
@@ -419,6 +530,8 @@ export function useEqualizer() {
     reset,
     toggle,
     savePreset,
-    deletePreset
+    deletePreset,
+    /** 关闭面板 / 退出前调用，确保防抖中的设置落盘 */
+    flushSaveSettings
   }
 }
