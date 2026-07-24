@@ -75,8 +75,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-playlist', id, updates),
   setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) =>
     ipcRenderer.invoke('set-playlist-cover', playlistId, source),
-  getPlaylistCoverCandidates: (playlistId: number) =>
-    ipcRenderer.invoke('get-playlist-cover-candidates', playlistId),
+  getPlaylistCoverCandidates: (playlistId: number, options?: { page?: number; pageSize?: number }) =>
+    ipcRenderer.invoke('get-playlist-cover-candidates', playlistId, options),
   deletePlaylist: (id: number) =>
     ipcRenderer.invoke('delete-playlist', id),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
@@ -325,7 +325,12 @@ declare global {
       createPlaylist: (name: string, description?: string) => Promise<number>
       updatePlaylist: (id: number, updates: any) => Promise<void>
       setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) => Promise<string | null>
-      getPlaylistCoverCandidates: (playlistId: number) => Promise<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>
+      getPlaylistCoverCandidates: (playlistId: number, options?: { page?: number; pageSize?: number }) => Promise<{
+        items: Array<{ musicId: number; title: string; artist: string; coverPath: string }>
+        page: number
+        pageSize: number
+        hasMore: boolean
+      }>
       deletePlaylist: (id: number) => Promise<void>
       getPlaylists: () => Promise<any[]>
       updatePlaylistOrder: (playlistIds: number[]) => Promise<void>

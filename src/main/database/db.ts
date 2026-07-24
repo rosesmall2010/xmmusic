@@ -1412,14 +1412,17 @@ export default class MusicDatabase {
   }
 
   /**
-   * 获取歌单内已有封面路径的歌曲（轻量字段，用于设置封面候选）
-   * @param limit SQL 侧硬顶，避免超大歌单全量拉取
+   * 获取歌单内已有封面路径的歌曲（轻量字段，用于设置封面候选分页扫描）
+   * @param limit 本批条数
+   * @param offset SQL OFFSET
    */
   getPlaylistSongsWithCoverPath(
     playlistId: number,
-    limit: number = 500
+    limit: number = 200,
+    offset: number = 0
   ): Array<{ id: number; title: string; artist: string; coverPath: string }> {
-    const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 500, 2000))
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit) || 200, 500))
+    const safeOffset = Math.max(0, Math.floor(offset) || 0)
     const stmt = this.db!.prepare(`
       SELECT
         am.id,
@@ -1432,9 +1435,9 @@ export default class MusicDatabase {
         AND am.cover_path IS NOT NULL
         AND TRIM(am.cover_path) != ''
       ORDER BY pi.position ASC
-      LIMIT ?
+      LIMIT ? OFFSET ?
     `)
-    const rows = stmt.all(playlistId, safeLimit) as Array<{
+    const rows = stmt.all(playlistId, safeLimit, safeOffset) as Array<{
       id: number
       title: string
       artist: string

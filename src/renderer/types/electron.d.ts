@@ -53,7 +53,12 @@ export interface ElectronAPI {
   createPlaylist: (name: string, description?: string) => Promise<number>
   updatePlaylist: (id: number, updates: any) => Promise<void>
   setPlaylistCover: (playlistId: number, source: { type: 'file' | 'music' | 'default'; filePath?: string; musicId?: number }) => Promise<string | null>
-  getPlaylistCoverCandidates: (playlistId: number) => Promise<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>
+  getPlaylistCoverCandidates: (playlistId: number, options?: { page?: number; pageSize?: number }) => Promise<{
+    items: Array<{ musicId: number; title: string; artist: string; coverPath: string }>
+    page: number
+    pageSize: number
+    hasMore: boolean
+  }>
   deletePlaylist: (id: number) => Promise<void>
   getPlaylists: () => Promise<any[]>
   updatePlaylistOrder: (playlistIds: number[]) => Promise<void>

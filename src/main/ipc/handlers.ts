@@ -533,10 +533,10 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return setPlaylistCover(db, playlistId, source)
   })
 
-  // 获取歌单内可作为封面的歌曲列表（有封面图）
-  ipcMain.handle('get-playlist-cover-candidates', async (_, playlistId: number) => {
-    if (!db) return []
-    return getPlaylistCoverCandidates(db, playlistId)
+  // 获取歌单内可作为封面的歌曲列表（有封面图，分页，每页最多 100）
+  ipcMain.handle('get-playlist-cover-candidates', async (_, playlistId: number, options?: { page?: number; pageSize?: number }) => {
+    if (!db) return { items: [], page: 1, pageSize: 100, hasMore: false }
+    return getPlaylistCoverCandidates(db, playlistId, options)
   })
 
   ipcMain.handle('delete-playlist', async (_, id: number) => {

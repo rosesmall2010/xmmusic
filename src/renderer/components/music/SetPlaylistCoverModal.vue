@@ -22,21 +22,41 @@
         <div v-else-if="candidates.length === 0" class="empty-hint">
           {{ $t('playlist.coverNoSongCovers') }}
         </div>
-        <div v-else class="candidate-grid">
-          <button
-            v-for="item in candidates"
-            :key="item.musicId + '-' + item.coverPath"
-            class="candidate-item"
-            :disabled="saving"
-            @click="pickSongCover(item)"
-          >
-            <img :src="toLocalFileUrl(item.coverPath)" :alt="item.title" />
-            <div class="candidate-meta">
-              <div class="title">{{ item.title }}</div>
-              <div class="artist">{{ item.artist }}</div>
-            </div>
-          </button>
-        </div>
+        <template v-else>
+          <div class="candidate-grid">
+            <button
+              v-for="item in candidates"
+              :key="item.musicId + '-' + item.coverPath"
+              class="candidate-item"
+              :disabled="saving"
+              @click="pickSongCover(item)"
+            >
+              <img :src="toLocalFileUrl(item.coverPath)" :alt="item.title" />
+              <div class="candidate-meta">
+                <div class="title">{{ item.title }}</div>
+                <div class="artist">{{ item.artist }}</div>
+              </div>
+            </button>
+          </div>
+
+          <div v-if="page > 1 || hasMore" class="pager">
+            <button
+              class="pager-btn"
+              :disabled="saving || loadingCandidates || page <= 1"
+              @click="goPage(page - 1)"
+            >
+              {{ $t('playlist.coverPrevPage') }}
+            </button>
+            <span class="pager-info">{{ $t('playlist.coverPageInfo', { page }) }}</span>
+            <button
+              class="pager-btn"
+              :disabled="saving || loadingCandidates || !hasMore"
+              @click="goPage(page + 1)"
+            >
+              {{ $t('playlist.coverNextPage') }}
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -46,6 +66,8 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toLocalFileUrl } from '@/utils/media'
+
+const PAGE_SIZE = 100
 
 const props = defineProps<{
   show: boolean
@@ -61,23 +83,38 @@ const { t } = useI18n()
 const saving = ref(false)
 const loadingCandidates = ref(false)
 const candidates = ref<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>([])
+const page = ref(1)
+const hasMore = ref(false)
 
 watch(() => props.show, async (visible) => {
   if (visible) {
-    await loadCandidates()
+    page.value = 1
+    await loadCandidates(1)
   }
 })
 
-const loadCandidates = async () => {
+const loadCandidates = async (targetPage: number) => {
   loadingCandidates.value = true
   try {
-    candidates.value = await window.electronAPI.getPlaylistCoverCandidates(props.playlistId)
+    const result = await window.electronAPI.getPlaylistCoverCandidates(props.playlistId, {
+      page: targetPage,
+      pageSize: PAGE_SIZE
+    })
+    candidates.value = result.items
+    page.value = result.page
+    hasMore.value = result.hasMore
   } catch (error) {
     console.error('加载歌单封面候选失败:', error)
     candidates.value = []
+    hasMore.value = false
   } finally {
     loadingCandidates.value = false
   }
+}
+
+const goPage = async (targetPage: number) => {
+  if (targetPage < 1 || loadingCandidates.value || saving.value) return
+  await loadCandidates(targetPage)
 }
 
 const close = () => {
@@ -216,7 +253,8 @@ const resetDefault = async () => {
 
 .btn-primary:disabled,
 .btn-secondary:disabled,
-.candidate-item:disabled {
+.candidate-item:disabled,
+.pager-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -278,5 +316,37 @@ const resetDefault = async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.pager-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.pager-info {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  min-width: 4em;
+  text-align: center;
 }
 </style>

@@ -3,15 +3,34 @@ import { join, extname } from 'path'
 import { app } from 'electron'
 import type MusicDatabase from '../database/db'
 
-/** 设置封面弹窗最终返回的候选上限 */
-export const PLAYLIST_COVER_CANDIDATE_LIMIT = 200
-/** SQL 拉取与 existsSync 扫描硬顶（允许重复/失效路径缓冲） */
-export const PLAYLIST_COVER_SCAN_LIMIT = 500
+/** 设置封面候选每页上限 */
+export const PLAYLIST_COVER_PAGE_SIZE = 100
+/** 分块扫描 SQL 行数（去重/失效路径缓冲） */
+const PLAYLIST_COVER_SQL_CHUNK = 200
 
 export type PlaylistCoverSource =
   | { type: 'file'; filePath: string }
   | { type: 'music'; musicId: number; filePath?: string }
   | { type: 'default' }
+
+export interface PlaylistCoverCandidate {
+  musicId: number
+  title: string
+  artist: string
+  coverPath: string
+}
+
+export interface PlaylistCoverCandidatesPage {
+  items: PlaylistCoverCandidate[]
+  page: number
+  pageSize: number
+  hasMore: boolean
+}
+
+export interface GetPlaylistCoverCandidatesOptions {
+  page?: number
+  pageSize?: number
+}
 
 /**
  * 设置歌单封面：选本地图片 / 使用歌单内歌曲封面 / 使用应用默认封面图
@@ -153,28 +172,52 @@ function copyCoverToPlaylistDir(playlistId: number, sourcePath: string): string 
 
 export function getPlaylistCoverCandidates(
   db: MusicDatabase,
-  playlistId: number
-): Array<{ musicId: number; title: string; artist: string; coverPath: string }> {
-  // SQL 侧 LIMIT + 扫描硬顶，避免超大歌单 / 大量失效路径卡死主进程
-  const songs = db.getPlaylistSongsWithCoverPath(Number(playlistId), PLAYLIST_COVER_SCAN_LIMIT)
-  const seen = new Set<string>()
-  const candidates: Array<{ musicId: number; title: string; artist: string; coverPath: string }> = []
-  let scanned = 0
+  playlistId: number,
+  options: GetPlaylistCoverCandidatesOptions = {}
+): PlaylistCoverCandidatesPage {
+  const pageSize = Math.min(
+    Math.max(1, Math.floor(options.pageSize ?? PLAYLIST_COVER_PAGE_SIZE) || PLAYLIST_COVER_PAGE_SIZE),
+    PLAYLIST_COVER_PAGE_SIZE
+  )
+  const page = Math.max(1, Math.floor(options.page ?? 1) || 1)
+  const skip = (page - 1) * pageSize
+  // 多取 1 条有效候选用于判断是否还有下一页
+  const needValid = skip + pageSize + 1
 
-  for (const song of songs) {
-    if (candidates.length >= PLAYLIST_COVER_CANDIDATE_LIMIT) break
-    if (scanned >= PLAYLIST_COVER_SCAN_LIMIT) break
-    scanned++
-    if (!song.coverPath || !existsSync(song.coverPath)) continue
-    if (seen.has(song.coverPath)) continue
-    seen.add(song.coverPath)
-    candidates.push({
-      musicId: song.id,
-      title: song.title,
-      artist: song.artist,
-      coverPath: song.coverPath
-    })
+  const seen = new Set<string>()
+  const collected: PlaylistCoverCandidate[] = []
+  let sqlOffset = 0
+
+  while (collected.length < needValid) {
+    const chunk = db.getPlaylistSongsWithCoverPath(
+      Number(playlistId),
+      PLAYLIST_COVER_SQL_CHUNK,
+      sqlOffset
+    )
+    if (chunk.length === 0) break
+    sqlOffset += chunk.length
+
+    for (const song of chunk) {
+      if (!song.coverPath || seen.has(song.coverPath)) continue
+      if (!existsSync(song.coverPath)) continue
+      seen.add(song.coverPath)
+      collected.push({
+        musicId: song.id,
+        title: song.title,
+        artist: song.artist,
+        coverPath: song.coverPath
+      })
+      if (collected.length >= needValid) break
+    }
+
+    if (chunk.length < PLAYLIST_COVER_SQL_CHUNK) break
   }
 
-  return candidates
+  const items = collected.slice(skip, skip + pageSize)
+  return {
+    items,
+    page,
+    pageSize,
+    hasMore: collected.length > skip + pageSize
+  }
 }
