@@ -49,17 +49,24 @@
 
 ## 功能开发规范
 
+### 构建验证（重要）
+- **代码改完后必须执行 `npm run build`**，确认渲染进程（Vite）与主进程（tsc）都能通过编译
+- 构建失败时先修复再提交；不要只依赖 `npm run dev`（开发模式可能漏掉生产构建错误）
+- 纯文档改动（仅 Markdown 等）可不跑完整 build
+
 ### 添加新功能时
 1. 更新相关的 Vue 组件
 2. 更新必要的类型定义
-3. 更新 CHANGELOG.md（在当前版本下添加）
-4. 必要时更新 README.md 和 TODO.md
-5. 自动提交代码（git add + git commit）
+3. 执行 `npm run build` 验证编译通过
+4. 更新 CHANGELOG.md（在当前版本下添加）
+5. 必要时更新 README.md 和 TODO.md
+6. 自动提交代码（git add + git commit）
 
 ### 修复 Bug 时
 1. 修复代码问题
-2. 在 CHANGELOG.md 的"修复"部分记录
-3. 自动提交代码
+2. 执行 `npm run build` 验证编译通过
+3. 在 CHANGELOG.md 的"修复"部分记录
+4. 自动提交代码
 
 ### 文档更新
 - README.md: 用户面向的功能说明
