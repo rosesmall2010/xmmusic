@@ -24,6 +24,12 @@ npm run dev
 npm run build
 ```
 
+会依次执行：
+- `build:renderer`：Vite 生产构建（会严格检查 Vue/TS 语法）
+- `build:electron`：主进程 TypeScript 编译
+
+**说明**：功能或 Bug 修复改完代码后，应执行一次 `npm run build`，确认编译通过后再提交。仅改 Markdown 等文档时可跳过。`npm run dev` 不能替代生产构建校验。
+
 ### 4. 打包
 
 ```bash
