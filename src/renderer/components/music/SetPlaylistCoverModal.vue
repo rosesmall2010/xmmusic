@@ -18,12 +18,14 @@
 
         <div class="section-title">{{ $t('playlist.coverFromSong') }}</div>
 
-        <div v-if="loadingCandidates" class="empty-hint">{{ $t('common.loading') }}</div>
-        <div v-else-if="candidates.length === 0" class="empty-hint">
-          {{ $t('playlist.coverNoSongCovers') }}
+        <div v-if="loadingCandidates && candidates.length === 0 && page <= 1" class="empty-hint">
+          {{ $t('common.loading') }}
         </div>
         <template v-else>
-          <div class="candidate-grid">
+          <div v-if="candidates.length === 0" class="empty-hint">
+            {{ page > 1 ? $t('playlist.coverPageEmpty') : $t('playlist.coverNoSongCovers') }}
+          </div>
+          <div v-else class="candidate-grid">
             <button
               v-for="item in candidates"
               :key="item.musicId + '-' + item.coverPath"
@@ -47,7 +49,10 @@
             >
               {{ $t('playlist.coverPrevPage') }}
             </button>
-            <span class="pager-info">{{ $t('playlist.coverPageInfo', { page }) }}</span>
+            <span class="pager-info">
+              {{ $t('playlist.coverPageInfo', { page }) }}
+              <span v-if="loadingCandidates" class="pager-loading">{{ $t('common.loading') }}</span>
+            </span>
             <button
               class="pager-btn"
               :disabled="saving || loadingCandidates || !hasMore"
@@ -85,35 +90,48 @@ const loadingCandidates = ref(false)
 const candidates = ref<Array<{ musicId: number; title: string; artist: string; coverPath: string }>>([])
 const page = ref(1)
 const hasMore = ref(false)
+/** 仅应用最新一次加载结果，避免翻页/开关弹窗竞态 */
+let loadRequestId = 0
 
 watch(() => props.show, async (visible) => {
   if (visible) {
     page.value = 1
+    hasMore.value = false
+    candidates.value = []
     await loadCandidates(1)
+  } else {
+    // 关闭时作废进行中的请求
+    loadRequestId++
+    loadingCandidates.value = false
   }
 })
 
 const loadCandidates = async (targetPage: number) => {
+  const requestId = ++loadRequestId
   loadingCandidates.value = true
   try {
     const result = await window.electronAPI.getPlaylistCoverCandidates(props.playlistId, {
       page: targetPage,
       pageSize: PAGE_SIZE
     })
+    if (requestId !== loadRequestId) return
     candidates.value = result.items
     page.value = result.page
     hasMore.value = result.hasMore
   } catch (error) {
+    if (requestId !== loadRequestId) return
     console.error('加载歌单封面候选失败:', error)
     candidates.value = []
     hasMore.value = false
   } finally {
-    loadingCandidates.value = false
+    if (requestId === loadRequestId) {
+      loadingCandidates.value = false
+    }
   }
 }
 
 const goPage = async (targetPage: number) => {
-  if (targetPage < 1 || loadingCandidates.value || saving.value) return
+  if (targetPage < 1 || saving.value) return
   await loadCandidates(targetPage)
 }
 
@@ -348,5 +366,13 @@ const resetDefault = async () => {
   color: var(--text-secondary);
   min-width: 4em;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.pager-loading {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
 }
 </style>

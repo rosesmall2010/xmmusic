@@ -217,6 +217,7 @@
     "coverFromSong": "Choose from playlist songs",
     "coverDefault": "Use Default Cover",
     "coverNoSongCovers": "No songs with covers in this playlist",
+    "coverPageEmpty": "No covers on this page. Go back to the previous page.",
     "coverPrevPage": "Previous",
     "coverNextPage": "Next",
     "coverPageInfo": "Page {page}",

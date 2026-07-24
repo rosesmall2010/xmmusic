@@ -7,6 +7,10 @@ import type MusicDatabase from '../database/db'
 export const PLAYLIST_COVER_PAGE_SIZE = 100
 /** 分块扫描 SQL 行数（去重/失效路径缓冲） */
 const PLAYLIST_COVER_SQL_CHUNK = 200
+/** 单次请求最多 existsSync 次数，防止主进程被拖死 */
+const PLAYLIST_COVER_MAX_EXISTS_PER_REQUEST = 800
+/** 进程内缓存最多保留的有效候选数 */
+const PLAYLIST_COVER_MAX_VALID_CACHE = 2000
 
 export type PlaylistCoverSource =
   | { type: 'file'; filePath: string }
@@ -30,6 +34,38 @@ export interface PlaylistCoverCandidatesPage {
 export interface GetPlaylistCoverCandidatesOptions {
   page?: number
   pageSize?: number
+}
+
+/** 同歌单分页扫描缓存，避免每页从 offset=0 重扫 */
+type CoverCandidateScanState = {
+  playlistId: number
+  candidates: PlaylistCoverCandidate[]
+  seen: Set<string>
+  sqlOffset: number
+  sqlExhausted: boolean
+}
+
+let coverScanState: CoverCandidateScanState | null = null
+
+function getOrCreateCoverScanState(playlistId: number): CoverCandidateScanState {
+  if (coverScanState && coverScanState.playlistId === playlistId) {
+    return coverScanState
+  }
+  coverScanState = {
+    playlistId,
+    candidates: [],
+    seen: new Set(),
+    sqlOffset: 0,
+    sqlExhausted: false
+  }
+  return coverScanState
+}
+
+/** 清除封面候选扫描缓存（歌单变更或需要强制刷新时） */
+export function invalidatePlaylistCoverCandidateCache(playlistId?: number): void {
+  if (playlistId === undefined || coverScanState?.playlistId === playlistId) {
+    coverScanState = null
+  }
 }
 
 /**
@@ -184,40 +220,72 @@ export function getPlaylistCoverCandidates(
   // 多取 1 条有效候选用于判断是否还有下一页
   const needValid = skip + pageSize + 1
 
-  const seen = new Set<string>()
-  const collected: PlaylistCoverCandidate[] = []
-  let sqlOffset = 0
+  const state = getOrCreateCoverScanState(Number(playlistId))
+  let existsChecks = 0
+  let hitExistsBudget = false
 
-  while (collected.length < needValid) {
+  while (
+    state.candidates.length < needValid &&
+    !state.sqlExhausted &&
+    state.candidates.length < PLAYLIST_COVER_MAX_VALID_CACHE
+  ) {
     const chunk = db.getPlaylistSongsWithCoverPath(
       Number(playlistId),
       PLAYLIST_COVER_SQL_CHUNK,
-      sqlOffset
+      state.sqlOffset
     )
-    if (chunk.length === 0) break
-    sqlOffset += chunk.length
+    if (chunk.length === 0) {
+      state.sqlExhausted = true
+      break
+    }
 
+    let processedInChunk = 0
     for (const song of chunk) {
-      if (!song.coverPath || seen.has(song.coverPath)) continue
+      processedInChunk++
+      if (!song.coverPath || state.seen.has(song.coverPath)) continue
+
+      existsChecks++
+      if (existsChecks > PLAYLIST_COVER_MAX_EXISTS_PER_REQUEST) {
+        hitExistsBudget = true
+        // 本行未处理完，回退 1，下次请求从该行继续
+        processedInChunk--
+        break
+      }
+
       if (!existsSync(song.coverPath)) continue
-      seen.add(song.coverPath)
-      collected.push({
+
+      state.seen.add(song.coverPath)
+      state.candidates.push({
         musicId: song.id,
         title: song.title,
         artist: song.artist,
         coverPath: song.coverPath
       })
-      if (collected.length >= needValid) break
+      if (state.candidates.length >= needValid) break
+      if (state.candidates.length >= PLAYLIST_COVER_MAX_VALID_CACHE) break
     }
 
-    if (chunk.length < PLAYLIST_COVER_SQL_CHUNK) break
+    state.sqlOffset += processedInChunk
+
+    if (hitExistsBudget) break
+    if (processedInChunk < chunk.length) break
+    if (chunk.length < PLAYLIST_COVER_SQL_CHUNK) {
+      state.sqlExhausted = true
+      break
+    }
   }
 
-  const items = collected.slice(skip, skip + pageSize)
+  const items = state.candidates.slice(skip, skip + pageSize)
+  const hasStrictMore = state.candidates.length > skip + pageSize
+  // 本页已满且 SQL 未耗尽时允许继续翻页（下次请求从缓存续扫）
+  const hasMore =
+    hasStrictMore ||
+    (items.length === pageSize && !state.sqlExhausted && state.candidates.length >= skip + pageSize)
+
   return {
     items,
     page,
     pageSize,
-    hasMore: collected.length > skip + pageSize
+    hasMore
   }
 }
