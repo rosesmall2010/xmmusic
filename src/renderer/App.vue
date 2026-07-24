@@ -5,9 +5,10 @@
       <div class="app-body">
         <AppSidebar />
         <main class="app-content">
-          <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-              <component :is="Component" />
+          <router-view v-slot="{ Component, route }">
+            <!-- 不用 out-in：避免离开与进入之间露出浅色底造成「白屏闪一下」 -->
+            <transition :name="mainTransitionName">
+              <component :is="Component" :key="route.path" />
             </transition>
           </router-view>
         </main>
@@ -35,7 +36,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import PlayerBar from '@/components/layout/PlayerBar.vue'
@@ -45,6 +46,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const theme = computed(() => {
   const currentTheme = settingsStore.theme
@@ -63,6 +65,16 @@ const isBlankLayout = computed(() => route.meta.layout === 'blank')
 // 桌面歌词是独立的 BrowserWindow，加载的是同一套渲染入口
 // 通过初始 hash 判断，避免在歌词窗口里执行主窗口的初始化逻辑
 const isDesktopLyricsWindow = window.location.hash.startsWith('#/desktop-lyrics')
+
+/** 主布局过渡名：进入/离开全屏播放时用 instant，避免露出浅色底 */
+const mainTransitionName = ref('fade')
+router.beforeEach((to, from) => {
+  if (to.name === 'NowPlaying' || from.name === 'NowPlaying') {
+    mainTransitionName.value = 'instant'
+  } else {
+    mainTransitionName.value = 'fade'
+  }
+})
 
 const toggleQueue = () => {
   showQueue.value = !showQueue.value

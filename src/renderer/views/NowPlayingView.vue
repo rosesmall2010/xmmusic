@@ -425,6 +425,7 @@ const formatTime = (seconds: number) => {
 /**
  * 根据封面图提取平均色，用于背景与特效随歌曲变化
  * - 取 32x32 缩略图计算，成本低
+ * - 压暗到适合全屏深色背景的亮度，避免亮封面导致「白屏闪一下」
  * - 失败时返回 null
  */
 const extractAverageColor = async (src: string): Promise<string | null> => {
@@ -463,10 +464,33 @@ const extractAverageColor = async (src: string): Promise<string | null> => {
     r = Math.round(r / count)
     g = Math.round(g / count)
     b = Math.round(b / count)
-    return `rgb(${r}, ${g}, ${b})`
+    return darkenColorForBackground(r, g, b)
   } catch {
     return null
   }
+}
+
+/** 将封面主色压到深色区间，保证全屏背景不会接近白色 */
+const darkenColorForBackground = (r: number, g: number, b: number): string => {
+  // 相对亮度（0~1）
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  // 目标亮度约 0.18，过亮则整体按比例压暗
+  const targetLuma = 0.18
+  if (luminance > targetLuma && luminance > 0) {
+    const scale = targetLuma / luminance
+    r = Math.round(r * scale)
+    g = Math.round(g * scale)
+    b = Math.round(b * scale)
+  }
+  // 再限制单通道上限，避免某一通道过亮
+  const maxChannel = Math.max(r, g, b)
+  if (maxChannel > 96) {
+    const s = 96 / maxChannel
+    r = Math.round(r * s)
+    g = Math.round(g * s)
+    b = Math.round(b * s)
+  }
+  return `rgb(${r}, ${g}, ${b})`
 }
 
 // 歌词逻辑
@@ -502,14 +526,22 @@ const scrollToCurrentLyric = () => {
 }
 
 // 监听当前音乐变化
-watch(currentMusic, async (music) => {
+watch(currentMusic, async (music, _prev, onCleanup) => {
+  let cancelled = false
+  onCleanup(() => {
+    cancelled = true
+  })
+
   if (music) {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
+    if (cancelled) return
     await loadLyrics()
-    // 背景颜色随封面变化（无封面则保持默认）
+    if (cancelled) return
+    // 背景颜色随封面变化；取色完成前保留上一曲深色，避免先跳到亮色再压暗造成闪白
     if (music.coverPath) {
       const coverUrl = getCoverUrl(music.coverPath)
       const color = await extractAverageColor(coverUrl)
+      if (cancelled) return
       if (color) backgroundColor.value = color
     } else {
       backgroundColor.value = '#1a1a1a'
@@ -589,6 +621,8 @@ watch(
   flex-direction: column;
   padding: var(--spacing-xl) 0;
   color: white;
+  /* 底层兜底深色，防止路由过渡/透明 canvas 露出浅色 app 底 */
+  background-color: #0a0a0a;
   overflow-y: auto;
   overflow-x: hidden;
   width: 100%;

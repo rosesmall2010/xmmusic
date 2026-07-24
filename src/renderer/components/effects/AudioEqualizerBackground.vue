@@ -71,7 +71,12 @@ const resize = () => {
   canvas.width = Math.floor(width * dpr)
   canvas.height = Math.floor(height * dpr)
   ctx = canvas.getContext('2d', { alpha: true })
-  if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  if (ctx) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    // resize 会清空画布，先铺黑底避免透明帧闪一下浅色背景
+    ctx.fillStyle = '#0a0a0a'
+    ctx.fillRect(0, 0, width, height)
+  }
 }
 
 const getFrequency = (): Uint8Array | null => {
