@@ -126,11 +126,12 @@ const pickSongCover = async (item: { musicId: number; coverPath: string }) => {
 const resetDefault = async () => {
   try {
     saving.value = true
-    await window.electronAPI.setPlaylistCover(props.playlistId, { type: 'default' })
-    emit('updated', null)
+    // 使用应用内置默认封面图写入歌单 coverPath
+    const coverPath = await window.electronAPI.setPlaylistCover(props.playlistId, { type: 'default' })
+    emit('updated', coverPath)
     emit('close')
   } catch (error: any) {
-    console.error('恢复默认封面失败:', error)
+    console.error('设置应用默认封面失败:', error)
     alert(t('playlist.coverSetError') + ': ' + (error?.message || error))
   } finally {
     saving.value = false

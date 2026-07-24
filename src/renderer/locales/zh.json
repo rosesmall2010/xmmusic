@@ -215,7 +215,7 @@
     "setCover": "设置封面",
     "coverFromImage": "选择图片",
     "coverFromSong": "从歌单歌曲中选择封面",
-    "coverDefault": "设为默认封面",
+    "coverDefault": "使用应用默认封面",
     "coverNoSongCovers": "当前歌单内没有带封面的歌曲",
     "coverSetError": "设置封面失败",
     "copyToFolder": "复制到目录",

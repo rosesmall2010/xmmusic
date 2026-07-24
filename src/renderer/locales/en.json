@@ -215,7 +215,7 @@
     "setCover": "Set Cover",
     "coverFromImage": "Choose Image",
     "coverFromSong": "Choose from playlist songs",
-    "coverDefault": "Use Default Cover",
+    "coverDefault": "Use App Default Cover",
     "coverNoSongCovers": "No songs with covers in this playlist",
     "coverSetError": "Failed to set cover",
     "copyToFolder": "Copy to Folder",
