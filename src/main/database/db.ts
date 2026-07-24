@@ -1411,6 +1411,39 @@ export default class MusicDatabase {
     this.updatePlaylistStats(playlistId)
   }
 
+  /**
+   * 获取歌单内已有封面路径的歌曲（轻量字段，用于设置封面候选）
+   */
+  getPlaylistSongsWithCoverPath(
+    playlistId: number
+  ): Array<{ id: number; title: string; artist: string; coverPath: string }> {
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.id,
+        am.title,
+        am.artist,
+        am.cover_path
+      FROM playlist_item pi
+      JOIN all_music am ON pi.music_id = am.id
+      WHERE pi.playlist_id = ?
+        AND am.cover_path IS NOT NULL
+        AND TRIM(am.cover_path) != ''
+      ORDER BY pi.position ASC
+    `)
+    const rows = stmt.all(playlistId) as Array<{
+      id: number
+      title: string
+      artist: string
+      cover_path: string
+    }>
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      artist: row.artist,
+      coverPath: row.cover_path
+    }))
+  }
+
   getPlaylistSongsByMusicId(playlistId: number): Array<MusicItem & { fullPath: string; position: number }> {
     const stmt = this.db!.prepare(`
       SELECT

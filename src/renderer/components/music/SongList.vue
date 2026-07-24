@@ -451,7 +451,7 @@ const handleBatchSyncToDatabase = async () => {
 
     const result = await window.electronAPI.batchSyncMusicMetadataToDb(musicIds)
 
-    // 逐条通知各列表/播放器 patch 显示
+    // 仅对真正写入的记录派发刷新事件
     for (const updated of result.updated) {
       window.dispatchEvent(new CustomEvent('music-metadata-updated', {
         detail: updated
@@ -461,10 +461,19 @@ const handleBatchSyncToDatabase = async () => {
     emit('songs-updated')
     cancelSelection()
 
+    const unchanged = result.unchanged ?? 0
     if (result.failed > 0) {
       alert(t('music.batchSyncPartial', {
         success: result.success,
+        unchanged,
         failed: result.failed
+      }))
+    } else if (result.success === 0 && unchanged > 0) {
+      alert(t('music.batchSyncUnchangedOnly', { unchanged }))
+    } else if (unchanged > 0) {
+      alert(t('music.batchSyncWithUnchanged', {
+        success: result.success,
+        unchanged
       }))
     } else {
       alert(t('music.batchSyncSuccess', { count: result.success }))

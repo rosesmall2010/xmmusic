@@ -1,7 +1,10 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { join, extname } from 'path'
 import { app } from 'electron'
 import type MusicDatabase from '../database/db'
+
+/** 设置封面弹窗候选上限，避免超大歌单全量扫描卡死主进程 */
+export const PLAYLIST_COVER_CANDIDATE_LIMIT = 200
 
 export type PlaylistCoverSource =
   | { type: 'file'; filePath: string }
@@ -136,7 +139,8 @@ function copyCoverToPlaylistDir(playlistId: number, sourcePath: string): string 
   // 使用时间戳生成唯一文件名，避免同路径导致浏览器缓存旧封面
   cleanupPlaylistCoverFiles(playlistId)
   const destPath = join(coversDir, `playlist-${playlistId}-${Date.now()}${ext}`)
-  copyFileSync(sourcePath, destPath)
+  // asar 内资源 copyFileSync 常失败；读+写对磁盘与 asar 路径都可用
+  writeFileSync(destPath, readFileSync(sourcePath))
   return destPath
 }
 
@@ -144,11 +148,13 @@ export function getPlaylistCoverCandidates(
   db: MusicDatabase,
   playlistId: number
 ): Array<{ musicId: number; title: string; artist: string; coverPath: string }> {
-  const songs = db.getPlaylistSongs(Number(playlistId))
+  // 仅拉有 cover_path 的轻量行，避免超大歌单全量 MusicItem
+  const songs = db.getPlaylistSongsWithCoverPath(Number(playlistId))
   const seen = new Set<string>()
   const candidates: Array<{ musicId: number; title: string; artist: string; coverPath: string }> = []
 
   for (const song of songs) {
+    if (candidates.length >= PLAYLIST_COVER_CANDIDATE_LIMIT) break
     if (!song.coverPath || !existsSync(song.coverPath)) continue
     if (seen.has(song.coverPath)) continue
     seen.add(song.coverPath)

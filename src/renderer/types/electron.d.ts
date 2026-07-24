@@ -185,6 +185,7 @@ export interface ElectronAPI {
   /** 批量：从文件名/ID3 自动解析后写入数据库 */
   batchSyncMusicMetadataToDb: (musicIds: number[]) => Promise<{
     success: number
+    unchanged: number
     failed: number
     updated: MusicItem[]
     errors: Array<{ id: number; file: string; error: string }>

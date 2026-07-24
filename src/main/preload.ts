@@ -427,6 +427,7 @@ declare global {
       syncMusicMetadataToDb: (musicId: number, updates: any) => Promise<MusicItem>
       batchSyncMusicMetadataToDb: (musicIds: number[]) => Promise<{
         success: number
+        unchanged: number
         failed: number
         updated: MusicItem[]
         errors: Array<{ id: number; file: string; error: string }>

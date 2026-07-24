@@ -13,8 +13,12 @@ export interface SyncMetadataUpdates {
 }
 
 export interface BatchSyncResult {
+  /** 实际写入数据库的条数 */
   success: number
+  /** 解析后与库内一致、跳过写库的条数 */
+  unchanged: number
   failed: number
+  /** 仅包含发生写入的记录（供前端派发刷新事件） */
   updated: MusicItem[]
   errors: Array<{ id: number; file: string; error: string }>
 }
@@ -180,26 +184,71 @@ export async function resolveMetadataForSync(music: MusicItem): Promise<SyncMeta
   return updates
 }
 
+function normalizeAlbum(value: string | null | undefined): string | null {
+  if (value === undefined || value === null || value.trim() === '') return null
+  return value.trim()
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  if (value === undefined || value === null || value.trim() === '') return null
+  return value.trim()
+}
+
+/** 判断解析结果相对库内记录是否有实质变化 */
+export function hasMetadataChanges(music: MusicItem, updates: SyncMetadataUpdates): boolean {
+  if (updates.title !== undefined && updates.title !== music.title) return true
+  if (updates.artist !== undefined && updates.artist !== music.artist) return true
+  if (updates.album !== undefined && normalizeAlbum(updates.album) !== normalizeAlbum(music.album)) {
+    return true
+  }
+  if (updates.year !== undefined && (updates.year ?? null) !== (music.year ?? null)) return true
+  if (
+    updates.genre !== undefined &&
+    normalizeOptionalText(updates.genre) !== normalizeOptionalText(music.genre)
+  ) {
+    return true
+  }
+  return false
+}
+
+export interface SyncToDbResult {
+  music: MusicItem
+  changed: boolean
+}
+
 /**
  * 仅把元数据写入数据库（不改文件 ID3）
  * 歌单/收藏等通过 music_id JOIN all_music，因此无需再改关联表
+ * 无实质变化时跳过写库
  */
 export function syncMusicMetadataToDb(
   db: MusicDatabase,
   musicId: number,
   updates: SyncMetadataUpdates
 ): MusicItem {
+  return syncMusicMetadataToDbWithStatus(db, musicId, updates).music
+}
+
+export function syncMusicMetadataToDbWithStatus(
+  db: MusicDatabase,
+  musicId: number,
+  updates: SyncMetadataUpdates
+): SyncToDbResult {
   const music = db.getMusicById(musicId)
   if (!music) {
     throw new Error(`音乐不存在: id=${musicId}`)
   }
 
+  if (!hasMetadataChanges(music, updates)) {
+    return { music, changed: false }
+  }
+
   const dbUpdates: Parameters<MusicDatabase['updateAllMusic']>[1] = {}
   if (updates.title !== undefined) dbUpdates.title = updates.title
   if (updates.artist !== undefined) dbUpdates.artist = updates.artist
-  if (updates.album !== undefined) dbUpdates.album = updates.album
+  if (updates.album !== undefined) dbUpdates.album = normalizeAlbum(updates.album)
   if (updates.year !== undefined) dbUpdates.year = updates.year
-  if (updates.genre !== undefined) dbUpdates.genre = updates.genre
+  if (updates.genre !== undefined) dbUpdates.genre = normalizeOptionalText(updates.genre)
 
   if (Object.keys(dbUpdates).length > 0) {
     db.updateAllMusic(musicId, dbUpdates)
@@ -209,7 +258,7 @@ export function syncMusicMetadataToDb(
   if (!updated) {
     throw new Error(`同步后无法读取音乐: id=${musicId}`)
   }
-  return updated
+  return { music: updated, changed: true }
 }
 
 /**
@@ -221,6 +270,7 @@ export async function batchSyncMusicMetadataToDb(
 ): Promise<BatchSyncResult> {
   const result: BatchSyncResult = {
     success: 0,
+    unchanged: 0,
     failed: 0,
     updated: [],
     errors: []
@@ -235,9 +285,13 @@ export async function batchSyncMusicMetadataToDb(
         continue
       }
       const updates = await resolveMetadataForSync(music)
-      const updated = syncMusicMetadataToDb(db, id, updates)
-      result.success++
-      result.updated.push(updated)
+      const { music: synced, changed } = syncMusicMetadataToDbWithStatus(db, id, updates)
+      if (changed) {
+        result.success++
+        result.updated.push(synced)
+      } else {
+        result.unchanged++
+      }
     } catch (error: any) {
       let file = ''
       try {
