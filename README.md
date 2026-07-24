@@ -310,4 +310,4 @@ xmmusic/
 
 ---
 
-<p align="center">Made with ❤️ by zdhsoft</p>
+<p align="center">Made with ❤️ by rosesmall2010</p>

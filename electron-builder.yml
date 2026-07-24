@@ -1,6 +1,6 @@
-appId: com.zdhsoft.xmmusic
+appId: com.rosesmall2010.xmmusic
 productName: xmmusic
-copyright: Copyright © 2024 zdhsoft
+copyright: Copyright © 2025-2026 rosesmall2010
 
 # 不要在交叉编译时重新构建原生模块
 buildDependenciesFromSource: false

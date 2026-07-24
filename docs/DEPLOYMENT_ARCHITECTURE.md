@@ -50,7 +50,7 @@
 ```json
 {
   "build": {
-    "appId": "com.zdhsoft.xmmusic",
+    "appId": "com.rosesmall2010.xmmusic",
     "productName": "xmmusic",
     "directories": {
       "output": "dist",
@@ -81,7 +81,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "zdhsoft",
+      "owner": "rosesmall2010",
       "repo": "xmmusic"
     }
   }

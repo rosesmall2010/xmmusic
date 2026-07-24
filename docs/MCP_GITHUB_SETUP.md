@@ -83,7 +83,7 @@ AI：[显示 GitHub Actions 运行状态]
 // 触发 GitHub Actions workflow
 async function triggerBuild(repo, workflowFile, ref = 'main') {
   const response = await github.rest.actions.createWorkflowDispatch({
-    owner: 'zdhsoft',
+    owner: 'rosesmall2010',
     repo: repo,
     workflow_id: workflowFile,
     ref: ref
