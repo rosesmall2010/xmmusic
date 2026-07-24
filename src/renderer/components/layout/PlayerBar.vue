@@ -332,16 +332,18 @@ watch(currentMusic, async (music) => {
   }
 }, { immediate: true })
 
-// 监听播放状态，初始化均衡器音频上下文
-watch(isPlaying, (playing) => {
-  if (playing) {
-    // 获取音频元素并初始化均衡器
-    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement
+// 仅在「音效已开启」时接管 Web Audio；平时走原生 Audio 直出，音质更干净
+watch(
+  [isPlaying, () => equalizer.enabled.value],
+  ([playing, eqOn]) => {
+    if (!playing || !eqOn) return
+    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
     if (audioElement) {
       equalizer.initAudioContext(audioElement)
     }
-  }
-}, { immediate: true })
+  },
+  { immediate: true }
+)
 
 // 初始化音量
 watch(

@@ -280,53 +280,77 @@ if (typeof window !== 'undefined') {
   })
 }
 
+const safeDisconnect = (node: AudioNode | null | undefined) => {
+  if (!node) return
+  try {
+    node.disconnect()
+  } catch {
+    // 忽略未连接等情况
+  }
+}
+
 export function useEqualizer() {
+  /**
+   * 路由音频图：
+   * - 音效关闭：source → destination（直通，尽量保真；分析器仅并联旁听）
+   * - 音效开启：source → 10 段 peaking → gain → destination
+   *
+   * 注意：一旦 createMediaElementSource，媒体元素就只能经 AudioContext 出声，
+   * 无法再回到「原生直出」；因此未开音效时也应避免无谓接管（见 PlayerBar）。
+   */
+  const routeAudioGraph = () => {
+    if (!audioContext || !sourceNode || !gainNode || !analyserNode || !timeAnalyserNode) {
+      return
+    }
+
+    safeDisconnect(sourceNode)
+    filters.forEach(safeDisconnect)
+    safeDisconnect(gainNode)
+    // Analyser 是叶子节点，一般无需 disconnect；重新从 tap 点连接即可
+
+    if (!enabled.value) {
+      // 直通：不经滤波器，减少相位/量化染色与潜在削波
+      sourceNode.connect(audioContext.destination)
+      sourceNode.connect(analyserNode)
+      sourceNode.connect(timeAnalyserNode)
+      gainNode.gain.value = 1
+      filters.forEach((filter) => {
+        filter.gain.value = 0
+      })
+      return
+    }
+
+    let currentNode: AudioNode = sourceNode
+    filters.forEach((filter) => {
+      currentNode.connect(filter)
+      currentNode = filter
+    })
+    currentNode.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    gainNode.connect(analyserNode)
+    gainNode.connect(timeAnalyserNode)
+
+    applyGains()
+  }
+
   // 初始化音频上下文
   const initAudioContext = (element: HTMLAudioElement) => {
-    // ... (保持原有逻辑)
-    // 如果已经为同一个元素初始化过，跳过
+    // 如果已经为同一个元素初始化过，跳过（但仍按当前开关校正路由）
     if (isInitialized && audioElement === element && audioContext && sourceNode) {
+      if (audioContext.state === 'suspended') {
+        void audioContext.resume()
+      }
+      routeAudioGraph()
       return
     }
 
     // 如果元素变化，需要重新初始化
     if (audioElement && audioElement !== element) {
-      // 断开旧的连接
-      if (sourceNode) {
-        try {
-          sourceNode.disconnect()
-        } catch (e) {
-          // 忽略断开错误
-        }
-      }
-      filters.forEach(filter => {
-        try {
-          filter.disconnect()
-        } catch (e) {
-          // 忽略断开错误
-        }
-      })
-      if (gainNode) {
-        try {
-          gainNode.disconnect()
-        } catch (e) {
-          // 忽略断开错误
-        }
-      }
-      if (analyserNode) {
-        try {
-          analyserNode.disconnect()
-        } catch (e) {
-          // 忽略断开错误
-        }
-      }
-      if (timeAnalyserNode) {
-        try {
-          timeAnalyserNode.disconnect()
-        } catch (e) {
-          // 忽略断开错误
-        }
-      }
+      safeDisconnect(sourceNode)
+      filters.forEach(safeDisconnect)
+      safeDisconnect(gainNode)
+      safeDisconnect(analyserNode)
+      safeDisconnect(timeAnalyserNode)
       isInitialized = false
       syncRuntime()
     }
@@ -336,66 +360,44 @@ export function useEqualizer() {
     }
 
     try {
-      // 创建或恢复音频上下文
+      // 创建或恢复音频上下文（playback 偏向缓冲与音质，而非超低延迟）
       if (!audioContext || audioContext.state === 'closed') {
-        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const Ctx = window.AudioContext || (window as any).webkitAudioContext
+        audioContext = new Ctx({ latencyHint: 'playback' })
       }
 
-      // 如果上下文被暂停，恢复它
       if (audioContext.state === 'suspended') {
-        audioContext.resume()
+        void audioContext.resume()
       }
 
       // ⚠️ 同一个 element 只能 createMediaElementSource 一次
-      // 如果开发模式热更新导致状态丢失，这里会抛 InvalidStateError
       sourceNode = audioContext.createMediaElementSource(element)
       gainNode = audioContext.createGain()
+      gainNode.gain.value = 1
 
-      // 创建10个滤波器
-      filters = EQUALIZER_FREQUENCIES.map(freq => {
+      filters = EQUALIZER_FREQUENCIES.map((freq) => {
         const filter = audioContext!.createBiquadFilter()
         filter.type = 'peaking'
         filter.frequency.value = freq
-        filter.Q.value = 1
+        // 略宽的 Q，减少开音效时尖刺感
+        filter.Q.value = 0.7
         filter.gain.value = 0
         return filter
       })
 
-      // 连接节点：source -> filters -> gain -> destination
-      let currentNode: AudioNode = sourceNode
-      filters.forEach(filter => {
-        currentNode.connect(filter)
-        currentNode = filter
-      })
-      currentNode.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-
-      // 频谱分析：从最终输出（含均衡器增益）并联到 AnalyserNode
       analyserNode = audioContext.createAnalyser()
       analyserNode.fftSize = 512
       analyserNode.smoothingTimeConstant = 0.8
-      try {
-        gainNode.connect(analyserNode)
-      } catch (e) {
-        // 忽略重复连接等异常
-      }
 
-      // 波形分析：给“振幅/RMS”使用，单独节点便于不同参数调优
       timeAnalyserNode = audioContext.createAnalyser()
       timeAnalyserNode.fftSize = 1024
       timeAnalyserNode.smoothingTimeConstant = 0.6
-      try {
-        gainNode.connect(timeAnalyserNode)
-      } catch (e) {
-        // 忽略重复连接等异常
-      }
 
       audioElement = element
       isInitialized = true
       console.log('✅ 均衡器音频上下文初始化成功')
 
-      // 初始化完成后应用当前的增益设置
-      applyGains()
+      routeAudioGraph()
       syncRuntime()
     } catch (error) {
       console.error('❌ 均衡器初始化失败:', error)
@@ -404,13 +406,25 @@ export function useEqualizer() {
     }
   }
 
+  /** 按最大正向增益留一点主音量余量，减轻削波发糊 */
+  const applyMasterHeadroom = () => {
+    if (!gainNode || !enabled.value) {
+      if (gainNode) gainNode.gain.value = 1
+      return
+    }
+    const maxBoost = Math.max(0, ...gains.value)
+    // 约抵消一半最大提升（dB→线性），避免重低音等预设严重削波
+    const headroomDb = maxBoost * 0.5
+    gainNode.gain.value = Math.pow(10, -headroomDb / 20)
+  }
+
   // 应用均衡器增益
   const applyGains = () => {
     if (!enabled.value || filters.length === 0) {
-      // 如果禁用，将所有增益设为0
-      filters.forEach(filter => {
+      filters.forEach((filter) => {
         filter.gain.value = 0
       })
+      if (gainNode) gainNode.gain.value = 1
       return
     }
 
@@ -419,6 +433,7 @@ export function useEqualizer() {
         filters[index].gain.value = gain
       }
     })
+    applyMasterHeadroom()
   }
 
   // 设置单个频段的增益
@@ -444,10 +459,22 @@ export function useEqualizer() {
     saveSettings(true)
   }
 
-  // 启用/禁用均衡器
+  // 启用/禁用均衡器：切换时重路由；开启时确保已接管播放元素
   const toggle = (value: boolean) => {
     enabled.value = value
-    applyGains()
+    if (value) {
+      const el =
+        audioElement ||
+        (typeof document !== 'undefined'
+          ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+          : null)
+      if (el) initAudioContext(el)
+    }
+    if (isInitialized) {
+      routeAudioGraph()
+    } else {
+      applyGains()
+    }
     saveSettings(true)
   }
 
@@ -470,24 +497,28 @@ export function useEqualizer() {
     }
   }
 
-  // 设置加载完成后，若音频图已初始化则再应用一次增益（仅绑定一次）
+  // 设置加载完成后，若音频图已初始化则按开关重路由（仅绑定一次）
   if (!didBindLoadApply) {
     didBindLoadApply = true
     void loadSettingsPromise?.then(() => {
       if (settingsLoaded && isInitialized) {
-        applyGains()
+        routeAudioGraph()
       }
     })
   }
 
   // 监听增益变化（用于拖动滑块时的实时应用，但不频繁保存，保存由 setGain 触发）
   watch(gains, () => {
-    applyGains()
+    if (enabled.value) applyGains()
   }, { deep: true })
 
-  // 监听启用状态
+  // 监听启用状态：开关变化时切换直通 / 滤波链
   watch(enabled, () => {
-    applyGains()
+    if (isInitialized) {
+      routeAudioGraph()
+    } else {
+      applyGains()
+    }
   })
 
   /**
