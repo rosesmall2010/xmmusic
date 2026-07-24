@@ -1,60 +1,145 @@
 import { Howl } from 'howler'
 import { usePlayerStore } from '@/stores/player'
+import { useEqualizer } from '@/composables/useEqualizer'
 import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-
-// 自动播放下一首（在usePlayer函数内部定义）
 
 let howl: Howl | null = null
 let progressTimer: NodeJS.Timeout | null = null
 let audioElement: HTMLAudioElement | null = null
 let useNativeAudio = false
 let isPlaybackInProgress = false // 播放锁，防止并发播放
+let restoreHookBound = false
+let isRestoringNative = false
 
 export function usePlayer() {
   const playerStore = usePlayerStore()
+  const equalizer = useEqualizer()
 
-  const playWithNativeAudio = async (music: MusicItem) => {
+  /** 绑定：关音效后重建未被捕获的 Audio，恢复系统级直出音质 */
+  const bindRestoreNativeHook = () => {
+    if (restoreHookBound || typeof window === 'undefined') return
+    restoreHookBound = true
+    window.addEventListener('xmmusic:restore-native-audio', () => {
+      void restoreNativeAudioPath()
+    })
+  }
+  bindRestoreNativeHook()
+
+  const discardAudioElement = (el: HTMLAudioElement | null) => {
+    if (!el) return
+    try {
+      el.pause()
+      el.onplay = null
+      el.onpause = null
+      el.onended = null
+      el.onerror = null
+      el.onloadedmetadata = null
+      el.removeAttribute('src')
+      el.load()
+      el.remove()
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Web Audio 释放后，旧 media 元素无法再直出扬声器。
+   * 重建元素并尽量从断点续播。
+   */
+  const restoreNativeAudioPath = async () => {
+    if (isRestoringNative) return
+    isRestoringNative = true
+    try {
+      if (equalizer.isCaptured()) {
+        await equalizer.releaseCapture()
+      }
+
+      const old =
+        audioElement ||
+        (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+      const music = playerStore.currentMusic
+      const resumeAt = old?.currentTime ?? playerStore.currentTime ?? 0
+      const wasPlaying = old ? !old.paused : playerStore.isPlaying
+
+      discardAudioElement(old)
+      audioElement = null
+      useNativeAudio = true
+
+      if (!music) return
+
+      await playWithNativeAudio(music, { resumeAt, autoplay: wasPlaying })
+      console.log('✅ 已恢复原生 Audio 直出路径')
+    } catch (error) {
+      console.error('❌ 恢复原生音频路径失败:', error)
+    } finally {
+      isRestoringNative = false
+    }
+  }
+
+  const playWithNativeAudio = async (
+    music: MusicItem,
+    options?: { resumeAt?: number; autoplay?: boolean }
+  ) => {
     console.log('🔄 尝试使用原生 Audio 播放')
 
     // 停止并清理旧的音频
     if (audioElement) {
       audioElement.pause()
       audioElement.src = ''
-      // 不从 DOM 移除，均衡器需要它保持在 DOM 中
     }
 
     let hasStartedPlaying = false
     let loadTimeout: NodeJS.Timeout | null = null
+    const resumeAt = options?.resumeAt
+    const autoplay = options?.autoplay !== false
 
-    // 复用 DOM 中固定的 Audio 元素（均衡器依赖它）
+    // 若当前 DOM 元素曾被 MediaElementSource 捕获，必须丢弃重建
     if (!audioElement) {
       const existing = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
-      if (existing) {
+      if (existing && equalizer.isCaptured()) {
+        discardAudioElement(existing)
+      } else if (existing) {
         audioElement = existing
-      } else {
-      audioElement = new Audio()
-      // 设置固定 ID 供均衡器使用
-      audioElement.id = 'xmmusic-audio-player'
-      // 隐藏元素（均衡器需要它在 DOM 中）
-      audioElement.style.display = 'none'
-        document.body.appendChild(audioElement)
-        console.log('✅ 音频元素已添加到 DOM，供均衡器使用')
       }
     }
 
-    // 使用自定义协议访问本地文件
-    // crossOrigin 必须在设置 src 之前指定，否则 MediaElementSource 拿不到跨域 PCM（输出静音）
+    if (!audioElement) {
+      audioElement = new Audio()
+      audioElement.id = 'xmmusic-audio-player'
+      audioElement.style.display = 'none'
+      audioElement.preload = 'auto'
+      document.body.appendChild(audioElement)
+      console.log('✅ 音频元素已添加到 DOM')
+    }
+
+    // 未开音效时不设 crossOrigin，走原生直出；开启音效时由均衡器补 CORS 并接管
+    const needWebAudio = equalizer.enabled.value
     const localFileUrl = toLocalFileUrl(music.filePath)
     console.log('🔗 使用协议:', localFileUrl)
     console.log('📁 原始路径:', music.filePath)
-    audioElement.crossOrigin = 'anonymous'
+
+    if (needWebAudio) {
+      audioElement.crossOrigin = 'anonymous'
+    } else {
+      audioElement.removeAttribute('crossorigin')
+    }
+
+    audioElement.preload = 'auto'
     audioElement.src = localFileUrl
     audioElement.volume = playerStore.volume / 100
 
     audioElement.onloadedmetadata = () => {
       console.log('✅ 原生 Audio 加载成功')
       playerStore.duration = audioElement!.duration
+      if (typeof resumeAt === 'number' && resumeAt > 0 && Number.isFinite(resumeAt)) {
+        try {
+          audioElement!.currentTime = Math.min(resumeAt, audioElement!.duration || resumeAt)
+          playerStore.currentTime = audioElement!.currentTime
+        } catch {
+          // ignore seek errors
+        }
+      }
       if (loadTimeout) {
         clearTimeout(loadTimeout)
         loadTimeout = null
@@ -70,6 +155,10 @@ export function usePlayer() {
         clearTimeout(loadTimeout)
         loadTimeout = null
       }
+      // 仅在音效开启时接管 Web Audio（避免频谱可视化拖垮音质）
+      if (equalizer.enabled.value) {
+        equalizer.initAudioContext(audioElement!)
+      }
     }
 
     audioElement.onpause = () => {
@@ -80,7 +169,6 @@ export function usePlayer() {
     audioElement.onended = () => {
       playerStore.isPlaying = false
       stopProgressUpdate()
-      // 自动播放下一首（根据播放模式）
       const next = playerStore.getNext()
       if (next) {
         const index = playerStore.queue.findIndex(m => m.id === next.id)
@@ -93,8 +181,7 @@ export function usePlayer() {
       }
     }
 
-    audioElement.onerror = (e) => {
-      // 只在还没开始播放时才显示错误
+    audioElement.onerror = () => {
       if (!hasStartedPlaying) {
         const error = audioElement?.error
         console.error('❌ 原生 Audio 加载失败')
@@ -104,7 +191,7 @@ export function usePlayer() {
         console.error('   URL:', localFileUrl)
         if (error) {
           let errorMsg = '未知错误'
-          switch(error.code) {
+          switch (error.code) {
             case 1: errorMsg = 'MEDIA_ERR_ABORTED - 用户中止'; break
             case 2: errorMsg = 'MEDIA_ERR_NETWORK - 网络错误'; break
             case 3: errorMsg = 'MEDIA_ERR_DECODE - 解码错误'; break
@@ -112,39 +199,37 @@ export function usePlayer() {
           }
           console.error('   错误详情:', errorMsg)
         }
-        // 不立即跳过，等待外层处理（会尝试 Howler.js）
         if (loadTimeout) clearTimeout(loadTimeout)
       }
     }
 
     try {
-      await audioElement.play()
       playerStore.currentMusic = music
       useNativeAudio = true
+      if (autoplay) {
+        await audioElement.play()
+      } else {
+        playerStore.isPlaying = false
+      }
     } catch (error) {
       console.error('❌ audioElement.play() 调用失败:', error)
-      // 清理资源
       if (audioElement) {
         audioElement.pause()
         audioElement.src = ''
       }
-      // throw 让外层 play() 尝试 Howler.js
       throw error
     }
   }
 
   const play = async (music: MusicItem) => {
-    // 检查播放锁，防止并发播放
     if (isPlaybackInProgress) {
       console.log('⏭️ 播放正在进行中，忽略此次请求')
       return
     }
 
     try {
-      // 设置播放锁
       isPlaybackInProgress = true
 
-      // 停止当前播放并清理资源
       if (howl) {
         howl.unload()
         howl = null
@@ -152,12 +237,10 @@ export function usePlayer() {
       if (audioElement) {
         audioElement.pause()
         audioElement.src = ''
-        // 不置空也不移除：均衡器需要它保持在 DOM 中
       }
       stopProgressUpdate()
       playerStore.isPlaying = false
 
-      // 记录播放，并通知侧边栏等刷新最近播放数量
       await window.electronAPI.recordPlay(music.id)
       window.dispatchEvent(new Event('recent-plays-updated'))
 
@@ -165,18 +248,15 @@ export function usePlayer() {
       console.log('📁 原始路径:', music.filePath)
       console.log('📝 文件扩展名:', music.fileExtension)
 
-      // 先尝试使用原生 Audio（更兼容）
       try {
         await playWithNativeAudio(music)
         console.log('✅ 使用原生 Audio 播放成功')
-        // 播放成功，释放锁
         isPlaybackInProgress = false
         return
       } catch (error) {
         console.log('⚠️ 原生 Audio 失败，尝试 Howler.js:', error)
       }
 
-      // 备用：使用 Howler.js
       const localFileUrl = toLocalFileUrl(music.filePath)
       console.log('🔗 Howler 使用协议:', localFileUrl)
       console.log('📁 原始路径:', music.filePath)
@@ -193,7 +273,6 @@ export function usePlayer() {
           console.log('▶️ Howler 开始播放')
           playerStore.isPlaying = true
           startProgressUpdate()
-          // 播放开始成功，释放锁
           isPlaybackInProgress = false
         },
         onpause: () => {
@@ -203,7 +282,6 @@ export function usePlayer() {
         onend: () => {
           playerStore.isPlaying = false
           stopProgressUpdate()
-          // 自动播放下一首（根据播放模式）
           const next = playerStore.getNext()
           if (next) {
             const index = playerStore.queue.findIndex(m => m.id === next.id)
@@ -223,7 +301,7 @@ export function usePlayer() {
           console.error('   文件扩展名:', music.fileExtension)
 
           let errorMsg = '未知错误'
-          switch(error) {
+          switch (error) {
             case 1: errorMsg = '中止加载'; break
             case 2: errorMsg = '网络错误（可能是路径问题）'; break
             case 3: errorMsg = '解码错误'; break
@@ -232,7 +310,6 @@ export function usePlayer() {
 
           console.error(`跳过损坏文件: ${music.title} - ${errorMsg}`)
 
-          // 更新数据库中的播放状态
           try {
             await window.electronAPI.updateMusicPlayStatus(music.id, false, errorMsg)
             console.log(`✅ 已标记文件为不可播放: ${music.title} - ${errorMsg}`)
@@ -242,17 +319,13 @@ export function usePlayer() {
 
           playerStore.isPlaying = false
           stopProgressUpdate()
-
-          // 释放播放锁
           isPlaybackInProgress = false
 
-          // 自动播放下一首，增加延迟避免鬼畜
           const next = playerStore.getNext()
           if (next) {
             const index = playerStore.queue.findIndex(m => m.id === next.id)
             if (index >= 0) {
               playerStore.setCurrentQueueIndex(index)
-              // 增加到 1000ms 延迟，给用户反应时间
               setTimeout(async () => {
                 await play(next)
               }, 1000)
@@ -265,17 +338,13 @@ export function usePlayer() {
       playerStore.currentMusic = music
       useNativeAudio = false
     } catch (error) {
-      // 捕获所有未处理的错误（如 NotSupportedError）
       console.error('❌ 播放完全失败:', error)
       console.error('🔄 自动跳到下一首')
 
       playerStore.isPlaying = false
       stopProgressUpdate()
-
-      // 释放播放锁
       isPlaybackInProgress = false
 
-      // 自动播放下一首，增加延迟
       const next = playerStore.getNext()
       if (next) {
         const index = playerStore.queue.findIndex(m => m.id === next.id)
@@ -349,7 +418,7 @@ export function usePlayer() {
     resume,
     seek,
     setVolume,
-    // 供均衡器访问音频元素
+    restoreNativeAudioPath,
     getAudioElement: () => audioElement
   }
 }

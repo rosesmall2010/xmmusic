@@ -56,6 +56,8 @@ const rgba = (c: RGB, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`
 const hsla = (h: number, s: number, l: number, a: number) => `hsla(${h}, ${s}%, ${l}%, ${a})`
 
 const ensureAudioNodes = () => {
+  // 仅在音效开启时才接管 Web Audio；否则用时间域假频谱，保住原生直出音质
+  if (!equalizer.enabled.value) return
   const el = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
   if (!el) return
   equalizer.initAudioContext(el)
@@ -120,9 +122,6 @@ const tick = (ts: number) => {
   const data = getFrequency()
   const activeFactor = props.active ? 1 : 0.25
 
-  // 没有频谱数据时，回退轻微动态，避免静止
-  const fallback = 0.25 + 0.2 * Math.sin(time * 2.1) + 0.12 * Math.sin(time * 5.3)
-
   // 柱子数量（减少数量让柱子更粗、更有“块感”）
   const bars = Math.max(32, Math.min(72, Math.floor(width / 22)))
   if (smoothed.length !== bars) smoothed = Array.from({ length: bars }).map(() => 0)
@@ -131,6 +130,20 @@ const tick = (ts: number) => {
   const len = data?.length ?? 0
   const startBin = Math.floor(len * 0.02)
   const endBin = Math.max(startBin + 1, Math.floor(len * 0.55))
+
+  // 无真实频谱时：多频段假数据，仍有舞台感，但不劫持播放链路
+  const fakeBands = !data
+    ? Array.from({ length: bars }, (_, i) => {
+        const t01 = i / Math.max(1, bars - 1)
+        const wave =
+          0.35 +
+          0.28 * Math.sin(time * 2.4 + t01 * 6.2) +
+          0.18 * Math.sin(time * 5.1 + t01 * 11) +
+          0.12 * Math.sin(time * 8.7 + i * 0.4)
+        const centerBoost = 1 - Math.abs(t01 - 0.5) * 0.7
+        return clamp01(wave * centerBoost * (props.active ? 1 : 0.35))
+      })
+    : null
 
   // 布局：底部中央为主的“舞台感”
   const paddingX = Math.max(18, width * 0.08)
@@ -151,7 +164,7 @@ const tick = (ts: number) => {
 
   // 透视微缩放：两侧略短（更接近示例图的“中心聚焦”）
   for (let i = 0; i < bars; i++) {
-    let v01 = fallback
+    let v01 = fakeBands?.[i] ?? 0.2
     if (data && len > 0) {
       const t01 = i / Math.max(1, bars - 1)
       const bin = Math.floor(startBin + (endBin - startBin) * t01)
@@ -238,7 +251,11 @@ watch(() => props.baseColor, (c) => {
 }, { immediate: true })
 
 watch(() => props.active, (v) => {
-  if (v) ensureAudioNodes()
+  if (v && equalizer.enabled.value) ensureAudioNodes()
+})
+
+watch(() => equalizer.enabled.value, (on) => {
+  if (on) ensureAudioNodes()
 })
 </script>
 

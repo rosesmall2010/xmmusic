@@ -572,12 +572,16 @@ watch(currentMusic, async (music, _prev, onCleanup) => {
   }
 }, { immediate: true })
 
-// 确保可视化特效能拿到频谱：播放时绑定到当前 audio 元素
-watch(isPlaying, (playing) => {
-  if (!playing) return
-  const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-  if (el) equalizer.initAudioContext(el)
-}, { immediate: true })
+// 仅在音效开启时绑定 Web Audio（频谱可视化不得为了动画牺牲音质）
+watch(
+  [isPlaying, () => equalizer.enabled.value],
+  ([playing, eqOn]) => {
+    if (!playing || !eqOn) return
+    const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+    if (el) equalizer.initAudioContext(el)
+  },
+  { immediate: true }
+)
 
 // 监听播放进度更新歌词
 watch(currentTime, (time) => {

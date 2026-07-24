@@ -333,7 +333,7 @@ export function useEqualizer() {
     applyGains()
   }
 
-  // 初始化音频上下文
+  // 初始化音频上下文（仅在用户开启音效时调用；可视化不得调用）
   const initAudioContext = (element: HTMLAudioElement) => {
     // 如果已经为同一个元素初始化过，跳过（但仍按当前开关校正路由）
     if (isInitialized && audioElement === element && audioContext && sourceNode) {
@@ -360,6 +360,27 @@ export function useEqualizer() {
     }
 
     try {
+      // MediaElementSource 需要 CORS；若尚未设置则补上并重载当前源
+      if (element.crossOrigin !== 'anonymous') {
+        const resumeAt = element.currentTime
+        const wasPlaying = !element.paused
+        const src = element.currentSrc || element.src
+        element.crossOrigin = 'anonymous'
+        if (src) {
+          element.src = src
+          const onMeta = () => {
+            element.removeEventListener('loadedmetadata', onMeta)
+            try {
+              element.currentTime = resumeAt
+            } catch {
+              // ignore
+            }
+            if (wasPlaying) void element.play().catch(() => {})
+          }
+          element.addEventListener('loadedmetadata', onMeta)
+        }
+      }
+
       // 创建或恢复音频上下文（playback 偏向缓冲与音质，而非超低延迟）
       if (!audioContext || audioContext.state === 'closed') {
         const Ctx = window.AudioContext || (window as any).webkitAudioContext
@@ -459,7 +480,43 @@ export function useEqualizer() {
     saveSettings(true)
   }
 
-  // 启用/禁用均衡器：切换时重路由；开启时确保已接管播放元素
+  /** 是否已被 MediaElementSource 接管（一旦接管只能经 AudioContext 出声） */
+  const isCaptured = () => isInitialized && !!sourceNode
+
+  /**
+   * 释放 Web Audio 捕获：关闭 AudioContext 并清空节点。
+   * 注意：旧的 HTMLAudioElement 无法恢复直出，调用方必须丢弃并重建元素。
+   */
+  const releaseCapture = async () => {
+    if (!isInitialized && !audioContext) return
+
+    safeDisconnect(sourceNode)
+    filters.forEach(safeDisconnect)
+    safeDisconnect(gainNode)
+    safeDisconnect(analyserNode)
+    safeDisconnect(timeAnalyserNode)
+
+    try {
+      if (audioContext && audioContext.state !== 'closed') {
+        await audioContext.close()
+      }
+    } catch {
+      // 忽略关闭异常
+    }
+
+    audioContext = null
+    sourceNode = null
+    gainNode = null
+    filters = []
+    analyserNode = null
+    timeAnalyserNode = null
+    audioElement = null
+    isInitialized = false
+    syncRuntime()
+    console.log('✅ 已释放 Web Audio 音频捕获')
+  }
+
+  // 启用/禁用均衡器：开启时接管；关闭时释放并通知播放器重建原生元素
   const toggle = (value: boolean) => {
     enabled.value = value
     if (value) {
@@ -469,11 +526,22 @@ export function useEqualizer() {
           ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
           : null)
       if (el) initAudioContext(el)
-    }
-    if (isInitialized) {
-      routeAudioGraph()
+      if (isInitialized) {
+        routeAudioGraph()
+      } else {
+        applyGains()
+      }
     } else {
-      applyGains()
+      // 关音效：彻底离开 Web Audio，恢复原生直出（需重建 media 元素）
+      if (isCaptured()) {
+        void releaseCapture().then(() => {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
+          }
+        })
+      } else {
+        applyGains()
+      }
     }
     saveSettings(true)
   }
@@ -512,12 +580,11 @@ export function useEqualizer() {
     if (enabled.value) applyGains()
   }, { deep: true })
 
-  // 监听启用状态：开关变化时切换直通 / 滤波链
-  watch(enabled, () => {
+  // 监听启用状态：仅在「开启且已接管」时重路由；关闭由 toggle → releaseCapture 处理
+  watch(enabled, (on) => {
+    if (!on) return
     if (isInitialized) {
       routeAudioGraph()
-    } else {
-      applyGains()
     }
   })
 
@@ -554,6 +621,8 @@ export function useEqualizer() {
     EQUALIZER_FREQUENCIES,
     EQUALIZER_PRESETS,
     initAudioContext,
+    isCaptured,
+    releaseCapture,
     getFrequencyData,
     getTimeDomainData,
     setGain,

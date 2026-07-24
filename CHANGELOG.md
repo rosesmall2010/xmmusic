@@ -12,6 +12,7 @@
 - 修复全屏播放偶发白屏闪一下：去掉主布局 `out-in` 空窗、进入 NowPlaying 禁用淡入淡出；封面取色强制压暗；canvas resize 先铺黑底
 - 降低全屏白屏频率：普通页恢复 `out-in`（避免叠层透底）；进出 NowPlaying 仍用 instant；去掉会触发重挂载的 route key；封面预加载后再替换；去掉进场 opacity:0 动画；背景色与渐变拆开写
 - 改善播放音质：未开音效时不再强制走 Web Audio 滤波链（PlayerBar 仅在开启时接管）；音效关闭时音频图直通 destination；开启时按最大提升留主音量余量减轻削波
+- 进一步提升音质：全屏频谱不再劫持 Audio；仅开启音效才 createMediaElementSource；关闭音效时释放 Web Audio 并重建原生元素直出；未开音效不设 crossOrigin
 ## [1.1.4] - 2026-07-23
 
 ### 文档
