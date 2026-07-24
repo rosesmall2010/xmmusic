@@ -35,21 +35,21 @@
         <div class="left-panel">
           <!-- 专辑封面 -->
           <div class="album-cover-container">
-            <div class="album-cover animate-scale-in">
-              <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
+            <div class="album-cover">
+              <DefaultCover v-if="!displayCoverUrl" mode="fill" />
               <template v-else>
                 <DefaultCover class="fallback-cover" mode="fill" />
                 <img
-                  :src="getCoverUrl(currentMusic.coverPath)"
+                  :src="displayCoverUrl"
                   :alt="$t('music.cover')"
-                  @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
+                  @error="onCoverError"
                 />
               </template>
             </div>
           </div>
 
           <!-- 歌曲信息 -->
-          <div class="song-info animate-slide-in-up">
+          <div class="song-info">
             <h1 class="song-title">{{ currentMusic?.title || $t('nowPlaying.noMusic') }}</h1>
             <p class="song-artist">{{ currentMusic?.artist || $t('nowPlaying.unknownArtist') }}</p>
             <p class="song-album" v-if="currentMusic?.album">{{ currentMusic.album }}</p>
@@ -209,6 +209,8 @@ const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
 const backgroundColor = ref('#1a1a1a')
+/** 展示中的封面 URL：切歌时等新图加载完成再替换，避免 img 清空透白 */
+const displayCoverUrl = ref<string | null>(null)
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
@@ -260,10 +262,16 @@ const VolumeIcon = computed(() => {
 })
 
 const backgroundStyle = computed(() => {
+  // 拆开写：避免 background 简写冲掉 background-color 深色兜底
   return {
-    background: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
+    backgroundColor: '#0a0a0a',
+    backgroundImage: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
   }
 })
+
+const onCoverError = () => {
+  displayCoverUrl.value = null
+}
 
 const queue = computed(() => playerStore.queue)
 const currentQueueIndex = computed(() => playerStore.currentQueueIndex)
@@ -537,17 +545,29 @@ watch(currentMusic, async (music, _prev, onCleanup) => {
     if (cancelled) return
     await loadLyrics()
     if (cancelled) return
-    // 背景颜色随封面变化；取色完成前保留上一曲深色，避免先跳到亮色再压暗造成闪白
+
     if (music.coverPath) {
       const coverUrl = getCoverUrl(music.coverPath)
+      // 先预加载封面，完成后再替换展示，避免 src 切换时空图闪白
+      await new Promise<void>((resolve) => {
+        const img = new Image()
+        img.onload = () => resolve()
+        img.onerror = () => resolve()
+        img.src = coverUrl
+      })
+      if (cancelled) return
+      displayCoverUrl.value = coverUrl
+
       const color = await extractAverageColor(coverUrl)
       if (cancelled) return
       if (color) backgroundColor.value = color
     } else {
+      displayCoverUrl.value = null
       backgroundColor.value = '#1a1a1a'
     }
   } else {
     isFavorite.value = false
+    displayCoverUrl.value = null
     backgroundColor.value = '#1a1a1a'
   }
 }, { immediate: true })

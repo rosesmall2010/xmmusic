@@ -5,10 +5,12 @@
       <div class="app-body">
         <AppSidebar />
         <main class="app-content">
-          <router-view v-slot="{ Component, route }">
-            <!-- 不用 out-in：避免离开与进入之间露出浅色底造成「白屏闪一下」 -->
-            <transition :name="mainTransitionName">
-              <component :is="Component" :key="route.path" />
+          <router-view v-slot="{ Component }">
+            <transition
+              :name="mainTransitionName"
+              :mode="mainTransitionMode"
+            >
+              <component :is="Component" />
             </transition>
           </router-view>
         </main>
@@ -66,13 +68,18 @@ const isBlankLayout = computed(() => route.meta.layout === 'blank')
 // 通过初始 hash 判断，避免在歌词窗口里执行主窗口的初始化逻辑
 const isDesktopLyricsWindow = window.location.hash.startsWith('#/desktop-lyrics')
 
-/** 主布局过渡名：进入/离开全屏播放时用 instant，避免露出浅色底 */
+/** 主布局过渡：普通页保留 out-in；进出全屏播放用 instant（无空窗、无叠层透底） */
 const mainTransitionName = ref('fade')
+const mainTransitionMode = ref<'out-in' | undefined>('out-in')
 router.beforeEach((to, from) => {
-  if (to.name === 'NowPlaying' || from.name === 'NowPlaying') {
+  const involveNowPlaying = to.name === 'NowPlaying' || from.name === 'NowPlaying'
+  if (involveNowPlaying) {
     mainTransitionName.value = 'instant'
+    // 不用 out-in：全屏页是 fixed 遮罩，同步切换即可，避免先卸旧页露出浅色底
+    mainTransitionMode.value = undefined
   } else {
     mainTransitionName.value = 'fade'
+    mainTransitionMode.value = 'out-in'
   }
 })
 
@@ -336,6 +343,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+  /* 过渡空窗时也不要露出纯白；浅色主题下至少是卡片底色 */
+  background-color: var(--bg-color);
 }
 
 /* 页面过渡动画 */
