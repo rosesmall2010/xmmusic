@@ -140,10 +140,10 @@ gh workflow run build.yml \
 if [ $? -eq 0 ]; then
   echo "✅ 构建已触发！"
   echo "📊 查看进度："
-  echo "   https://github.com/zdhsoft/xmmusic/actions"
+  echo "   https://github.com/rosesmall2010/xmmusic/actions"
 
   # 自动打开浏览器
-  open "https://github.com/zdhsoft/xmmusic/actions"
+  open "https://github.com/rosesmall2010/xmmusic/actions"
 else
   echo "❌ 触发失败，请检查 GitHub CLI 配置"
 fi

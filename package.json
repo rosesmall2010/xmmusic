@@ -39,6 +39,14 @@
     "email": "zdhsoft@126.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rosesmall2010/xmmusic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rosesmall2010/xmmusic/issues"
+  },
+  "homepage": "https://github.com/rosesmall2010/xmmusic#readme",
   "engines": {
     "node": ">=24.0.0"
   },

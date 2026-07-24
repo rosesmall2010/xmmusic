@@ -210,7 +210,7 @@
             <p class="app-desc">{{ $t('settings.appDescription') }}</p>
           </div>
           <div class="app-links">
-            <a href="https://github.com/zdhsoft/xmmusic" target="_blank" class="link">GitHub</a>
+            <a href="https://github.com/rosesmall2010/xmmusic" target="_blank" class="link">GitHub</a>
             <span class="divider">|</span>
             <a href="#" class="link" @click.prevent="checkUpdate">{{ $t('settings.checkUpdate') }}</a>
           </div>

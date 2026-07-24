@@ -70,7 +70,7 @@ cat ~/.ssh/gitee_sync.pub
 
 ### 步骤 5: 在 GitHub 配置 Secrets
 
-1. 进入 GitHub 仓库 `zdhsoft/xmmusic`
+1. 进入 GitHub 仓库 `rosesmall2010/xmmusic`
 2. 点击 **Settings** → **Secrets and variables** → **Actions**
 3. 点击 **New repository secret**，添加以下两个 Secret：
 

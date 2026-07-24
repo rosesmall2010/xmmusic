@@ -10,6 +10,7 @@
 ### 文档
 - 协作规则与开发指南补充：代码改完后须执行 `npm run build` 验证编译正确性
 - 同步更新 README：最新版本 v1.1.4、歌单封面/复制到目录说明、技术栈与安装包文件名
+- 修正仓库地址为 [rosesmall2010/xmmusic](https://github.com/rosesmall2010/xmmusic)（README / CHANGELOG / 设置页 / CI 脚本等）
 
 ### 修复
 - 修复歌单详情页 `deletePlaylist` 确认语句缺少括号导致生产构建失败
@@ -666,5 +667,5 @@
 
 ## 链接
 
-- [GitHub 仓库](https://github.com/zdhsoft/xmmusic)
-- [问题反馈](https://github.com/zdhsoft/xmmusic/issues)
+- [GitHub 仓库](https://github.com/rosesmall2010/xmmusic)
+- [问题反馈](https://github.com/rosesmall2010/xmmusic/issues)

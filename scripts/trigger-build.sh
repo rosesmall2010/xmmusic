@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # 仓库信息
-REPO_OWNER="zdhsoft"
+REPO_OWNER="rosesmall2010"
 REPO_NAME="xmmusic"
 WORKFLOW_FILE="build.yml"
 

@@ -2,8 +2,8 @@
 
 > 基于 Electron + Vue 3 + TypeScript 的高颜值本地音乐播放器
 
-[![GitHub release](https://img.shields.io/github/v/release/zdhsoft/xmmusic)](https://github.com/zdhsoft/xmmusic/releases)
-[![License](https://img.shields.io/github/license/zdhsoft/xmmusic)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/rosesmall2010/xmmusic)](https://github.com/rosesmall2010/xmmusic/releases)
+[![License](https://img.shields.io/github/license/rosesmall2010/xmmusic)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
 
 ## ✨ 特性
@@ -83,7 +83,7 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 ### 下载安装包
 
-从 [Releases](https://github.com/zdhsoft/xmmusic/releases) 页面下载对应平台的安装包:
+从 [Releases](https://github.com/rosesmall2010/xmmusic/releases) 页面下载对应平台的安装包:
 
 - **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.1.4-arm64.dmg`
 - **Windows**: `xmmusic Setup 1.1.4.exe`
@@ -93,7 +93,7 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 ```bash
 # 克隆仓库
-git clone https://github.com/zdhsoft/xmmusic.git
+git clone https://github.com/rosesmall2010/xmmusic.git
 cd xmmusic
 
 # 安装依赖
