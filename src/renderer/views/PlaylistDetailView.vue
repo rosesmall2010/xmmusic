@@ -346,7 +346,7 @@ const clearPlaylist = async () => {
 }
 
 const deletePlaylist = async () => {
-  if (!confirm(t('playlist.deleteConfirm', { name: playlist.value?.name || '' })) return
+  if (!confirm(t('playlist.deleteConfirm', { name: playlist.value?.name || '' }))) return
 
   try {
     await window.electronAPI.deletePlaylist(playlist.value.id)
