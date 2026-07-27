@@ -31,7 +31,7 @@ type Flame = {
   kind: 0 | 1
 }
 
-/** 火星：多为蓝白，少量暖色点缀（贴近参考图） */
+/** 火星：蓝白细点上浮 */
 type Spark = {
   x: number
   y: number
@@ -40,7 +40,6 @@ type Spark = {
   life: number
   maxLife: number
   size: number
-  warm: boolean
 }
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -135,8 +134,6 @@ const spawnFlame = (kind: 0 | 1 = 0): Flame => {
 const spawnSpark = (): Spark => {
   const { paddingX, usableW, baselineY } = stage()
   const power = 0.4 + energy * 0.7
-  // 参考图：少量橙红火星点缀蓝焰
-  const warm = Math.random() < 0.18
   return {
     x: paddingX + Math.random() * usableW,
     y: baselineY - Math.random() * height * 0.22,
@@ -144,8 +141,7 @@ const spawnSpark = (): Spark => {
     vy: -(50 + Math.random() * 110) * power,
     life: 0,
     maxLife: 0.7 + Math.random() * 1.5,
-    size: warm ? 1.1 + Math.random() * 2.2 : 1.4 + Math.random() * 3.2,
-    warm
+    size: 1.4 + Math.random() * 3.2
   }
 }
 
@@ -293,13 +289,10 @@ const tick = (ts: number) => {
 
     const p = s.life / s.maxLife
     const a = (1 - p) * (isLight ? 0.9 : 0.85) * (0.5 + energy * 0.5)
-    if (s.warm) {
-      ctx.fillStyle = hsla(18 + Math.random() * 16, 100, isLight ? 48 : 58, a * 0.85)
-    } else {
-      ctx.fillStyle = isLight
-        ? hsla(205, 100, 52, a)
-        : hsla(200, 100, 78, a)
-    }
+    // 纯蓝白火星，不要任何暖色
+    ctx.fillStyle = isLight
+      ? hsla(205, 100, 52, a)
+      : hsla(200, 100, 78, a)
     ctx.beginPath()
     ctx.arc(s.x, s.y, s.size * (1 - p * 0.35), 0, Math.PI * 2)
     ctx.fill()
