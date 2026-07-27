@@ -88,12 +88,12 @@ const resize = () => {
 }
 
 /**
- * 火焰范围控制在播放控制区上方：
- * - 顶部仍压在歌词区下沿，避免侵入正文
- * - 底部抬到控制区上沿附近（音量/按钮行上方）
+ * 火焰特效区域与柱状频谱保持同一范围同一大小：
+ * - 柱状频谱：baselineY = 0.85, maxH = 0.62 => 顶部约 0.23
+ * - 火焰直接复用这组边界，确保视觉区域一致
  */
 const fireTopY = () => height * 0.23
-const fireBaseY = () => height * 0.78
+const fireBaseY = () => height * 0.85
 
 const spawnFlame = (): Flame => {
   const centered = (Math.random() + Math.random()) / 2
@@ -103,7 +103,7 @@ const spawnFlame = (): Flame => {
   const maxLife = (0.4 + Math.random() * 0.55) * (0.7 + power * 0.5)
   return {
     x,
-    y: fireBaseY() + Math.random() * height * 0.01,
+    y: fireBaseY() + Math.random() * height * 0.02,
     vx: (Math.random() - 0.5) * 32,
     vy: -(80 + Math.random() * 130) * (0.55 + power) * (0.55 + centerFocus * 0.5),
     life: 0,
@@ -161,8 +161,8 @@ const tick = (ts: number) => {
 
   // 底部白热炉心：与 fireBaseY 齐平
   const bY = fireBaseY()
-  const baseH = height * 0.2
-  const base = ctx.createLinearGradient(0, bY - baseH, 0, bY + height * 0.02)
+  const baseH = height * 0.22
+  const base = ctx.createLinearGradient(0, bY - baseH, 0, bY + height * 0.08)
   if (isLight) {
     base.addColorStop(0, hsla(28, 95, 55, 0))
     base.addColorStop(0.5, hsla(32, 100, 58, 0.14 + energy * 0.16))
@@ -173,7 +173,7 @@ const tick = (ts: number) => {
     base.addColorStop(1, hsla(42, 100, 76, 0.25 + energy * 0.32))
   }
   ctx.fillStyle = base
-  ctx.fillRect(0, bY - baseH, width, baseH + height * 0.02)
+  ctx.fillRect(0, bY - baseH, width, baseH + height * 0.08)
 
   // 生成火舌
   const flameSpawn = Math.round((4 + energy * 14) * (props.active ? 1 : 0.35))
@@ -263,14 +263,19 @@ const tick = (ts: number) => {
   ctx.fillStyle = fade
   ctx.fillRect(0, 0, width, topClipY + height * 0.12)
 
-  // 底部裁切：硬性限制火焰不进入播放控制区
-  const bottomCutY = fireBaseY() + height * 0.03
-  const bottomCut = ctx.createLinearGradient(0, bottomCutY - height * 0.04, 0, height)
-  bottomCut.addColorStop(0, 'rgba(0,0,0,0)')
-  bottomCut.addColorStop(0.35, 'rgba(0,0,0,0.55)')
-  bottomCut.addColorStop(1, 'rgba(0,0,0,1)')
-  ctx.fillStyle = bottomCut
-  ctx.fillRect(0, bottomCutY - height * 0.04, width, height - (bottomCutY - height * 0.04))
+  // 底部收口：跟柱状频谱同样做法，保留底部融入感但不硬切
+  const bottomFade = ctx.createLinearGradient(0, fireBaseY() - (height * 0.62), 0, height)
+  if (isLight) {
+    bottomFade.addColorStop(0, 'rgba(0,0,0,0)')
+    bottomFade.addColorStop(0.78, 'rgba(0,0,0,0.03)')
+    bottomFade.addColorStop(1, 'rgba(0,0,0,0.18)')
+  } else {
+    bottomFade.addColorStop(0, 'rgba(0,0,0,0)')
+    bottomFade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
+    bottomFade.addColorStop(1, 'rgba(0,0,0,0.35)')
+  }
+  ctx.fillStyle = bottomFade
+  ctx.fillRect(0, 0, width, height)
 }
 
 const onResize = () => resize()

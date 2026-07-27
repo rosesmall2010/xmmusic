@@ -986,7 +986,7 @@ watch(
 
 .album-cover-container {
   width: 100%;
-  max-width: min(100%, 440px);
+  max-width: min(100%, 360px);
   flex-shrink: 1;
   min-height: 0;
 }

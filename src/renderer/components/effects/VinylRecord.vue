@@ -96,7 +96,7 @@ const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
 
   position: relative;
   width: 100%;
-  max-width: 440px;
+  max-width: 100%;
   margin: 0 auto;
   /* 给唱臂留右上角空间 */
   padding-top: 22px;
