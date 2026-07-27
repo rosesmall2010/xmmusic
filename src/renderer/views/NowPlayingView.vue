@@ -1032,8 +1032,6 @@ watch(
   background: none;
   border: none;
   color: var(--np-fg-3);
-  /* 压在频谱特效上，加描边 */
-  text-shadow: var(--np-text-outline);
   font-size: var(--font-size-base);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
@@ -1052,11 +1050,6 @@ watch(
   color: var(--np-fg);
   background: var(--np-hover);
   font-weight: 600;
-}
-
-/* 浅色下 tab 在面板上方、对比度足够，不需要描边（深色仍保留） */
-.now-playing-view.is-light .panel-tab {
-  text-shadow: none;
 }
 
 /* 歌词面板 */
