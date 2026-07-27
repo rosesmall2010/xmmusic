@@ -100,8 +100,8 @@ const tick = (ts: number) => {
   // 用 destination-out 按 alpha 擦除上一帧，而不是叠一层不透明底色：
   // 叠底色会让 canvas 越来越不透明，把下层的封面渐变整块盖住
   ctx.globalCompositeOperation = 'destination-out'
-  // 浅色下擦除更快（tau 更小），否则淡彩残影会糊成一片脏底
-  const tauTrail = isLight ? 0.032 : 0.055
+  // 浅色擦除略快于深色即可；原先过快会把本就偏淡的柱体残影抹掉，显得更弱
+  const tauTrail = isLight ? 0.045 : 0.055
   const trailAlpha = Math.min(0.4, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
   // destination-out 只用 alpha，颜色本身无意义
   ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`
@@ -179,11 +179,12 @@ const tick = (ts: number) => {
     // 顶部必须淡下去，否则高饱和亮色会把文字吃掉（描边也救不回来）
     const grad = ctx.createLinearGradient(0, y, 0, y + h)
     if (isLight) {
-      // 浅色下柱子要「退到背景」：低不透明度的淡彩，避免和深色文字抢注意力
-      const alpha = (0.1 + smooth * 0.26) * (props.active ? 1 : 0.55)
-      grad.addColorStop(0, hsla(hue, 70, 72, alpha * 0.16))
-      grad.addColorStop(0.35, hsla(hue, 72, 66, alpha * 0.46))
-      grad.addColorStop(1, hsla(hue, 74, 56, alpha))
+      // 浅色底上要用更高不透明度 + 更深更饱和的色，否则柱体像水印看不清；
+      // 顶部仍渐隐，避免侵入歌词/队列区抢文字
+      const alpha = (0.22 + smooth * 0.5) * (props.active ? 1 : 0.6)
+      grad.addColorStop(0, hsla(hue, 78, 48, alpha * 0.22))
+      grad.addColorStop(0.35, hsla(hue, 80, 42, alpha * 0.62))
+      grad.addColorStop(1, hsla(hue, 82, 38, alpha))
     } else {
       const alpha = (0.1 + smooth * 0.55) * (props.active ? 1 : 0.7)
       grad.addColorStop(0, hsla(hue, 92, 50, alpha * 0.16))
@@ -198,7 +199,7 @@ const tick = (ts: number) => {
     // 柱顶高光线：只做很淡的一笔点出柱顶，太重会显得锯齿、也会干扰上方文字
     if (smooth > 0.08) {
       ctx.strokeStyle = isLight
-        ? hsla(hue, 70, 52, 0.1 + smooth * 0.14)
+        ? hsla(hue, 78, 36, 0.18 + smooth * 0.22)
         : hsla(hue, 92, 60, 0.08 + smooth * 0.12)
       ctx.lineWidth = 1
       ctx.beginPath()
@@ -209,12 +210,18 @@ const tick = (ts: number) => {
   }
 
   // 底部虚化（让柱子融入背景，避免硬边）：同样用擦除而不是叠蒙层，
-  // 擦的是柱子自身的不透明度，两种主题的效果一致，不需要分主题取色
+  // 擦的是柱子自身的不透明度；浅色擦得轻一点，否则柱基会被抹得太淡看不清
   ctx.globalCompositeOperation = 'destination-out'
   const fade = ctx.createLinearGradient(0, baselineY - maxH, 0, height)
-  fade.addColorStop(0, 'rgba(0,0,0,0)')
-  fade.addColorStop(0.72, 'rgba(0,0,0,0.08)')
-  fade.addColorStop(1, 'rgba(0,0,0,0.45)')
+  if (isLight) {
+    fade.addColorStop(0, 'rgba(0,0,0,0)')
+    fade.addColorStop(0.75, 'rgba(0,0,0,0.04)')
+    fade.addColorStop(1, 'rgba(0,0,0,0.22)')
+  } else {
+    fade.addColorStop(0, 'rgba(0,0,0,0)')
+    fade.addColorStop(0.72, 'rgba(0,0,0,0.08)')
+    fade.addColorStop(1, 'rgba(0,0,0,0.45)')
+  }
   ctx.fillStyle = fade
   ctx.fillRect(0, 0, width, height)
 }
