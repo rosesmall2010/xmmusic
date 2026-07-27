@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEqualizer } from '@/composables/useEqualizer'
-import { getNowPlayingStage } from '@/utils/nowPlayingStage'
+import { getNowPlayingStage, type NowPlayingStage } from '@/utils/nowPlayingStage'
 
 const props = withDefaults(defineProps<{
   /** 是否处于播放状态（暂停时火焰压低） */
@@ -93,8 +93,8 @@ const resize = () => {
   if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 
-const spawnFlame = (kind: 0 | 1 = 0): Flame => {
-  const { paddingX, usableW, baselineY } = getNowPlayingStage(width, height)
+const spawnFlame = (kind: 0 | 1, stage: NowPlayingStage): Flame => {
+  const { paddingX, usableW, baselineY } = stage
   const centered = (Math.random() + Math.random() + Math.random()) / 3
   const x = paddingX + centered * usableW
   const centerFocus = 1 - Math.abs(centered - 0.5) * 2
@@ -117,8 +117,8 @@ const spawnFlame = (kind: 0 | 1 = 0): Flame => {
   }
 }
 
-const spawnSpark = (): Spark => {
-  const { paddingX, usableW, baselineY } = getNowPlayingStage(width, height)
+const spawnSpark = (stage: NowPlayingStage): Spark => {
+  const { paddingX, usableW, baselineY } = stage
   const power = 0.4 + energy * 0.7
   return {
     x: paddingX + Math.random() * usableW,
@@ -142,20 +142,31 @@ const drawBlueTongue = (
   const stretchX = e.kind === 1 ? 0.38 : 0.48
   const r = Math.max(2, e.size * (0.28 + grow * 0.72))
   const hue = e.hueBias + (e.life / e.maxLife) * 18
+  const a = fade * (isLight ? (0.7 + energy * 0.3) : (0.32 + energy * 0.48))
 
   c.save()
   c.translate(e.x, e.y)
   c.scale(stretchX, stretchY)
 
+  // 小粒子用实心色，避免每帧 createRadialGradient
+  if (r < 8) {
+    c.fillStyle = isLight
+      ? hsla(hue + 8, 100, 55, a * 0.85)
+      : hsla(hue + 12, 100, 70, a * 0.75)
+    c.beginPath()
+    c.arc(0, 0, r, 0, Math.PI * 2)
+    c.fill()
+    c.restore()
+    return
+  }
+
   const grad = c.createRadialGradient(0, r * 0.08, 0, 0, 0, r)
   if (isLight) {
-    const a = fade * (0.7 + energy * 0.3)
     grad.addColorStop(0, hsla(hue + 30, 60, 96, a))
     grad.addColorStop(0.2, hsla(hue + 12, 100, 68, a * 0.92))
     grad.addColorStop(0.55, hsla(hue - 5, 98, 42, a * 0.55))
     grad.addColorStop(1, hsla(hue - 28, 90, 24, 0))
   } else {
-    const a = fade * (0.32 + energy * 0.48)
     grad.addColorStop(0, hsla(hue + 35, 40, 98, a))
     grad.addColorStop(0.2, hsla(hue + 12, 100, 68, a * 0.88))
     grad.addColorStop(0.55, hsla(hue - 5, 100, 48, a * 0.45))
@@ -177,7 +188,8 @@ const tick = (ts: number) => {
   time += dt
 
   const isLight = props.light
-  const { paddingX, usableW, baselineY, maxH, topY } = getNowPlayingStage(width, height)
+  const stage = getNowPlayingStage(width, height)
+  const { paddingX, usableW, baselineY, maxH, topY } = stage
 
   ctx.globalCompositeOperation = 'destination-out'
   const tauTrail = isLight ? 0.065 : 0.05
@@ -209,11 +221,11 @@ const tick = (ts: number) => {
   // 生成量随上限压低，避免每帧猛灌粒子
   const bodySpawn = Math.round((3 + energy * 10) * (props.active ? 1 : 0.35))
   const wispSpawn = Math.round((2 + energy * 6) * (props.active ? 1 : 0.3))
-  for (let i = 0; i < bodySpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(0))
-  for (let i = 0; i < wispSpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(1))
+  for (let i = 0; i < bodySpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(0, stage))
+  for (let i = 0; i < wispSpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(1, stage))
 
   const sparkSpawn = Math.round((1 + energy * 5) * (props.active ? 1 : 0.25))
-  for (let i = 0; i < sparkSpawn && sparks.length < MAX_SPARKS; i++) sparks.push(spawnSpark())
+  for (let i = 0; i < sparkSpawn && sparks.length < MAX_SPARKS; i++) sparks.push(spawnSpark(stage))
 
   const nextFlames: Flame[] = []
   for (const e of flames) {

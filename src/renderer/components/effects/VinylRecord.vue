@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   coverUrl?: string | null
@@ -81,6 +81,7 @@ const discRef = ref<HTMLElement | null>(null)
 let angle = 0
 let rafId = 0
 let lastTs = 0
+let mounted = false
 
 const ROTATE_SPEED = 18 // 度/秒
 
@@ -98,11 +99,11 @@ const step = (ts: number) => {
 }
 
 const start = () => {
-  if (rafId) return
+  if (!mounted || rafId) return
   lastTs = 0
+  applyAngle()
   rafId = requestAnimationFrame((ts) => {
     lastTs = ts
-    applyAngle()
     rafId = requestAnimationFrame(step)
   })
 }
@@ -112,9 +113,21 @@ const stop = () => {
   rafId = 0
 }
 
-watch(() => props.active, (v) => (v ? start() : stop()), { immediate: true })
+watch(() => props.active, (v) => {
+  if (!mounted) return
+  v ? start() : stop()
+})
 
-onBeforeUnmount(stop)
+onMounted(() => {
+  mounted = true
+  applyAngle()
+  if (props.active) start()
+})
+
+onBeforeUnmount(() => {
+  mounted = false
+  stop()
+})
 </script>
 
 <style scoped>

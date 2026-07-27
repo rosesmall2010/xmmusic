@@ -48,7 +48,7 @@
     <!-- 主内容区 -->
     <div class="content">
       <!-- 上半部分：左右分栏 -->
-      <div class="main-area">
+      <div class="main-area" :class="{ 'is-vinyl': effect === 'vinyl' }">
         <!-- 左侧：封面和歌曲信息 -->
         <div class="left-panel" :class="{ 'is-vinyl': effect === 'vinyl' }">
           <!-- 专辑封面：唱片特效下换成旋转黑胶 -->
@@ -970,6 +970,11 @@ watch(
   overflow: hidden;
   min-width: 0;
   align-items: stretch;
+}
+
+/* 唱片唱臂可能略超出左栏，父级也要放开，否则仍会被裁切 */
+.main-area.is-vinyl {
+  overflow: visible;
 }
 
 /* 左侧面板 - 封面和歌曲信息 */
