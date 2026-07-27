@@ -11,3 +11,4 @@ alwaysApply: true
   - 任何含 `Cursor` / `cursoragent` 的作者、联名、trailer 行
 - **禁止**修改 `git config`（包括 user.name / user.email）
 - 提交信息正文只用 Conventional Commits 中文说明，不要附带 IDE/Agent 署名
+- 若环境在 `git commit` / `git commit --amend` 后仍自动插入 `Co-authored-by: Cursor`：用 `git commit-tree` 按当前 tree 与父提交重建同内容提交，再 `git reset --soft` 指向新提交，以去掉联名行（仅限刚由本会话创建、且未推送的 HEAD）
