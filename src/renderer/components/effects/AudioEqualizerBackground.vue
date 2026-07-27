@@ -207,20 +207,20 @@ const tick = (ts: number) => {
 
     // 多彩渐变：每根柱子一个 hue（随时间微漂移），不使用白色
     const hue = (i / Math.max(1, bars - 1)) * 320 + time * 10
-    // 每根柱子的纵向渐变：
-    // 深色下自下而上变亮（融入黑背景）；浅色下反过来，底部实、顶部渐隐到白
+    // 两种主题都是「底部实、向上渐隐」：柱顶会侵入歌词/队列区域，
+    // 顶部必须淡下去，否则高饱和亮色会把文字吃掉（描边也救不回来）
     const grad = ctx.createLinearGradient(0, y, 0, y + h)
     if (isLight) {
       // 浅色下柱子要「退到背景」：低不透明度的淡彩，避免和深色文字抢注意力
       const alpha = (0.1 + smooth * 0.26) * (props.active ? 1 : 0.55)
-      grad.addColorStop(0, hsla(hue, 70, 72, alpha * 0.4))
-      grad.addColorStop(0.45, hsla(hue, 72, 64, alpha * 0.75))
+      grad.addColorStop(0, hsla(hue, 70, 72, alpha * 0.16))
+      grad.addColorStop(0.35, hsla(hue, 72, 66, alpha * 0.46))
       grad.addColorStop(1, hsla(hue, 74, 56, alpha))
     } else {
       const alpha = (0.1 + smooth * 0.55) * (props.active ? 1 : 0.7)
-      grad.addColorStop(0, hsla(hue, 92, 58, alpha))
-      grad.addColorStop(0.55, hsla(hue, 92, 40, alpha * 0.75))
-      grad.addColorStop(1, hsla(hue, 92, 22, alpha * 0.45))
+      grad.addColorStop(0, hsla(hue, 92, 50, alpha * 0.16))
+      grad.addColorStop(0.35, hsla(hue, 92, 46, alpha * 0.46))
+      grad.addColorStop(1, hsla(hue, 92, 42, alpha))
     }
 
     // 廉价发光：不用 shadowBlur（每根柱子模糊渲染极贵，是掉帧主因），
@@ -229,7 +229,7 @@ const tick = (ts: number) => {
       const glowPad = 4 + smooth * 8
       ctx.fillStyle = isLight
         ? hsla(hue, 70, 62, 0.07 * smooth)
-        : hsla(hue, 92, 50, 0.1 * smooth)
+        : hsla(hue, 92, 50, 0.07 * smooth)
       roundRect(ctx, xx - glowPad, y - glowPad, barW + glowPad * 2, h + glowPad * 2, glowPad)
       ctx.fill()
     }
@@ -238,11 +238,11 @@ const tick = (ts: number) => {
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
 
-    // 顶部高光线：浅色下用很淡的加深描边点出柱顶，太重会显得锯齿
+    // 柱顶高光线：只做很淡的一笔点出柱顶，太重会显得锯齿、也会干扰上方文字
     if (smooth > 0.08) {
       ctx.strokeStyle = isLight
         ? hsla(hue, 70, 52, 0.1 + smooth * 0.14)
-        : hsla(hue, 92, 66, 0.14 + smooth * 0.22)
+        : hsla(hue, 92, 60, 0.08 + smooth * 0.12)
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(xx + 1, y + 1)

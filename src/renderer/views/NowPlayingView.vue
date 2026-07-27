@@ -704,11 +704,13 @@ watch(
   /* 全屏播放页的局部配色令牌：深色为默认，.is-light 整组覆盖。
      背景是随封面变化的渐变 + canvas 特效，无法直接套用全局变量，
      因此这里单独定义一套，保证两种主题下文字与控件都有足够对比度 */
+  /* 文字层级：因为要压在高对比的频谱特效上，即使是次要文字也必须足够「实」，
+     不能像普通页面那样用低不透明度的灰 —— 层级差靠这几档 + 字号/字重体现 */
   --np-fg: #ffffff;
-  --np-fg-2: rgba(255, 255, 255, 0.8);
-  --np-fg-3: rgba(255, 255, 255, 0.6);
-  --np-fg-4: rgba(255, 255, 255, 0.5);
-  --np-fg-5: rgba(255, 255, 255, 0.4);
+  --np-fg-2: rgba(255, 255, 255, 0.96);
+  --np-fg-3: rgba(255, 255, 255, 0.88);
+  --np-fg-4: rgba(255, 255, 255, 0.8);
+  --np-fg-5: rgba(255, 255, 255, 0.62);
   --np-hover: rgba(255, 255, 255, 0.1);
   --np-hover-soft: rgba(255, 255, 255, 0.05);
   --np-border: rgba(255, 255, 255, 0.1);
@@ -718,14 +720,20 @@ watch(
   /* 进度条 / 滑块的填充色 */
   --np-fill: #ffffff;
   /* 文字描边色：深色主题用黑描边，浅色主题用白描边 */
-  --np-outline: rgba(0, 0, 0, 0.8);
-  --np-outline-glow: rgba(0, 0, 0, 0.6);
-  /* 小字号用的四向轻描边：让歌词/队列文字压在频谱特效上依然清晰 */
+  --np-outline: rgba(0, 0, 0, 0.9);
+  --np-outline-glow: rgba(0, 0, 0, 0.75);
+  /* 八向描边 + 外发光：四向描边挡不住对角线方向的背景，
+     所有压在频谱特效上的文字（歌名/歌词/队列/时间）统一用这一套 */
   --np-text-outline:
-    0 1px 0 var(--np-outline),
+    -1px -1px 0 var(--np-outline),
+    1px -1px 0 var(--np-outline),
+    -1px 1px 0 var(--np-outline),
+    1px 1px 0 var(--np-outline),
     0 -1px 0 var(--np-outline),
+    0 1px 0 var(--np-outline),
+    -1px 0 0 var(--np-outline),
     1px 0 0 var(--np-outline),
-    -1px 0 0 var(--np-outline);
+    0 0 4px var(--np-outline-glow);
   --np-cover-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 
   position: fixed;
@@ -747,13 +755,11 @@ watch(
 }
 
 .now-playing-view.is-light {
-  /* 浅色下文字压在淡彩特效上，对比度要比深色主题更高：
-     深色主题的白字靠亮度差就够，浅色主题的深字必须提高不透明度才清晰 */
   --np-fg: #14161a;
-  --np-fg-2: rgba(20, 22, 26, 0.92);
-  --np-fg-3: rgba(20, 22, 26, 0.78);
-  --np-fg-4: rgba(20, 22, 26, 0.68);
-  --np-fg-5: rgba(20, 22, 26, 0.52);
+  --np-fg-2: rgba(20, 22, 26, 0.96);
+  --np-fg-3: rgba(20, 22, 26, 0.88);
+  --np-fg-4: rgba(20, 22, 26, 0.8);
+  --np-fg-5: rgba(20, 22, 26, 0.62);
   --np-hover: rgba(20, 22, 26, 0.07);
   --np-hover-soft: rgba(20, 22, 26, 0.04);
   --np-border: rgba(20, 22, 26, 0.1);
@@ -762,8 +768,8 @@ watch(
   --np-scroll-thumb-hover: rgba(20, 22, 26, 0.28);
   /* 浅色下白色填充不可见，改用主色 */
   --np-fill: var(--color-primary);
-  --np-outline: rgba(255, 255, 255, 0.85);
-  --np-outline-glow: rgba(255, 255, 255, 0.7);
+  --np-outline: rgba(255, 255, 255, 0.95);
+  --np-outline-glow: rgba(255, 255, 255, 0.85);
   --np-cover-shadow: 0 18px 44px rgba(20, 22, 26, 0.16);
 
   background-color: #fafbfc;
@@ -946,16 +952,7 @@ watch(
 .song-title,
 .song-artist,
 .song-album {
-  text-shadow:
-    -1px -1px 0 var(--np-outline),
-    1px -1px 0 var(--np-outline),
-    -1px 1px 0 var(--np-outline),
-    1px 1px 0 var(--np-outline),
-    0 -1px 0 var(--np-outline),
-    0 1px 0 var(--np-outline),
-    -1px 0 0 var(--np-outline),
-    1px 0 0 var(--np-outline),
-    0 0 3px var(--np-outline-glow);
+  text-shadow: var(--np-text-outline);
 }
 
 .song-title {
