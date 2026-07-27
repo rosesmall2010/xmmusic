@@ -166,9 +166,10 @@ const tick = (ts: number) => {
   const baselineY = height * 0.85
   const maxH = height * 0.55
 
-  // 底部柔光（像图里的光晕）；浅色下减弱，避免在浅背景上糊成一团
-  const glowStrength = isLight ? 0.05 + 0.07 * (data ? 1 : 0) : 0.1 + 0.18 * (data ? 1 : 0)
-  const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.55)
+  // 底部柔光（像图里的光晕）；浅色下减弱，避免在浅背景上糊成一团。
+  // 半径收在柱区附近：铺得太高会在柱顶上方留一片朦胧，让整个画面显糊
+  const glowStrength = isLight ? 0.04 + 0.05 * (data ? 1 : 0) : 0.07 + 0.13 * (data ? 1 : 0)
+  const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.42)
   glow.addColorStop(0, rgba(baseRgb, glowStrength * activeFactor))
   glow.addColorStop(1, rgba(baseRgb, 0))
   ctx.fillStyle = glow
@@ -224,12 +225,14 @@ const tick = (ts: number) => {
     }
 
     // 廉价发光：不用 shadowBlur（每根柱子模糊渲染极贵，是掉帧主因），
-    // 改为在柱子后面叠一层加宽的低透明度同色矩形
+    // 改为在柱子后面叠一层略微加宽的低透明度同色矩形。
+    // 半径必须跟着 barW 走并控制在 gap 量级内：固定的大半径会让相邻柱子的
+    // 光晕大面积重叠，糊成一团雾而不是霓虹边缘
     if (smooth > 0.05) {
-      const glowPad = 4 + smooth * 8
+      const glowPad = Math.min(gap * 0.9, barW * (0.18 + smooth * 0.3))
       ctx.fillStyle = isLight
-        ? hsla(hue, 70, 62, 0.07 * smooth)
-        : hsla(hue, 92, 50, 0.07 * smooth)
+        ? hsla(hue, 70, 60, 0.12 * smooth)
+        : hsla(hue, 92, 52, 0.13 * smooth)
       roundRect(ctx, xx - glowPad, y - glowPad, barW + glowPad * 2, h + glowPad * 2, glowPad)
       ctx.fill()
     }
