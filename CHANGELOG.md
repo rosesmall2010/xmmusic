@@ -11,6 +11,7 @@
 - 修正 README 徽章：补充 MIT `LICENSE` 文件，License 改为静态 MIT 徽章；Platform 标明 macOS arm64 | Windows | Linux，并链接到 Releases
 - README 安装章节补充 macOS 说明：仅 arm64、右键打开、`xattr -cr` 清除隔离属性（「已损坏」误报）、建议从 Releases 直下 dmg
 - 同步更新 PROGRESS.md 至 v1.1.6：里程碑/模块进度、本周工作、近期完成项与下一步计划
+- 同步更新 TODO.md 至 v1.1.6：勾选已完成项、调整优先级（macOS 公证/列表交互/自动更新）、补全 v1.1.x 已完成清单
 
 ### 修复
 - 修复全屏播放封面底部被裁切：封面在矮窗口中改为受 max-height 约束等比缩小，不再被 overflow 切掉下边；唱片组件同步按可用空间缩放
