@@ -5,13 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.6] - 2026-07-27
+
+### 修复
+- 修复全屏播放封面底部被裁切：封面在矮窗口中改为受 max-height 约束等比缩小，不再被 overflow 切掉下边；唱片组件同步按可用空间缩放
+
 ## [1.1.5] - 2026-07-27
 
 ### 文档
 - 同步更新 README：最新版本 v1.1.5、全屏特效/浅色主题说明、安装包文件名；播放链路说明改为原生 Audio 为主、Howler 兜底
 
 ### 修复
-- 修复全屏播放封面底部被裁切：封面在矮窗口中改为受 max-height 约束等比缩小，不再被 overflow 切掉下边
+- 修复唱片唱臂被 `.main-area` 裁切：vinyl 时父级一并放开 overflow
 - 唱片旋转改为挂载后再启动，避免 discRef 未就绪时空转
 - 火焰生成改为复用本帧 stage；小粒子改用实心色减少 createRadialGradient
 - 修复音效（均衡器）设置退出后丢失：开关/预设立即落盘，关闭面板与退出前 flush；localStorage 同步镜像兜底
