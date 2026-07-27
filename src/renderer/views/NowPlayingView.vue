@@ -1,8 +1,8 @@
 <template>
-  <div class="now-playing-view" :style="backgroundStyle">
+  <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle">
     <!-- 背景特效：均衡器光带随音乐变化 -->
     <div class="background-effects" aria-hidden="true">
-      <AudioEqualizerBackground :base-color="backgroundColor" :active="isPlaying" />
+      <AudioEqualizerBackground :base-color="backgroundColor" :active="isPlaying" :light="isLight" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
@@ -189,10 +189,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
@@ -205,8 +206,32 @@ import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 const router = useRouter()
 const { t } = useI18n()
 const playerStore = usePlayerStore()
+const settingsStore = useSettingsStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
+
+/** 深色/浅色：跟随全局主题，system 模式下读系统偏好 */
+const systemPrefersDark = ref(
+  typeof window !== 'undefined'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : true
+)
+
+if (typeof window !== 'undefined') {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)')
+  const onChange = (e: MediaQueryListEvent) => {
+    systemPrefersDark.value = e.matches
+  }
+  mq.addEventListener('change', onChange)
+  onUnmounted(() => mq.removeEventListener('change', onChange))
+}
+
+const isLight = computed(() => {
+  const t = settingsStore.theme
+  if (t === 'light') return true
+  if (t === 'dark') return false
+  return !systemPrefersDark.value
+})
 
 const backgroundColor = ref('#1a1a1a')
 /** 展示中的封面 URL：切歌时等新图加载完成再替换，避免 img 清空透白 */
@@ -262,16 +287,20 @@ const VolumeIcon = computed(() => {
 })
 
 const backgroundStyle = computed(() => {
-  // 拆开写：避免 background 简写冲掉 background-color 深色兜底
+  // 拆开写：避免 background 简写冲掉 background-color 兜底
+  const base = isLight.value ? '#fafbfc' : '#0a0a0a'
   return {
-    backgroundColor: '#0a0a0a',
-    backgroundImage: `linear-gradient(135deg, ${backgroundColor.value} 0%, #0a0a0a 100%)`,
+    backgroundColor: base,
+    backgroundImage: `linear-gradient(135deg, ${backgroundColor.value} 0%, ${base} 100%)`,
   }
 })
 
 const onCoverError = () => {
   displayCoverUrl.value = null
 }
+
+/** 无封面可取色时的背景主色 */
+const fallbackBackgroundColor = () => (isLight.value ? '#eef1f5' : '#1a1a1a')
 
 const queue = computed(() => playerStore.queue)
 const currentQueueIndex = computed(() => playerStore.currentQueueIndex)
@@ -433,7 +462,7 @@ const formatTime = (seconds: number) => {
 /**
  * 根据封面图提取平均色，用于背景与特效随歌曲变化
  * - 取 32x32 缩略图计算，成本低
- * - 压暗到适合全屏深色背景的亮度，避免亮封面导致「白屏闪一下」
+ * - 深色主题压暗（避免亮封面「白屏闪一下」），浅色主题提亮成柔和淡彩
  * - 失败时返回 null
  */
 const extractAverageColor = async (src: string): Promise<string | null> => {
@@ -472,7 +501,9 @@ const extractAverageColor = async (src: string): Promise<string | null> => {
     r = Math.round(r / count)
     g = Math.round(g / count)
     b = Math.round(b / count)
-    return darkenColorForBackground(r, g, b)
+    return isLight.value
+      ? lightenColorForBackground(r, g, b)
+      : darkenColorForBackground(r, g, b)
   } catch {
     return null
   }
@@ -497,6 +528,30 @@ const darkenColorForBackground = (r: number, g: number, b: number): string => {
     r = Math.round(r * s)
     g = Math.round(g * s)
     b = Math.round(b * s)
+  }
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+/**
+ * 将封面主色提亮成柔和淡彩，用于浅色主题背景
+ * 保留封面的色相倾向，但整体拉到接近白的高亮度区间，
+ * 这样深色文字始终有足够对比度，也不会出现刺眼的高饱和大色块
+ */
+const lightenColorForBackground = (r: number, g: number, b: number): string => {
+  // 往白色混合（保留约 22% 原色），得到淡彩底色
+  const mixWithWhite = (v: number) => Math.round(255 - (255 - v) * 0.22)
+  r = mixWithWhite(r)
+  g = mixWithWhite(g)
+  b = mixWithWhite(b)
+
+  // 保证足够亮：亮度不足时继续往白靠
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  const targetLuma = 0.88
+  if (luminance < targetLuma) {
+    const lift = (targetLuma - luminance) * 255
+    r = Math.min(255, Math.round(r + lift))
+    g = Math.min(255, Math.round(g + lift))
+    b = Math.min(255, Math.round(b + lift))
   }
   return `rgb(${r}, ${g}, ${b})`
 }
@@ -563,14 +618,25 @@ watch(currentMusic, async (music, _prev, onCleanup) => {
       if (color) backgroundColor.value = color
     } else {
       displayCoverUrl.value = null
-      backgroundColor.value = '#1a1a1a'
+      backgroundColor.value = fallbackBackgroundColor()
     }
   } else {
     isFavorite.value = false
     displayCoverUrl.value = null
-    backgroundColor.value = '#1a1a1a'
+    backgroundColor.value = fallbackBackgroundColor()
   }
 }, { immediate: true })
+
+// 切换主题时重算背景主色：深色要压暗、浅色要提亮，不能沿用上一主题的结果
+watch(isLight, async () => {
+  const cover = displayCoverUrl.value
+  if (!cover) {
+    backgroundColor.value = fallbackBackgroundColor()
+    return
+  }
+  const color = await extractAverageColor(cover)
+  backgroundColor.value = color ?? fallbackBackgroundColor()
+})
 
 // 仅在音效开启时绑定 Web Audio（频谱可视化不得为了动画牺牲音质）
 watch(
@@ -635,6 +701,27 @@ watch(
 
 <style scoped>
 .now-playing-view {
+  /* 全屏播放页的局部配色令牌：深色为默认，.is-light 整组覆盖。
+     背景是随封面变化的渐变 + canvas 特效，无法直接套用全局变量，
+     因此这里单独定义一套，保证两种主题下文字与控件都有足够对比度 */
+  --np-fg: #ffffff;
+  --np-fg-2: rgba(255, 255, 255, 0.8);
+  --np-fg-3: rgba(255, 255, 255, 0.6);
+  --np-fg-4: rgba(255, 255, 255, 0.5);
+  --np-fg-5: rgba(255, 255, 255, 0.4);
+  --np-hover: rgba(255, 255, 255, 0.1);
+  --np-hover-soft: rgba(255, 255, 255, 0.05);
+  --np-border: rgba(255, 255, 255, 0.1);
+  --np-track: rgba(255, 255, 255, 0.2);
+  --np-scroll-thumb: rgba(255, 255, 255, 0.2);
+  --np-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+  /* 进度条 / 滑块的填充色 */
+  --np-fill: #ffffff;
+  /* 文字描边色：深色主题用黑描边，浅色主题用白描边 */
+  --np-outline: rgba(0, 0, 0, 0.8);
+  --np-outline-glow: rgba(0, 0, 0, 0.6);
+  --np-cover-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+
   position: fixed;
   top: 0;
   left: 0;
@@ -644,13 +731,34 @@ watch(
   display: flex;
   flex-direction: column;
   padding: var(--spacing-xl) 0;
-  color: white;
-  /* 底层兜底深色，防止路由过渡/透明 canvas 露出浅色 app 底 */
+  color: var(--np-fg);
+  /* 底层兜底色，防止路由过渡/透明 canvas 露出相反主题的底色 */
   background-color: #0a0a0a;
   overflow-y: auto;
   overflow-x: hidden;
   width: 100%;
   isolation: isolate; /* 确保背景层不会影响内部堆叠 */
+}
+
+.now-playing-view.is-light {
+  --np-fg: #14161a;
+  --np-fg-2: rgba(20, 22, 26, 0.78);
+  --np-fg-3: rgba(20, 22, 26, 0.62);
+  --np-fg-4: rgba(20, 22, 26, 0.5);
+  --np-fg-5: rgba(20, 22, 26, 0.38);
+  --np-hover: rgba(20, 22, 26, 0.07);
+  --np-hover-soft: rgba(20, 22, 26, 0.04);
+  --np-border: rgba(20, 22, 26, 0.1);
+  --np-track: rgba(20, 22, 26, 0.14);
+  --np-scroll-thumb: rgba(20, 22, 26, 0.18);
+  --np-scroll-thumb-hover: rgba(20, 22, 26, 0.28);
+  /* 浅色下白色填充不可见，改用主色 */
+  --np-fill: var(--color-primary);
+  --np-outline: rgba(255, 255, 255, 0.85);
+  --np-outline-glow: rgba(255, 255, 255, 0.7);
+  --np-cover-shadow: 0 18px 44px rgba(20, 22, 26, 0.16);
+
+  background-color: #fafbfc;
 }
 
 .background-effects {
@@ -681,7 +789,7 @@ watch(
   gap: var(--spacing-sm);
   background: none;
   border: none;
-  color: white;
+  color: var(--np-fg);
   font-size: var(--font-size-lg);
   cursor: pointer;
   padding: var(--spacing-sm);
@@ -691,7 +799,7 @@ watch(
 }
 
 .btn-back:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--np-hover);
 }
 
 .actions {
@@ -703,7 +811,7 @@ watch(
 .btn-action {
   background: none;
   border: none;
-  color: white;
+  color: var(--np-fg);
   font-size: var(--font-size-xl);
   cursor: pointer;
   padding: var(--spacing-sm);
@@ -717,7 +825,7 @@ watch(
 }
 
 .btn-action:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--np-hover);
 }
 
 /* 自定义tooltip */
@@ -798,7 +906,7 @@ watch(
   aspect-ratio: 1;
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--np-cover-shadow);
   position: relative;
   margin: 0 auto;
 }
@@ -825,55 +933,39 @@ watch(
   width: 100%;
 }
 
+/* 描边效果：让文字在流动的背景特效上始终清晰
+   深色主题用黑描边、浅色主题用白描边（见 --np-outline） */
+.song-title,
+.song-artist,
+.song-album {
+  text-shadow:
+    -1px -1px 0 var(--np-outline),
+    1px -1px 0 var(--np-outline),
+    -1px 1px 0 var(--np-outline),
+    1px 1px 0 var(--np-outline),
+    0 -1px 0 var(--np-outline),
+    0 1px 0 var(--np-outline),
+    -1px 0 0 var(--np-outline),
+    1px 0 0 var(--np-outline),
+    0 0 3px var(--np-outline-glow);
+}
+
 .song-title {
   font-size: var(--font-size-2xl);
   font-weight: 700;
   margin-bottom: var(--spacing-xs);
-  color: white;
-  /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow:
-    -1px -1px 0 rgba(0, 0, 0, 0.8),
-    1px -1px 0 rgba(0, 0, 0, 0.8),
-    -1px 1px 0 rgba(0, 0, 0, 0.8),
-    1px 1px 0 rgba(0, 0, 0, 0.8),
-    0 -1px 0 rgba(0, 0, 0, 0.8),
-    0 1px 0 rgba(0, 0, 0, 0.8),
-    -1px 0 0 rgba(0, 0, 0, 0.8),
-    1px 0 0 rgba(0, 0, 0, 0.8),
-    0 0 4px rgba(0, 0, 0, 0.6);
+  color: var(--np-fg);
 }
 
 .song-artist {
   font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--np-fg-2);
   margin-bottom: var(--spacing-xs);
-  /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow:
-    -1px -1px 0 rgba(0, 0, 0, 0.8),
-    1px -1px 0 rgba(0, 0, 0, 0.8),
-    -1px 1px 0 rgba(0, 0, 0, 0.8),
-    1px 1px 0 rgba(0, 0, 0, 0.8),
-    0 -1px 0 rgba(0, 0, 0, 0.8),
-    0 1px 0 rgba(0, 0, 0, 0.8),
-    -1px 0 0 rgba(0, 0, 0, 0.8),
-    1px 0 0 rgba(0, 0, 0, 0.8),
-    0 0 3px rgba(0, 0, 0, 0.6);
 }
 
 .song-album {
   font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.6);
-  /* 黑色描边效果，提升在背景特效下的可读性 */
-  text-shadow:
-    -1px -1px 0 rgba(0, 0, 0, 0.8),
-    1px -1px 0 rgba(0, 0, 0, 0.8),
-    -1px 1px 0 rgba(0, 0, 0, 0.8),
-    1px 1px 0 rgba(0, 0, 0, 0.8),
-    0 -1px 0 rgba(0, 0, 0, 0.8),
-    0 1px 0 rgba(0, 0, 0, 0.8),
-    -1px 0 0 rgba(0, 0, 0, 0.8),
-    1px 0 0 rgba(0, 0, 0, 0.8),
-    0 0 3px rgba(0, 0, 0, 0.6);
+  color: var(--np-fg-3);
 }
 
 /* 右侧面板 - 歌词/队列 */
@@ -891,7 +983,7 @@ watch(
   display: flex;
   gap: var(--spacing-sm);
   padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--np-border);
   overflow-x: hidden;
   flex-wrap: nowrap;
 }
@@ -899,7 +991,7 @@ watch(
 .panel-tab {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--np-fg-3);
   font-size: var(--font-size-base);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
@@ -910,13 +1002,13 @@ watch(
 }
 
 .panel-tab:hover {
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--np-fg-2);
+  background: var(--np-hover-soft);
 }
 
 .panel-tab.active {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--np-fg);
+  background: var(--np-hover);
   font-weight: 600;
 }
 
@@ -943,7 +1035,7 @@ watch(
 
 .lyrics-line {
   font-size: var(--font-size-xl);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--np-fg-4);
   margin: var(--spacing-xl) 0;
   transition: all var(--transition-base);
   cursor: pointer;
@@ -952,18 +1044,25 @@ watch(
 }
 
 .lyrics-line:hover {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--np-fg-2);
 }
 
 .lyrics-line.active {
   font-size: var(--font-size-3xl);
-  color: white;
+  color: var(--np-fg);
   font-weight: 700;
   transform: scale(1.05);
+  /* 当前行叠在特效上，加描边保证可读 */
+  text-shadow:
+    0 1px 0 var(--np-outline),
+    0 -1px 0 var(--np-outline),
+    1px 0 0 var(--np-outline),
+    -1px 0 0 var(--np-outline),
+    0 0 6px var(--np-outline-glow);
 }
 
 .lyrics-line.empty {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--np-fg-5);
 }
 
 /* 队列面板 */
@@ -976,7 +1075,7 @@ watch(
   height: 100%;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: var(--np-scroll-thumb) transparent;
 }
 
 .queue-list::-webkit-scrollbar {
@@ -988,12 +1087,12 @@ watch(
 }
 
 .queue-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--np-scroll-thumb);
   border-radius: 3px;
 }
 
 .queue-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--np-scroll-thumb-hover);
 }
 
 .queue-item {
@@ -1007,27 +1106,27 @@ watch(
 }
 
 .queue-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--np-hover-soft);
 }
 
 .queue-item.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--np-hover);
 }
 
 .queue-item .item-index {
   width: 24px;
   text-align: center;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--np-fg-4);
   flex-shrink: 0;
 }
 
 .queue-item.active .item-index {
-  color: white;
+  color: var(--np-fg);
 }
 
 .queue-item .playing-icon {
-  color: white;
+  color: var(--np-fg);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -1043,7 +1142,7 @@ watch(
 
 .queue-item .item-title {
   font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--np-fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1051,7 +1150,7 @@ watch(
 }
 
 .queue-item.active .item-title {
-  color: white;
+  color: var(--np-fg);
   font-weight: 600;
 }
 
@@ -1060,7 +1159,7 @@ watch(
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--np-fg-4);
   overflow: hidden;
 }
 
@@ -1085,7 +1184,7 @@ watch(
 
 .queue-item .item-duration {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--np-fg-4);
   flex-shrink: 0;
 }
 
@@ -1093,7 +1192,7 @@ watch(
   opacity: 0;
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--np-fg-4);
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
@@ -1107,7 +1206,7 @@ watch(
 }
 
 .queue-item .item-remove:hover {
-  color: white;
+  color: var(--np-fg);
 }
 
 .queue-empty {
@@ -1115,7 +1214,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--np-fg-5);
   font-size: var(--font-size-base);
 }
 
@@ -1125,7 +1224,7 @@ watch(
   flex-direction: column;
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--np-border);
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -1141,7 +1240,7 @@ watch(
 
 .progress-bar {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--np-track);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
@@ -1150,7 +1249,7 @@ watch(
 
 .progress-fill {
   height: 100%;
-  background: white;
+  background: var(--np-fill);
   border-radius: 2px;
   position: relative;
 }
@@ -1162,7 +1261,7 @@ watch(
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
-  background: white;
+  background: var(--np-fill);
   border-radius: 50%;
   opacity: 0;
   transition: opacity var(--transition-base);
@@ -1176,7 +1275,7 @@ watch(
   display: flex;
   justify-content: space-between;
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--np-fg-3);
 }
 
 .controls {
@@ -1210,7 +1309,7 @@ watch(
 .volume-slider input[type="range"] {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--np-track);
   border-radius: 2px;
   outline: none;
   cursor: pointer;
@@ -1219,7 +1318,7 @@ watch(
 
 .volume-slider input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--np-track);
   border-radius: 2px;
 }
 
@@ -1227,7 +1326,7 @@ watch(
   -webkit-appearance: none;
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--np-fill);
   border-radius: 50%;
   cursor: pointer;
   margin-top: -5px;
@@ -1241,14 +1340,14 @@ watch(
 
 .volume-slider input[type="range"]::-moz-range-track {
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--np-track);
   border-radius: 2px;
 }
 
 .volume-slider input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--np-fill);
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -1263,7 +1362,7 @@ watch(
 .btn-control {
   background: none;
   border: none;
-  color: white;
+  color: var(--np-fg);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1281,11 +1380,11 @@ watch(
   width: 44px;
   height: 44px;
   border-radius: 22px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--np-fg-2);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--np-hover);
 }
 
 .btn-primary {

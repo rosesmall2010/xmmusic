@@ -11,9 +11,12 @@ const props = withDefaults(defineProps<{
   baseColor?: string
   /** 是否处于播放状态（暂停时降低强度） */
   active?: boolean
+  /** 浅色主题：改用正常混合 + 中等亮度色，避免加法混合把画面洗白 */
+  light?: boolean
 }>(), {
   baseColor: '#31c27c',
-  active: false
+  active: false,
+  light: false
 })
 
 type RGB = { r: number; g: number; b: number }
@@ -75,8 +78,8 @@ const resize = () => {
   ctx = canvas.getContext('2d', { alpha: true })
   if (ctx) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    // resize 会清空画布，先铺黑底避免透明帧闪一下浅色背景
-    ctx.fillStyle = '#0a0a0a'
+    // resize 会清空画布，先铺底色避免透明帧闪一下与主题相反的背景
+    ctx.fillStyle = props.light ? '#f7f8fa' : '#0a0a0a'
     ctx.fillRect(0, 0, width, height)
   }
 }
@@ -116,10 +119,17 @@ const tick = (ts: number) => {
   lastTs = ts
   time += dt
 
+  const isLight = props.light
+
   // 背景拖尾（类似示例图的“光带残影”）；按帧时长换算，帧率无关
+  // 浅色主题下用白色蒙层擦除，否则残影会越积越黑
   ctx.globalCompositeOperation = 'source-over'
-  const trailAlpha = 1 - Math.exp(-dt / 0.055)
-  ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.4, trailAlpha).toFixed(3)})`
+  // 浅色下擦除更快（tau 更小），否则淡彩残影会糊成一片脏底
+  const tauTrail = isLight ? 0.032 : 0.055
+  const trailAlpha = Math.min(0.55, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
+  ctx.fillStyle = isLight
+    ? `rgba(250, 251, 252, ${trailAlpha})`
+    : `rgba(0, 0, 0, ${trailAlpha})`
   ctx.fillRect(0, 0, width, height)
 
   const data = getFrequency()
@@ -156,14 +166,16 @@ const tick = (ts: number) => {
   const baselineY = height * 0.85
   const maxH = height * 0.55
 
-  // 底部柔光（像图里的光晕）
+  // 底部柔光（像图里的光晕）；浅色下减弱，避免在浅背景上糊成一团
+  const glowStrength = isLight ? 0.05 + 0.07 * (data ? 1 : 0) : 0.1 + 0.18 * (data ? 1 : 0)
   const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.55)
-  glow.addColorStop(0, rgba(baseRgb, (0.10 + 0.18 * (data ? 1 : 0)) * activeFactor))
-  glow.addColorStop(1, 'rgba(0,0,0,0)')
+  glow.addColorStop(0, rgba(baseRgb, glowStrength * activeFactor))
+  glow.addColorStop(1, rgba(baseRgb, 0))
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, width, height)
 
-  ctx.globalCompositeOperation = 'lighter'
+  // 深色用加法混合出霓虹感；浅色必须用正常混合，否则叠加只会把画面洗成白色
+  ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
   // 透视微缩放：两侧略短（更接近示例图的“中心聚焦”）
   for (let i = 0; i < bars; i++) {
@@ -193,24 +205,31 @@ const tick = (ts: number) => {
     const wobble = Math.sin(time * 0.9 + i * 0.22) * (props.active ? 0.6 : 0.25)
     const xx = x + wobble
 
-    // 多彩霓虹：每根柱子一个 hue（随时间微漂移），不使用白色
+    // 多彩渐变：每根柱子一个 hue（随时间微漂移），不使用白色
     const hue = (i / Math.max(1, bars - 1)) * 320 + time * 10
-    const alpha = (0.10 + smooth * 0.55) * (props.active ? 1 : 0.7)
-    const top = hsla(hue, 92, 58, alpha)
-    const mid = hsla(hue, 92, 40, alpha * 0.75)
-    const bottom = hsla(hue, 92, 22, alpha * 0.45)
-
-    // 每根柱子的纵向渐变
+    // 每根柱子的纵向渐变：
+    // 深色下自下而上变亮（融入黑背景）；浅色下反过来，底部实、顶部渐隐到白
     const grad = ctx.createLinearGradient(0, y, 0, y + h)
-    grad.addColorStop(0, top)
-    grad.addColorStop(0.55, mid)
-    grad.addColorStop(1, bottom)
+    if (isLight) {
+      // 浅色下柱子要「退到背景」：低不透明度的淡彩，避免和深色文字抢注意力
+      const alpha = (0.1 + smooth * 0.26) * (props.active ? 1 : 0.55)
+      grad.addColorStop(0, hsla(hue, 70, 72, alpha * 0.4))
+      grad.addColorStop(0.45, hsla(hue, 72, 64, alpha * 0.75))
+      grad.addColorStop(1, hsla(hue, 74, 56, alpha))
+    } else {
+      const alpha = (0.1 + smooth * 0.55) * (props.active ? 1 : 0.7)
+      grad.addColorStop(0, hsla(hue, 92, 58, alpha))
+      grad.addColorStop(0.55, hsla(hue, 92, 40, alpha * 0.75))
+      grad.addColorStop(1, hsla(hue, 92, 22, alpha * 0.45))
+    }
 
     // 廉价发光：不用 shadowBlur（每根柱子模糊渲染极贵，是掉帧主因），
-    // 改为在柱子后面叠一层加宽的低透明度同色矩形，'lighter' 混合下效果接近
+    // 改为在柱子后面叠一层加宽的低透明度同色矩形
     if (smooth > 0.05) {
       const glowPad = 4 + smooth * 8
-      ctx.fillStyle = hsla(hue, 92, 50, 0.10 * smooth)
+      ctx.fillStyle = isLight
+        ? hsla(hue, 70, 62, 0.07 * smooth)
+        : hsla(hue, 92, 50, 0.1 * smooth)
       roundRect(ctx, xx - glowPad, y - glowPad, barW + glowPad * 2, h + glowPad * 2, glowPad)
       ctx.fill()
     }
@@ -219,9 +238,11 @@ const tick = (ts: number) => {
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
 
-    // 顶部高光线
+    // 顶部高光线：浅色下用很淡的加深描边点出柱顶，太重会显得锯齿
     if (smooth > 0.08) {
-      ctx.strokeStyle = hsla(hue, 92, 66, 0.14 + smooth * 0.22)
+      ctx.strokeStyle = isLight
+        ? hsla(hue, 70, 52, 0.1 + smooth * 0.14)
+        : hsla(hue, 92, 66, 0.14 + smooth * 0.22)
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(xx + 1, y + 1)
@@ -230,12 +251,18 @@ const tick = (ts: number) => {
     }
   }
 
-  // 底部虚化遮罩（让柱子融入背景，避免硬边）
+  // 底部虚化遮罩（让柱子融入背景，避免硬边）；浅色用白色蒙层
   ctx.globalCompositeOperation = 'source-over'
   const fade = ctx.createLinearGradient(0, baselineY - maxH, 0, height)
-  fade.addColorStop(0, 'rgba(0,0,0,0)')
-  fade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
-  fade.addColorStop(1, 'rgba(0,0,0,0.38)')
+  if (isLight) {
+    fade.addColorStop(0, 'rgba(255,255,255,0)')
+    fade.addColorStop(0.72, 'rgba(255,255,255,0.1)')
+    fade.addColorStop(1, 'rgba(255,255,255,0.5)')
+  } else {
+    fade.addColorStop(0, 'rgba(0,0,0,0)')
+    fade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
+    fade.addColorStop(1, 'rgba(0,0,0,0.38)')
+  }
   ctx.fillStyle = fade
   ctx.fillRect(0, 0, width, height)
 }
@@ -259,6 +286,14 @@ watch(() => props.baseColor, (c) => {
   const rgb = c ? parseColorToRgb(c) : null
   if (rgb) baseRgb = rgb
 }, { immediate: true })
+
+// 主题切换时立即重铺底色，避免残留上一主题的拖尾
+watch(() => props.light, () => {
+  if (!ctx) return
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillStyle = props.light ? '#f7f8fa' : '#0a0a0a'
+  ctx.fillRect(0, 0, width, height)
+})
 
 watch(() => props.active, (v) => {
   if (v && equalizer.enabled.value) ensureAudioNodes()
