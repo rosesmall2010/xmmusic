@@ -981,7 +981,8 @@ watch(
   gap: var(--spacing-xl);
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  /* 允许唱片唱臂完整显示；横向仍由 main-area 约束 */
+  overflow: visible;
 }
 
 .album-cover-container {
@@ -989,6 +990,8 @@ watch(
   max-width: min(100%, 360px);
   flex-shrink: 1;
   min-height: 0;
+  /* 唱片唱臂需要完整显示，不能被裁切 */
+  overflow: visible;
 }
 
 .album-cover {
