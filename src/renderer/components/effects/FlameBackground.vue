@@ -9,7 +9,7 @@ import { useEqualizer } from '@/composables/useEqualizer'
 const props = withDefaults(defineProps<{
   /** 是否处于播放状态（暂停时火焰压低） */
   active?: boolean
-  /** 浅色主题：正常混合 + 深橙红勾边高饱和火舌，保证浅底上依然绚丽 */
+  /** 浅色主题：蓝色火焰（正常混合 + 青蓝勾边）；深色主题：黄橙火焰 */
   light?: boolean
 }>(), {
   active: false,
@@ -122,8 +122,8 @@ const spawnFlame = (): Flame => {
     life: 0,
     maxLife,
     size: (12 + Math.random() * 26) * (0.6 + power * 0.65) * sizeScale,
-    // 浅色偏橙红，深色偏黄橙
-    hue: props.light ? (4 + Math.random() * 22) : (8 + Math.random() * 26)
+    // 浅色：蓝色火焰；深色：黄橙火焰
+    hue: props.light ? (195 + Math.random() * 35) : (8 + Math.random() * 26)
   }
 }
 
@@ -217,20 +217,22 @@ const tick = (ts: number) => {
     const grow = Math.sin(Math.min(1, p * 1.35) * Math.PI)
     const r = Math.max(2, e.size * (0.35 + grow * 0.55))
     const fade = (1 - p) ** 1.8
-    const hue = e.hue - p * 10
+    // 浅色蓝焰向上变冷蓝，深色橙焰向上偏红
+    const hue = isLight ? e.hue + p * 12 : e.hue - p * 10
 
     ctx.save()
     ctx.translate(e.x, e.y)
     ctx.scale(0.68, 1.5)
     const grad = ctx.createRadialGradient(0, 0, r * 0.12, 0, 0, r)
     if (isLight) {
-      // 浅底：外焰深橙红勾边 + 中层高饱和橙 + 芯亮黄，靠对比出绚丽感
+      // 浅色蓝焰：外圈深蓝/靛勾边 + 中层亮青蓝 + 芯近白蓝，浅底上对比清晰又绚丽
       const a = fade * (0.62 + energy * 0.38)
-      grad.addColorStop(0, hsla(hue + 38, 100, 58, a))
-      grad.addColorStop(0.22, hsla(hue + 22, 100, 50, a * 0.95))
-      grad.addColorStop(0.5, hsla(hue + 8, 100, 42, a * 0.78))
-      grad.addColorStop(0.78, hsla(hue - 2, 98, 32, a * 0.4))
-      grad.addColorStop(1, hsla(hue - 8, 95, 26, 0))
+      const blue = hue // 约 195~230
+      grad.addColorStop(0, hsla(blue + 20, 100, 72, a))
+      grad.addColorStop(0.22, hsla(blue + 8, 100, 58, a * 0.95))
+      grad.addColorStop(0.5, hsla(blue - 5, 98, 46, a * 0.78))
+      grad.addColorStop(0.78, hsla(blue - 18, 95, 34, a * 0.42))
+      grad.addColorStop(1, hsla(blue - 28, 90, 28, 0))
     } else {
       const a = fade * (0.28 + energy * 0.42)
       grad.addColorStop(0, hsla(hue + 36, 100, 90, a))
@@ -262,7 +264,7 @@ const tick = (ts: number) => {
     const p = s.life / s.maxLife
     const a = (1 - p) * (isLight ? 0.85 : 0.75) * (0.45 + energy * 0.55)
     ctx.fillStyle = isLight
-      ? hsla(18, 100, 42, a)
+      ? hsla(210, 100, 48, a)
       : hsla(32, 100, 62, a)
     ctx.beginPath()
     ctx.arc(s.x, s.y, s.size * (1 - p * 0.4), 0, Math.PI * 2)
