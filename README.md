@@ -3,8 +3,8 @@
 > 基于 Electron + Vue 3 + TypeScript 的高颜值本地音乐播放器
 
 [![GitHub release](https://img.shields.io/github/v/release/rosesmall2010/xmmusic)](https://github.com/rosesmall2010/xmmusic/releases)
-[![License](https://img.shields.io/github/license/rosesmall2010/xmmusic)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20arm64%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/rosesmall2010/xmmusic/releases)
 
 ## ✨ 特性
 

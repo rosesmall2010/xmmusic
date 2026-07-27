@@ -7,6 +7,9 @@
 
 ## [1.1.6] - 2026-07-27
 
+### 文档
+- 修正 README 徽章：补充 MIT `LICENSE` 文件，License 改为静态 MIT 徽章；Platform 标明 macOS arm64 | Windows | Linux，并链接到 Releases
+
 ### 修复
 - 修复全屏播放封面底部被裁切：封面在矮窗口中改为受 max-height 约束等比缩小，不再被 overflow 切掉下边；唱片组件同步按可用空间缩放
 
