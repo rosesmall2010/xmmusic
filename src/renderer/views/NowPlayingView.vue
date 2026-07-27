@@ -981,11 +981,14 @@ watch(
   gap: var(--spacing-xl);
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .album-cover-container {
   width: 100%;
   max-width: min(100%, 440px);
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .album-cover {
@@ -1018,6 +1021,8 @@ watch(
 .song-info {
   text-align: center;
   width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 /* 描边效果：让文字在流动的背景特效上始终清晰
