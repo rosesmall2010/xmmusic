@@ -1054,6 +1054,11 @@ watch(
   font-weight: 600;
 }
 
+/* 浅色下 tab 在面板上方、对比度足够，不需要描边（深色仍保留） */
+.now-playing-view.is-light .panel-tab {
+  text-shadow: none;
+}
+
 /* 歌词面板 */
 .lyrics-panel {
   height: 100%;
