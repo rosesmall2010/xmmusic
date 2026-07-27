@@ -1,0 +1,13 @@
+---
+description: Git 提交作者只用 GitHub 用户名，禁止 Cursor 联名
+alwaysApply: true
+---
+
+# Git 提交作者规范
+
+- 提交作者使用本地 `git config` 中的 GitHub 用户名与邮箱（本仓库为 `rosesmall2010` / `rosesmall2010@gmail.com`）
+- **禁止**在 commit message 中追加以下任一内容：
+  - `Co-authored-by: Cursor <cursoragent@cursor.com>`
+  - 任何含 `Cursor` / `cursoragent` 的作者、联名、trailer 行
+- **禁止**修改 `git config`（包括 user.name / user.email）
+- 提交信息正文只用 Conventional Commits 中文说明，不要附带 IDE/Agent 署名

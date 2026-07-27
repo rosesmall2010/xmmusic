@@ -16,6 +16,21 @@
           <Minimize2 :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.switchToMini') }}</span>
         </button>
+        <button
+          class="btn-action"
+          @click="toggleTheme"
+          :title="isLight ? $t('header.switchToDark') : $t('header.switchToLight')"
+        >
+          <Moon v-if="isLight" :size="20" />
+          <Sun v-else :size="20" />
+          <span class="btn-tooltip">
+            {{ isLight ? $t('header.switchToDark') : $t('header.switchToLight') }}
+          </span>
+        </button>
+        <button class="btn-action" @click="toggleLanguage" :title="$t('header.switchLanguage')">
+          <Languages :size="20" />
+          <span class="btn-tooltip">{{ $t('header.switchLanguage') }}</span>
+        </button>
         <button class="btn-action" @click="toggleDesktopLyrics">
           <Monitor :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.desktopLyrics') }}</span>
@@ -199,7 +214,7 @@ import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
@@ -424,6 +439,20 @@ const toggleMiniMode = async () => {
   localStorage.setItem('lastRoute', router.currentRoute.value.fullPath)
   await window.electronAPI.setMiniMode(true)
   router.replace('/mini')
+}
+
+/** 与主界面顶栏同一套逻辑：在 light/dark 间切换并同步窗口外观 */
+const toggleTheme = async () => {
+  const next = isLight.value ? 'dark' : 'light'
+  settingsStore.setTheme(next)
+  await window.electronAPI.saveSettings({ theme: next })
+  await window.electronAPI.setWindowTheme(next)
+  window.dispatchEvent(new CustomEvent('theme-changed', { detail: next }))
+}
+
+const toggleLanguage = () => {
+  const newLang = settingsStore.language === 'zh' ? 'en' : 'zh'
+  settingsStore.setLanguage(newLang)
 }
 
 const toggleDesktopLyrics = async () => {
