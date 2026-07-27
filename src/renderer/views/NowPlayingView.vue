@@ -1012,18 +1012,18 @@ watch(
 }
 
 .album-cover {
-  /* 同时受宽高约束：矮窗口时随 max-height 缩小，避免底部被裁 */
-  width: auto;
-  height: auto;
+  /* 以宽度为准，矮窗口时由 max-height + aspect-ratio 等比缩小，避免裁底 */
+  width: 100%;
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
+  height: auto;
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--np-cover-shadow);
   position: relative;
   margin: 0 auto;
-  flex-shrink: 0;
+  flex-shrink: 1;
 }
 
 .album-cover img {

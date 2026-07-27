@@ -145,11 +145,12 @@ onBeforeUnmount(() => {
   --arm-shadow: rgba(0, 0, 0, 0.45);
 
   position: relative;
-  width: auto;
-  height: auto;
+  /* 必须以宽度撑开：盘面是绝对定位，width/height:auto 会塌成 0 */
+  width: 100%;
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
+  height: auto;
   margin: 0 auto;
 }
 
@@ -170,7 +171,6 @@ onBeforeUnmount(() => {
 .vinyl-stage {
   position: relative;
   width: 100%;
-  height: 100%;
   aspect-ratio: 1;
   overflow: visible;
 }
