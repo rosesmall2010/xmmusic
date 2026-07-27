@@ -176,21 +176,7 @@ const tick = (ts: number) => {
 
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
-  // 底部白热炉心：贴在柱脚线上沿，不越过 baseline
-  const baseH = maxH * 0.35
-  const base = ctx.createLinearGradient(0, baselineY - baseH, 0, baselineY)
-  if (isLight) {
-    base.addColorStop(0, hsla(28, 95, 55, 0))
-    base.addColorStop(0.5, hsla(32, 100, 58, 0.14 + energy * 0.16))
-    base.addColorStop(1, hsla(40, 100, 62, 0.25 + energy * 0.22))
-  } else {
-    base.addColorStop(0, hsla(20, 100, 50, 0))
-    base.addColorStop(0.4, hsla(28, 100, 58, 0.12 + energy * 0.16))
-    base.addColorStop(1, hsla(42, 100, 76, 0.25 + energy * 0.32))
-  }
-  ctx.fillStyle = base
-  ctx.fillRect(paddingX, baselineY - baseH, usableW, baseH)
-
+  // 只要火舌/火星，不要底部黄色渐变炉心背景
   const flameSpawn = Math.round((4 + energy * 14) * (props.active ? 1 : 0.35))
   for (let i = 0; i < flameSpawn && flames.length < 320; i++) flames.push(spawnFlame())
 
