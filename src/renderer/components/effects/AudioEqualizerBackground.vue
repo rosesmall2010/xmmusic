@@ -78,9 +78,8 @@ const resize = () => {
   ctx = canvas.getContext('2d', { alpha: true })
   if (ctx) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    // resize 会清空画布，先铺底色避免透明帧闪一下与主题相反的背景
-    ctx.fillStyle = props.light ? '#f7f8fa' : '#0a0a0a'
-    ctx.fillRect(0, 0, width, height)
+    // 保持透明：底色由 .now-playing-view 的封面渐变提供。
+    // 这里若铺不透明底色，会把渐变整块盖掉（封面取色就白做了）
   }
 }
 
@@ -121,15 +120,15 @@ const tick = (ts: number) => {
 
   const isLight = props.light
 
-  // 背景拖尾（类似示例图的“光带残影”）；按帧时长换算，帧率无关
-  // 浅色主题下用白色蒙层擦除，否则残影会越积越黑
-  ctx.globalCompositeOperation = 'source-over'
+  // 背景拖尾（类似示例图的“光带残影”）；按帧时长换算，帧率无关。
+  // 用 destination-out 按 alpha 擦除上一帧，而不是叠一层不透明底色：
+  // 叠底色会让 canvas 越来越不透明，把下层的封面渐变整块盖住
+  ctx.globalCompositeOperation = 'destination-out'
   // 浅色下擦除更快（tau 更小），否则淡彩残影会糊成一片脏底
   const tauTrail = isLight ? 0.032 : 0.055
-  const trailAlpha = Math.min(0.55, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
-  ctx.fillStyle = isLight
-    ? `rgba(250, 251, 252, ${trailAlpha})`
-    : `rgba(0, 0, 0, ${trailAlpha})`
+  const trailAlpha = Math.min(0.4, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
+  // destination-out 只用 alpha，颜色本身无意义
+  ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`
   ctx.fillRect(0, 0, width, height)
 
   const data = getFrequency()
@@ -168,6 +167,8 @@ const tick = (ts: number) => {
 
   // 底部柔光（像图里的光晕）；浅色下减弱，避免在浅背景上糊成一团。
   // 半径收在柱区附近：铺得太高会在柱顶上方留一片朦胧，让整个画面显糊
+  // 注意：上面的拖尾用的是 destination-out，这里必须切回正常混合才是「叠光」
+  ctx.globalCompositeOperation = 'source-over'
   const glowStrength = isLight ? 0.04 + 0.05 * (data ? 1 : 0) : 0.07 + 0.13 * (data ? 1 : 0)
   const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.42)
   glow.addColorStop(0, rgba(baseRgb, glowStrength * activeFactor))
@@ -254,18 +255,13 @@ const tick = (ts: number) => {
     }
   }
 
-  // 底部虚化遮罩（让柱子融入背景，避免硬边）；浅色用白色蒙层
-  ctx.globalCompositeOperation = 'source-over'
+  // 底部虚化（让柱子融入背景，避免硬边）：同样用擦除而不是叠蒙层，
+  // 擦的是柱子自身的不透明度，两种主题的效果一致，不需要分主题取色
+  ctx.globalCompositeOperation = 'destination-out'
   const fade = ctx.createLinearGradient(0, baselineY - maxH, 0, height)
-  if (isLight) {
-    fade.addColorStop(0, 'rgba(255,255,255,0)')
-    fade.addColorStop(0.72, 'rgba(255,255,255,0.1)')
-    fade.addColorStop(1, 'rgba(255,255,255,0.5)')
-  } else {
-    fade.addColorStop(0, 'rgba(0,0,0,0)')
-    fade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
-    fade.addColorStop(1, 'rgba(0,0,0,0.38)')
-  }
+  fade.addColorStop(0, 'rgba(0,0,0,0)')
+  fade.addColorStop(0.72, 'rgba(0,0,0,0.08)')
+  fade.addColorStop(1, 'rgba(0,0,0,0.45)')
   ctx.fillStyle = fade
   ctx.fillRect(0, 0, width, height)
 }
@@ -290,12 +286,10 @@ watch(() => props.baseColor, (c) => {
   if (rgb) baseRgb = rgb
 }, { immediate: true })
 
-// 主题切换时立即重铺底色，避免残留上一主题的拖尾
+// 主题切换时清空画布，避免上一主题的残影用新主题的混合模式继续叠加
 watch(() => props.light, () => {
   if (!ctx) return
-  ctx.globalCompositeOperation = 'source-over'
-  ctx.fillStyle = props.light ? '#f7f8fa' : '#0a0a0a'
-  ctx.fillRect(0, 0, width, height)
+  ctx.clearRect(0, 0, width, height)
 })
 
 watch(() => props.active, (v) => {

@@ -302,6 +302,23 @@ const onCoverError = () => {
 /** 无封面可取色时的背景主色 */
 const fallbackBackgroundColor = () => (isLight.value ? '#eef1f5' : '#1a1a1a')
 
+/**
+ * 从封面取色并写入背景主色。
+ * 切歌与切主题是两条并发的异步链，用一个共用的递增序号保证只有最新一次能写回，
+ * 否则慢的那次返回后会把背景改成上一首歌（或上一个主题）的颜色
+ */
+let colorRequestId = 0
+const applyCoverColor = async (coverUrl: string | null) => {
+  const id = ++colorRequestId
+  if (!coverUrl) {
+    backgroundColor.value = fallbackBackgroundColor()
+    return
+  }
+  const color = await extractAverageColor(coverUrl)
+  if (id !== colorRequestId) return
+  backgroundColor.value = color ?? fallbackBackgroundColor()
+}
+
 const queue = computed(() => playerStore.queue)
 const currentQueueIndex = computed(() => playerStore.currentQueueIndex)
 
@@ -613,29 +630,21 @@ watch(currentMusic, async (music, _prev, onCleanup) => {
       if (cancelled) return
       displayCoverUrl.value = coverUrl
 
-      const color = await extractAverageColor(coverUrl)
-      if (cancelled) return
-      if (color) backgroundColor.value = color
+      await applyCoverColor(coverUrl)
     } else {
       displayCoverUrl.value = null
-      backgroundColor.value = fallbackBackgroundColor()
+      await applyCoverColor(null)
     }
   } else {
     isFavorite.value = false
     displayCoverUrl.value = null
-    backgroundColor.value = fallbackBackgroundColor()
+    await applyCoverColor(null)
   }
 }, { immediate: true })
 
 // 切换主题时重算背景主色：深色要压暗、浅色要提亮，不能沿用上一主题的结果
-watch(isLight, async () => {
-  const cover = displayCoverUrl.value
-  if (!cover) {
-    backgroundColor.value = fallbackBackgroundColor()
-    return
-  }
-  const color = await extractAverageColor(cover)
-  backgroundColor.value = color ?? fallbackBackgroundColor()
+watch(isLight, () => {
+  applyCoverColor(displayCoverUrl.value)
 })
 
 // 仅在音效开启时绑定 Web Audio（频谱可视化不得为了动画牺牲音质）
@@ -746,7 +755,8 @@ watch(
   flex-direction: column;
   padding: var(--spacing-xl) 0;
   color: var(--np-fg);
-  /* 底层兜底色，防止路由过渡/透明 canvas 露出相反主题的底色 */
+  /* 兜底色：正常情况下会被内联的 backgroundStyle 覆盖，
+     仅在内联样式还没应用的那一帧防止露出相反主题的底色 */
   background-color: #0a0a0a;
   overflow-y: auto;
   overflow-x: hidden;
@@ -997,6 +1007,8 @@ watch(
   background: none;
   border: none;
   color: var(--np-fg-3);
+  /* 压在频谱特效上，加描边 */
+  text-shadow: var(--np-text-outline);
   font-size: var(--font-size-base);
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
@@ -1105,11 +1117,6 @@ watch(
   cursor: pointer;
   transition: background var(--transition-base);
   /* 队列文字同样压在频谱特效上，统一加描边 */
-  text-shadow: var(--np-text-outline);
-}
-
-.queue-empty,
-.panel-tab {
   text-shadow: var(--np-text-outline);
 }
 
@@ -1224,6 +1231,7 @@ watch(
   justify-content: center;
   color: var(--np-fg-5);
   font-size: var(--font-size-base);
+  text-shadow: var(--np-text-outline);
 }
 
 /* 底部播放控制区 */
