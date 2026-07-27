@@ -100,8 +100,8 @@ const tick = (ts: number) => {
   // 用 destination-out 按 alpha 擦除上一帧，而不是叠一层不透明底色：
   // 叠底色会让 canvas 越来越不透明，把下层的封面渐变整块盖住
   ctx.globalCompositeOperation = 'destination-out'
-  // 浅色擦除略快于深色即可；原先过快会把本就偏淡的柱体残影抹掉，显得更弱
-  const tauTrail = isLight ? 0.045 : 0.055
+  // 浅色/深色拖尾节奏接近，避免浅色残影被抹得太快显得发闷
+  const tauTrail = 0.055
   const trailAlpha = Math.min(0.4, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
   // destination-out 只用 alpha，颜色本身无意义
   ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`
@@ -139,7 +139,7 @@ const tick = (ts: number) => {
   const gap = 4
   const barW = Math.max(3, Math.floor((usableW - gap * (bars - 1)) / bars))
   const baselineY = height * 0.85
-  const maxH = height * 0.55
+  const maxH = height * 0.62
 
   // 拖尾用的是 destination-out；深色用加法混合出霓虹感，浅色必须用正常混合
   // （加法混合在浅背景上只会把画面洗成白色）
@@ -173,34 +173,32 @@ const tick = (ts: number) => {
     const wobble = Math.sin(time * 0.9 + i * 0.22) * (props.active ? 0.6 : 0.25)
     const xx = x + wobble
 
-    // 多彩渐变：每根柱子一个 hue（随时间微漂移），不使用白色
+    // 多彩霓虹：顶部亮、底部收暗（改浅色主题前的绚丽方向）。
+    // 文字已有八向描边，可读性够，不再为避文字把柱顶抹淡。
     const hue = (i / Math.max(1, bars - 1)) * 320 + time * 10
-    // 两种主题都是「底部实、向上渐隐」：柱顶会侵入歌词/队列区域，
-    // 顶部必须淡下去，否则高饱和亮色会把文字吃掉（描边也救不回来）
     const grad = ctx.createLinearGradient(0, y, 0, y + h)
     if (isLight) {
-      // 浅色底上要用更高不透明度 + 更深更饱和的色，否则柱体像水印看不清；
-      // 顶部仍渐隐，避免侵入歌词/队列区抢文字
-      const alpha = (0.22 + smooth * 0.5) * (props.active ? 1 : 0.6)
-      grad.addColorStop(0, hsla(hue, 78, 48, alpha * 0.22))
-      grad.addColorStop(0.35, hsla(hue, 80, 42, alpha * 0.62))
-      grad.addColorStop(1, hsla(hue, 82, 38, alpha))
+      // 浅色不能用 lighter，靠高饱和 + 实一点的 alpha 出彩；明度略低于深色以免发粉
+      const alpha = (0.22 + smooth * 0.62) * (props.active ? 1 : 0.65)
+      grad.addColorStop(0, hsla(hue, 90, 52, alpha))
+      grad.addColorStop(0.55, hsla(hue, 88, 40, alpha * 0.82))
+      grad.addColorStop(1, hsla(hue, 86, 32, alpha * 0.55))
     } else {
-      const alpha = (0.1 + smooth * 0.55) * (props.active ? 1 : 0.7)
-      grad.addColorStop(0, hsla(hue, 92, 50, alpha * 0.16))
-      grad.addColorStop(0.35, hsla(hue, 92, 46, alpha * 0.46))
-      grad.addColorStop(1, hsla(hue, 92, 42, alpha))
+      const alpha = (0.12 + smooth * 0.62) * (props.active ? 1 : 0.7)
+      grad.addColorStop(0, hsla(hue, 92, 58, alpha))
+      grad.addColorStop(0.55, hsla(hue, 92, 40, alpha * 0.75))
+      grad.addColorStop(1, hsla(hue, 92, 22, alpha * 0.45))
     }
 
     ctx.fillStyle = grad
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
 
-    // 柱顶高光线：只做很淡的一笔点出柱顶，太重会显得锯齿、也会干扰上方文字
+    // 柱顶高光线：点出霓虹边缘
     if (smooth > 0.08) {
       ctx.strokeStyle = isLight
-        ? hsla(hue, 78, 36, 0.18 + smooth * 0.22)
-        : hsla(hue, 92, 60, 0.08 + smooth * 0.12)
+        ? hsla(hue, 90, 42, 0.22 + smooth * 0.28)
+        : hsla(hue, 92, 66, 0.14 + smooth * 0.22)
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(xx + 1, y + 1)
@@ -209,18 +207,17 @@ const tick = (ts: number) => {
     }
   }
 
-  // 底部虚化（让柱子融入背景，避免硬边）：同样用擦除而不是叠蒙层，
-  // 擦的是柱子自身的不透明度；浅色擦得轻一点，否则柱基会被抹得太淡看不清
+  // 底部虚化：擦除柱脚不透明度，让柱子融入背景；浅色擦得轻，保住绚丽柱基
   ctx.globalCompositeOperation = 'destination-out'
   const fade = ctx.createLinearGradient(0, baselineY - maxH, 0, height)
   if (isLight) {
     fade.addColorStop(0, 'rgba(0,0,0,0)')
-    fade.addColorStop(0.75, 'rgba(0,0,0,0.04)')
-    fade.addColorStop(1, 'rgba(0,0,0,0.22)')
+    fade.addColorStop(0.78, 'rgba(0,0,0,0.03)')
+    fade.addColorStop(1, 'rgba(0,0,0,0.18)')
   } else {
     fade.addColorStop(0, 'rgba(0,0,0,0)')
-    fade.addColorStop(0.72, 'rgba(0,0,0,0.08)')
-    fade.addColorStop(1, 'rgba(0,0,0,0.45)')
+    fade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
+    fade.addColorStop(1, 'rgba(0,0,0,0.35)')
   }
   ctx.fillStyle = fade
   ctx.fillRect(0, 0, width, height)
