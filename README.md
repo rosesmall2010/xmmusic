@@ -96,9 +96,9 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 从 [Releases](https://github.com/rosesmall2010/xmmusic/releases) 页面下载对应平台的安装包:
 
-- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.1.5-arm64.dmg`
-- **Windows**: `xmmusic Setup 1.1.5.exe`
-- **Linux**: `xmmusic-1.1.5.AppImage`
+- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.1.6-arm64.dmg`
+- **Windows**: `xmmusic Setup 1.1.6.exe`
+- **Linux**: `xmmusic-1.1.6.AppImage`
 
 ### 从源码构建
 
