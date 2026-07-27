@@ -1435,16 +1435,19 @@ watch(
 .btn-primary {
   width: 72px;
   height: 44px;
-  background: var(--color-primary);
+  /* 底栏无实底，绿色光晕 box-shadow 会与频谱叠色，看起来像按钮周围泛绿 */
+  background-color: var(--color-primary);
   color: white;
+  border: none;
   border-radius: 22px; /* 胶囊：高度的一半 */
-  box-shadow: 0 6px 16px rgba(var(--color-primary-rgb), 0.35);
+  isolation: isolate;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
   transition: all var(--transition-base) var(--transition-timing);
 }
 
 .btn-primary:hover {
-  background: var(--color-primary-light);
-  box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.45);
+  background-color: var(--color-primary-light);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
 }
 
 .btn-primary:active {
