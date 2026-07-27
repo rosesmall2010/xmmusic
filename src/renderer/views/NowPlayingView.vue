@@ -2,7 +2,7 @@
   <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle">
     <!-- 背景特效：均衡器光带随音乐变化 -->
     <div class="background-effects" aria-hidden="true">
-      <AudioEqualizerBackground :base-color="backgroundColor" :active="isPlaying" :light="isLight" />
+      <AudioEqualizerBackground :active="isPlaying" :light="isLight" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">

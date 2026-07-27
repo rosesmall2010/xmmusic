@@ -7,19 +7,14 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEqualizer } from '@/composables/useEqualizer'
 
 const props = withDefaults(defineProps<{
-  /** 基础色（来自封面平均色），用于让均衡器配色随歌曲变化 */
-  baseColor?: string
   /** 是否处于播放状态（暂停时降低强度） */
   active?: boolean
   /** 浅色主题：改用正常混合 + 中等亮度色，避免加法混合把画面洗白 */
   light?: boolean
 }>(), {
-  baseColor: '#31c27c',
   active: false,
   light: false
 })
-
-type RGB = { r: number; g: number; b: number }
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const equalizer = useEqualizer()
@@ -35,27 +30,8 @@ let spectrum: Uint8Array | null = null
 // 柱子平滑缓存（0-1）
 let smoothed: number[] = []
 
-// 配色
-let baseRgb: RGB = { r: 49, g: 194, b: 124 }
-
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 
-const parseColorToRgb = (color: string): RGB | null => {
-  const c = color.trim()
-  if (c.startsWith('rgb')) {
-    const m = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
-    if (!m) return null
-    return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) }
-  }
-  const h = c.replace('#', '')
-  const full = h.length === 3 ? h.split('').map(ch => ch + ch).join('') : h
-  if (full.length !== 6) return null
-  const n = Number.parseInt(full, 16)
-  if (Number.isNaN(n)) return null
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
-}
-
-const rgba = (c: RGB, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`
 const hsla = (h: number, s: number, l: number, a: number) => `hsla(${h}, ${s}%, ${l}%, ${a})`
 
 const ensureAudioNodes = () => {
@@ -165,18 +141,8 @@ const tick = (ts: number) => {
   const baselineY = height * 0.85
   const maxH = height * 0.55
 
-  // 底部柔光（像图里的光晕）；浅色下减弱，避免在浅背景上糊成一团。
-  // 半径收在柱区附近：铺得太高会在柱顶上方留一片朦胧，让整个画面显糊
-  // 注意：上面的拖尾用的是 destination-out，这里必须切回正常混合才是「叠光」
-  ctx.globalCompositeOperation = 'source-over'
-  const glowStrength = isLight ? 0.04 + 0.05 * (data ? 1 : 0) : 0.07 + 0.13 * (data ? 1 : 0)
-  const glow = ctx.createRadialGradient(width * 0.5, baselineY + 40, 0, width * 0.5, baselineY + 40, height * 0.42)
-  glow.addColorStop(0, rgba(baseRgb, glowStrength * activeFactor))
-  glow.addColorStop(1, rgba(baseRgb, 0))
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, width, height)
-
-  // 深色用加法混合出霓虹感；浅色必须用正常混合，否则叠加只会把画面洗成白色
+  // 拖尾用的是 destination-out；深色用加法混合出霓虹感，浅色必须用正常混合
+  // （加法混合在浅背景上只会把画面洗成白色）
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
   // 透视微缩放：两侧略短（更接近示例图的“中心聚焦”）
@@ -225,19 +191,6 @@ const tick = (ts: number) => {
       grad.addColorStop(1, hsla(hue, 92, 42, alpha))
     }
 
-    // 廉价发光：不用 shadowBlur（每根柱子模糊渲染极贵，是掉帧主因），
-    // 改为在柱子后面叠一层略微加宽的低透明度同色矩形。
-    // 半径必须跟着 barW 走并控制在 gap 量级内：固定的大半径会让相邻柱子的
-    // 光晕大面积重叠，糊成一团雾而不是霓虹边缘
-    if (smooth > 0.05) {
-      const glowPad = Math.min(gap * 0.9, barW * (0.18 + smooth * 0.3))
-      ctx.fillStyle = isLight
-        ? hsla(hue, 70, 60, 0.12 * smooth)
-        : hsla(hue, 92, 52, 0.13 * smooth)
-      roundRect(ctx, xx - glowPad, y - glowPad, barW + glowPad * 2, h + glowPad * 2, glowPad)
-      ctx.fill()
-    }
-
     ctx.fillStyle = grad
     roundRect(ctx, xx, y, barW, h, Math.min(8, barW * 0.45))
     ctx.fill()
@@ -280,11 +233,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   smoothed = []
 })
-
-watch(() => props.baseColor, (c) => {
-  const rgb = c ? parseColorToRgb(c) : null
-  if (rgb) baseRgb = rgb
-}, { immediate: true })
 
 // 主题切换时清空画布，避免上一主题的残影用新主题的混合模式继续叠加
 watch(() => props.light, () => {
