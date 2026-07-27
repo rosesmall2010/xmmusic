@@ -997,8 +997,13 @@ watch(
 .album-cover-container {
   width: 100%;
   max-width: min(100%, 360px);
-  flex-shrink: 1;
+  /* 占满标题上方剩余高度，让封面在矮窗口里等比缩小，而不是被裁底 */
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
 
@@ -1007,13 +1012,18 @@ watch(
 }
 
 .album-cover {
-  width: 100%;
+  /* 同时受宽高约束：矮窗口时随 max-height 缩小，避免底部被裁 */
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   aspect-ratio: 1;
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--np-cover-shadow);
   position: relative;
   margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .album-cover img {

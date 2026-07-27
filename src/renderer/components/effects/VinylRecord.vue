@@ -145,8 +145,11 @@ onBeforeUnmount(() => {
   --arm-shadow: rgba(0, 0, 0, 0.45);
 
   position: relative;
-  width: 100%;
+  width: auto;
+  height: auto;
   max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
   margin: 0 auto;
 }
 
@@ -167,6 +170,7 @@ onBeforeUnmount(() => {
 .vinyl-stage {
   position: relative;
   width: 100%;
+  height: 100%;
   aspect-ratio: 1;
   overflow: visible;
 }
