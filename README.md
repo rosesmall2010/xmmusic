@@ -100,6 +100,23 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 - **Windows**: `xmmusic Setup 1.1.6.exe`
 - **Linux**: `xmmusic-1.1.6.AppImage`
 
+> macOS 安装包仅支持 **Apple Silicon（`arm64`）**。可在终端用 `uname -m` 确认，应显示 `arm64`。
+
+### macOS 安装说明
+
+1. 打开 `.dmg`，将 `xmmusic.app` 拖到「应用程序」。
+2. 首次启动建议：**Finder 中右键应用 →「打开」→ 再点「打开」**（只需一次）。
+3. 若系统提示 **「已损坏，无法打开」**：多半是 Gatekeeper 隔离属性（经 Signal / 微信 / 网盘等渠道传递时很常见），**不是安装包损坏**。在终端执行：
+
+```bash
+# 路径按实际位置修改；若解压后出现「xmmusic 2.app」等同理
+xattr -cr /Applications/xmmusic.app
+```
+
+然后再次右键「打开」。仍被拦截时，到 **系统设置 → 隐私与安全性** 中允许「仍要打开」。
+
+**建议**：优先从 GitHub Releases 用浏览器直接下载 `.dmg`，少走聊天/网盘转发。当前发布包**未做 Apple 公证**，双击可能仍会提示一次，属预期行为。
+
 ### 从源码构建
 
 ```bash
