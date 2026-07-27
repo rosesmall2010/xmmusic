@@ -623,9 +623,11 @@ watch(
   transform: translateY(-50%) scale(0);
   width: 12px;
   height: 12px;
-  background: white;
+  /* 白底 + 主色描边：纯白在浅色主题的浅背景上看不清 */
+  background: #ffffff;
+  border: 2px solid var(--color-primary);
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

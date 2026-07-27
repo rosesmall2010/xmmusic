@@ -720,6 +720,12 @@ watch(
   /* 文字描边色：深色主题用黑描边，浅色主题用白描边 */
   --np-outline: rgba(0, 0, 0, 0.8);
   --np-outline-glow: rgba(0, 0, 0, 0.6);
+  /* 小字号用的四向轻描边：让歌词/队列文字压在频谱特效上依然清晰 */
+  --np-text-outline:
+    0 1px 0 var(--np-outline),
+    0 -1px 0 var(--np-outline),
+    1px 0 0 var(--np-outline),
+    -1px 0 0 var(--np-outline);
   --np-cover-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 
   position: fixed;
@@ -741,11 +747,13 @@ watch(
 }
 
 .now-playing-view.is-light {
+  /* 浅色下文字压在淡彩特效上，对比度要比深色主题更高：
+     深色主题的白字靠亮度差就够，浅色主题的深字必须提高不透明度才清晰 */
   --np-fg: #14161a;
-  --np-fg-2: rgba(20, 22, 26, 0.78);
-  --np-fg-3: rgba(20, 22, 26, 0.62);
-  --np-fg-4: rgba(20, 22, 26, 0.5);
-  --np-fg-5: rgba(20, 22, 26, 0.38);
+  --np-fg-2: rgba(20, 22, 26, 0.92);
+  --np-fg-3: rgba(20, 22, 26, 0.78);
+  --np-fg-4: rgba(20, 22, 26, 0.68);
+  --np-fg-5: rgba(20, 22, 26, 0.52);
   --np-hover: rgba(20, 22, 26, 0.07);
   --np-hover-soft: rgba(20, 22, 26, 0.04);
   --np-border: rgba(20, 22, 26, 0.1);
@@ -1041,6 +1049,7 @@ watch(
   cursor: pointer;
   min-height: 1.5em;
   padding: 0 var(--spacing-lg);
+  text-shadow: var(--np-text-outline);
 }
 
 .lyrics-line:hover {
@@ -1052,13 +1061,8 @@ watch(
   color: var(--np-fg);
   font-weight: 700;
   transform: scale(1.05);
-  /* 当前行叠在特效上，加描边保证可读 */
-  text-shadow:
-    0 1px 0 var(--np-outline),
-    0 -1px 0 var(--np-outline),
-    1px 0 0 var(--np-outline),
-    -1px 0 0 var(--np-outline),
-    0 0 6px var(--np-outline-glow);
+  /* 当前行字号大、更突出，描边之外再加一层扩散提升可读性 */
+  text-shadow: var(--np-text-outline), 0 0 6px var(--np-outline-glow);
 }
 
 .lyrics-line.empty {
@@ -1103,6 +1107,13 @@ watch(
   border-radius: var(--radius-base);
   cursor: pointer;
   transition: background var(--transition-base);
+  /* 队列文字同样压在频谱特效上，统一加描边 */
+  text-shadow: var(--np-text-outline);
+}
+
+.queue-empty,
+.panel-tab {
+  text-shadow: var(--np-text-outline);
 }
 
 .queue-item:hover {
@@ -1224,7 +1235,6 @@ watch(
   flex-direction: column;
   gap: var(--spacing-lg);
   padding: var(--spacing-lg) 0;
-  border-top: 1px solid var(--np-border);
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -1244,7 +1254,8 @@ watch(
   border-radius: 2px;
   cursor: pointer;
   position: relative;
-  margin-bottom: var(--spacing-xs);
+  /* 左右/上方留出 6px：拖动按钮比轨道大，否则会被外层的 overflow 裁掉 */
+  margin: 6px 6px var(--spacing-xs);
 }
 
 .progress-fill {
@@ -1261,8 +1272,11 @@ watch(
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
-  background: var(--np-fill);
+  /* 白底 + 主色描边：深色与浅色主题下都能看清 */
+  background: #ffffff;
+  border: 2px solid var(--color-primary);
   border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
   opacity: 0;
   transition: opacity var(--transition-base);
 }
@@ -1276,6 +1290,9 @@ watch(
   justify-content: space-between;
   font-size: var(--font-size-xs);
   color: var(--np-fg-3);
+  /* 与进度条左右对齐（进度条有 6px 外边距） */
+  padding: 0 6px;
+  text-shadow: var(--np-text-outline);
 }
 
 .controls {
