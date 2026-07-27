@@ -16,18 +16,14 @@
           <Minimize2 :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.switchToMini') }}</span>
         </button>
-        <button
-          class="btn-action"
-          @click="toggleTheme"
-          :title="isLight ? $t('header.switchToDark') : $t('header.switchToLight')"
-        >
+        <button class="btn-action" @click="toggleTheme">
           <Moon v-if="isLight" :size="20" />
           <Sun v-else :size="20" />
           <span class="btn-tooltip">
             {{ isLight ? $t('header.switchToDark') : $t('header.switchToLight') }}
           </span>
         </button>
-        <button class="btn-action" @click="toggleLanguage" :title="$t('header.switchLanguage')">
+        <button class="btn-action" @click="toggleLanguage">
           <Languages :size="20" />
           <span class="btn-tooltip">{{ $t('header.switchLanguage') }}</span>
         </button>
