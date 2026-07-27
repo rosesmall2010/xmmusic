@@ -229,21 +229,7 @@ const tick = (ts: number) => {
 
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
-  // 底部淡蓝大气晕（参考图里的 bloom，不是黄炉心）
-  const bloomH = maxH * 0.28
-  const bloom = ctx.createLinearGradient(0, baselineY - bloomH, 0, baselineY)
-  if (isLight) {
-    bloom.addColorStop(0, hsla(210, 100, 45, 0))
-    bloom.addColorStop(0.55, hsla(205, 100, 48, 0.06 + energy * 0.08))
-    bloom.addColorStop(1, hsla(200, 100, 55, 0.1 + energy * 0.12))
-  } else {
-    bloom.addColorStop(0, hsla(210, 100, 55, 0))
-    bloom.addColorStop(0.5, hsla(205, 100, 60, 0.04 + energy * 0.08))
-    bloom.addColorStop(1, hsla(200, 90, 70, 0.08 + energy * 0.14))
-  }
-  ctx.fillStyle = bloom
-  ctx.fillRect(paddingX, baselineY - bloomH, usableW, bloomH)
-
+  // 不要任何背景晕层，只要火舌与火星
   // 主体火舌 + 细尖卷须
   const bodySpawn = Math.round((5 + energy * 16) * (props.active ? 1 : 0.35))
   const wispSpawn = Math.round((3 + energy * 10) * (props.active ? 1 : 0.3))
