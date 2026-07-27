@@ -1,8 +1,9 @@
 <template>
   <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle">
-    <!-- 背景特效：均衡器光带随音乐变化 -->
+    <!-- 背景特效：随所选特效切换；唱片特效的主体在封面区，背景保持干净 -->
     <div class="background-effects" aria-hidden="true">
-      <AudioEqualizerBackground :active="isPlaying" :light="isLight" />
+      <AudioEqualizerBackground v-if="effect === 'spectrum'" :active="isPlaying" :light="isLight" />
+      <FlameBackground v-else-if="effect === 'flame'" :active="isPlaying" :light="isLight" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
@@ -27,6 +28,12 @@
           <Languages :size="20" />
           <span class="btn-tooltip">{{ $t('header.switchLanguage') }}</span>
         </button>
+        <button class="btn-action" @click="cycleEffect">
+          <component :is="EffectIcon" :size="20" />
+          <span class="btn-tooltip">
+            {{ $t('nowPlaying.switchEffect') }}：{{ $t(`nowPlaying.effect.${effect}`) }}
+          </span>
+        </button>
         <button class="btn-action" @click="toggleDesktopLyrics">
           <Monitor :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.desktopLyrics') }}</span>
@@ -44,9 +51,21 @@
       <div class="main-area">
         <!-- 左侧：封面和歌曲信息 -->
         <div class="left-panel">
-          <!-- 专辑封面 -->
+          <!-- 专辑封面：唱片特效下换成旋转黑胶 -->
           <div class="album-cover-container">
-            <div class="album-cover">
+            <VinylRecord
+              v-if="effect === 'vinyl'"
+              :cover-url="displayCoverUrl"
+              :active="isPlaying"
+              :light="isLight"
+              :alt="$t('music.cover')"
+              @cover-error="onCoverError"
+            >
+              <template #fallback>
+                <DefaultCover mode="fill" />
+              </template>
+            </VinylRecord>
+            <div v-else class="album-cover">
               <DefaultCover v-if="!displayCoverUrl" mode="fill" />
               <template v-else>
                 <DefaultCover class="fallback-cover" mode="fill" />
@@ -208,9 +227,11 @@ import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
+import FlameBackground from '@/components/effects/FlameBackground.vue'
+import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Disc3 } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
@@ -243,6 +264,19 @@ const isLight = computed(() => {
   if (t === 'dark') return false
   return !systemPrefersDark.value
 })
+
+/** 当前特效：由 settingsStore 持久化，重启后保持上次选择 */
+const effect = computed(() => settingsStore.nowPlayingEffect)
+
+const EffectIcon = computed(() => {
+  if (effect.value === 'flame') return Flame
+  if (effect.value === 'vinyl') return Disc3
+  return AudioLines
+})
+
+const cycleEffect = () => {
+  settingsStore.cycleNowPlayingEffect()
+}
 
 const backgroundColor = ref('#1a1a1a')
 /** 展示中的封面 URL：切歌时等新图加载完成再替换，避免 img 清空透白 */

@@ -84,7 +84,13 @@
     "noLyrics": "暂无歌词",
     "noMusic": "暂无播放",
     "unknownArtist": "未知艺术家",
-    "lyricsLoadError": "歌词加载失败"
+    "lyricsLoadError": "歌词加载失败",
+    "switchEffect": "切换特效",
+    "effect": {
+      "spectrum": "霓虹频谱",
+      "flame": "火焰",
+      "vinyl": "经典唱片"
+    }
   },
   "miniPlayer": {
     "exitMiniMode": "退出迷你模式",

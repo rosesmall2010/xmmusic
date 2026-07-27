@@ -84,7 +84,13 @@
     "noLyrics": "No lyrics available",
     "noMusic": "No music playing",
     "unknownArtist": "Unknown Artist",
-    "lyricsLoadError": "Failed to load lyrics"
+    "lyricsLoadError": "Failed to load lyrics",
+    "switchEffect": "Switch Effect",
+    "effect": {
+      "spectrum": "Neon Spectrum",
+      "flame": "Flame",
+      "vinyl": "Classic Vinyl"
+    }
   },
   "miniPlayer": {
     "exitMiniMode": "Exit Mini Mode",

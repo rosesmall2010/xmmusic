@@ -4,6 +4,11 @@ import { setLocale } from '@/locales'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
+/** 全屏播放页的视觉特效 */
+export type NowPlayingEffect = 'spectrum' | 'flame' | 'vinyl'
+
+/** 特效切换顺序：按钮每次点击按此顺序循环 */
+export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'vinyl']
 
 // 检测系统语言
 function detectSystemLanguage(): 'zh' | 'en' {
@@ -34,6 +39,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const autoPlay = ref(localStorage.getItem('autoPlay') !== 'false') // Default true
   const scanOnStartup = ref(localStorage.getItem('scanOnStartup') === 'true')
 
+  // 全屏播放特效：从 localStorage 恢复，重启后保持上次选择；值非法时回落到频谱
+  const savedEffect = localStorage.getItem('nowPlayingEffect') as NowPlayingEffect | null
+  const nowPlayingEffect = ref<NowPlayingEffect>(
+    savedEffect && NOW_PLAYING_EFFECTS.includes(savedEffect) ? savedEffect : 'spectrum'
+  )
+
   // Actions
   function setTheme(newTheme: Theme) {
     theme.value = newTheme
@@ -60,6 +71,17 @@ export const useSettingsStore = defineStore('settings', () => {
     language.value = newLanguage
     localStorage.setItem('locale', newLanguage)
     setLocale(newLanguage)
+  }
+
+  function setNowPlayingEffect(effect: NowPlayingEffect) {
+    nowPlayingEffect.value = effect
+    localStorage.setItem('nowPlayingEffect', effect)
+  }
+
+  /** 按固定顺序切到下一个特效 */
+  function cycleNowPlayingEffect() {
+    const idx = NOW_PLAYING_EFFECTS.indexOf(nowPlayingEffect.value)
+    setNowPlayingEffect(NOW_PLAYING_EFFECTS[(idx + 1) % NOW_PLAYING_EFFECTS.length])
   }
 
   // Helper to apply theme
@@ -99,8 +121,11 @@ export const useSettingsStore = defineStore('settings', () => {
     closeToTray,
     autoPlay,
     scanOnStartup,
+    nowPlayingEffect,
     setTheme,
     setLanguage,
+    setNowPlayingEffect,
+    cycleNowPlayingEffect,
     toggleCloseToTray,
     toggleAutoPlay,
     toggleScanOnStartup
