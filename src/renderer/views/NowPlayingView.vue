@@ -1435,19 +1435,20 @@ watch(
 .btn-primary {
   width: 72px;
   height: 44px;
-  /* 底栏无实底，绿色光晕 box-shadow 会与频谱叠色，看起来像按钮周围泛绿 */
+  /* 全屏底栏透明 + 父级 overflow 会裁掉阴影，留下底部一条发灰的直线残影；
+     这里不加 box-shadow，只保留实心胶囊 */
   background-color: var(--color-primary);
   color: white;
   border: none;
   border-radius: 22px; /* 胶囊：高度的一半 */
-  isolation: isolate;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
-  transition: all var(--transition-base) var(--transition-timing);
+  box-shadow: none;
+  transition: background-color var(--transition-base) var(--transition-timing),
+    transform var(--transition-base) var(--transition-timing);
 }
 
 .btn-primary:hover {
   background-color: var(--color-primary-light);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  box-shadow: none;
 }
 
 .btn-primary:active {
