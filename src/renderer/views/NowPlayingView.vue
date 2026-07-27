@@ -1005,6 +1005,9 @@ watch(
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* 以容器宽高较小边作为封面边长，避免 width:100% 压不住 max-height 时裁底 */
+  container-type: size;
+  container-name: album-cover;
 }
 
 .left-panel.is-vinyl .album-cover-container {
@@ -1012,8 +1015,8 @@ watch(
 }
 
 .album-cover {
-  /* 以宽度为准，矮窗口时由 max-height + aspect-ratio 等比缩小，避免裁底 */
-  width: 100%;
+  /* 取容器宽、高中的较小值，始终保持正方形且完整可见 */
+  width: min(100%, 100cqh);
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
@@ -1023,7 +1026,16 @@ watch(
   box-shadow: var(--np-cover-shadow);
   position: relative;
   margin: 0 auto;
-  flex-shrink: 1;
+  flex-shrink: 0;
+}
+
+/* 唱片同样跟容器较小边缩放，避免塌缩或裁切 */
+.album-cover-container :deep(.vinyl) {
+  width: min(100%, 100cqh);
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1;
+  height: auto;
 }
 
 .album-cover img {

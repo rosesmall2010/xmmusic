@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
   --arm-shadow: rgba(0, 0, 0, 0.45);
 
   position: relative;
-  /* 必须以宽度撑开：盘面是绝对定位，width/height:auto 会塌成 0 */
+  /* 默认撑满父级；NowPlaying 容器 query 会覆盖为 min(100%, 100cqh) */
   width: 100%;
   max-width: 100%;
   max-height: 100%;
