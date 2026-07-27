@@ -9,11 +9,11 @@
 
 ### 文档
 - 同步更新 README：最新版本 v1.1.5、全屏特效/浅色主题说明、安装包文件名；播放链路说明改为原生 Audio 为主、Howler 兜底
+
+### 修复
 - 修复唱片唱臂被 `.main-area` 裁切：vinyl 时父级一并放开 overflow
 - 唱片旋转改为挂载后再启动，避免 discRef 未就绪时空转
 - 火焰生成改为复用本帧 stage；小粒子改用实心色减少 createRadialGradient
-
-### 修复
 - 修复音效（均衡器）设置退出后丢失：开关/预设立即落盘，关闭面板与退出前 flush；localStorage 同步镜像兜底
 - 修复全屏播放偶发白屏闪一下：去掉主布局 `out-in` 空窗、进入 NowPlaying 禁用淡入淡出；封面取色强制压暗；canvas resize 先铺黑底
 - 降低全屏白屏频率：普通页恢复 `out-in`（避免叠层透底）；进出 NowPlaying 仍用 instant；去掉会触发重挂载的 route key；封面预加载后再替换；去掉进场 opacity:0 动画；背景色与渐变拆开写
