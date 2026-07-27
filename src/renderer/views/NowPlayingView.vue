@@ -960,15 +960,16 @@ watch(
   box-sizing: border-box;
 }
 
-/* 上半部分 - 左右分栏 */
+/* 上半部分 - 左右对半：封面+标题 | 歌词/队列 */
 .main-area {
   flex: 1;
   display: grid;
-  grid-template-columns: 400px 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-3xl);
   min-height: 0;
   overflow: hidden;
   min-width: 0;
+  align-items: stretch;
 }
 
 /* 左侧面板 - 封面和歌曲信息 */
@@ -976,16 +977,19 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-xl);
+  min-width: 0;
+  min-height: 0;
 }
 
 .album-cover-container {
   width: 100%;
+  max-width: min(100%, 440px);
 }
 
 .album-cover {
   width: 100%;
-  max-width: 320px;
   aspect-ratio: 1;
   border-radius: var(--radius-xl);
   overflow: hidden;
