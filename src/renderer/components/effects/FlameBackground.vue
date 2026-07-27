@@ -9,14 +9,14 @@ import { useEqualizer } from '@/composables/useEqualizer'
 const props = withDefaults(defineProps<{
   /** 是否处于播放状态（暂停时火焰压低） */
   active?: boolean
-  /** 浅色主题：蓝色火焰（正常混合 + 青蓝勾边）；深色主题：黄橙火焰 */
+  /** 浅色主题：正常混合 + 更深钴蓝勾边，保证浅底对比；深浅均用蓝色火焰 */
   light?: boolean
 }>(), {
   active: false,
   light: false
 })
 
-/** 大火舌粒子 */
+/** 火舌：白芯 → 电光青 → 钴蓝外焰 */
 type Flame = {
   x: number
   y: number
@@ -25,10 +25,13 @@ type Flame = {
   life: number
   maxLife: number
   size: number
-  hue: number
+  /** 色相偏移：偏青或偏靛 */
+  hueBias: number
+  /** 0=主体火舌，1=细尖卷须 */
+  kind: 0 | 1
 }
 
-/** 上浮火星 */
+/** 火星：多为蓝白，少量暖色点缀（贴近参考图） */
 type Spark = {
   x: number
   y: number
@@ -37,6 +40,7 @@ type Spark = {
   life: number
   maxLife: number
   size: number
+  warm: boolean
 }
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -59,8 +63,7 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const hsla = (h: number, s: number, l: number, a: number) => `hsla(${h}, ${s}%, ${l}%, ${a})`
 
 /**
- * 与柱状频谱 AudioEqualizerBackground 完全一致的舞台区域：
- * paddingX / baselineY / maxH 同源，底边停在进度条上沿（不含控制栏）
+ * 与柱状频谱同一舞台：底边停在进度条上沿（不含控制栏）
  */
 const stage = () => {
   const paddingX = Math.max(18, width * 0.08)
@@ -103,44 +106,92 @@ const resize = () => {
   if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 
-const spawnFlame = (): Flame => {
+const spawnFlame = (kind: 0 | 1 = 0): Flame => {
   const { paddingX, usableW, baselineY } = stage()
-  const centered = (Math.random() + Math.random()) / 2
+  // 中心略密，形成参考图里「火墙」感
+  const centered = (Math.random() + Math.random() + Math.random()) / 3
   const x = paddingX + centered * usableW
   const centerFocus = 1 - Math.abs(centered - 0.5) * 2
-  const power = 0.4 + energy * 0.7
-  // 浅色下寿命略长，火墙更连成片、更绚丽
-  const lifeScale = props.light ? 1.15 : 1
-  const maxLife = (0.4 + Math.random() * 0.55) * (0.7 + power * 0.5) * lifeScale
-  const sizeScale = props.light ? 1.18 : 1
+  const power = 0.45 + energy * 0.75
+  const isWisp = kind === 1
+  const maxLife = (isWisp ? 0.35 : 0.5) + Math.random() * (isWisp ? 0.45 : 0.7)
+  const sizeBase = isWisp
+    ? 6 + Math.random() * 14
+    : 14 + Math.random() * 32
   return {
     x,
-    // 只在柱脚线上生成，绝不进入控制栏
-    y: baselineY - Math.random() * height * 0.012,
-    vx: (Math.random() - 0.5) * 32,
-    vy: -(80 + Math.random() * 130) * (0.55 + power) * (0.55 + centerFocus * 0.5),
+    y: baselineY - Math.random() * height * 0.01,
+    vx: (Math.random() - 0.5) * (isWisp ? 55 : 28),
+    vy: -(70 + Math.random() * (isWisp ? 180 : 140)) * (0.55 + power) * (0.5 + centerFocus * 0.55),
     life: 0,
-    maxLife,
-    size: (12 + Math.random() * 26) * (0.6 + power * 0.65) * sizeScale,
-    // 浅色：蓝色火焰；深色：黄橙火焰
-    hue: props.light ? (195 + Math.random() * 35) : (8 + Math.random() * 26)
+    maxLife: maxLife * (0.75 + power * 0.45),
+    size: sizeBase * (0.55 + power * 0.7),
+    // 190~220：青蓝 ↔ 电光蓝；卷须略偏靛
+    hueBias: isWisp ? (210 + Math.random() * 25) : (190 + Math.random() * 28),
+    kind
   }
 }
 
 const spawnSpark = (): Spark => {
   const { paddingX, usableW, baselineY } = stage()
-  const x = paddingX + Math.random() * usableW
   const power = 0.4 + energy * 0.7
+  // 参考图：少量橙红火星点缀蓝焰
+  const warm = Math.random() < 0.18
   return {
-    x,
-    y: baselineY - Math.random() * height * 0.18,
-    vx: (Math.random() - 0.5) * 28,
-    vy: -(40 + Math.random() * 90) * power,
+    x: paddingX + Math.random() * usableW,
+    y: baselineY - Math.random() * height * 0.22,
+    vx: (Math.random() - 0.5) * 36,
+    vy: -(50 + Math.random() * 110) * power,
     life: 0,
-    maxLife: 0.8 + Math.random() * 1.4,
-    // 浅色火星略大，保证可见
-    size: (props.light ? 1.8 : 1.2) + Math.random() * (props.light ? 3.4 : 2.8)
+    maxLife: 0.7 + Math.random() * 1.5,
+    size: warm ? 1.1 + Math.random() * 2.2 : 1.4 + Math.random() * 3.2,
+    warm
   }
+}
+
+const drawBlueTongue = (
+  c: CanvasRenderingContext2D,
+  e: Flame,
+  fade: number,
+  isLight: boolean
+) => {
+  const grow = Math.sin(Math.min(1, (e.life / e.maxLife) * 1.25) * Math.PI)
+  // 火舌竖向拉得很长，尖端更像参考图的卷须
+  const stretchY = e.kind === 1 ? 2.6 : 2.15
+  const stretchX = e.kind === 1 ? 0.38 : 0.48
+  const r = Math.max(2, e.size * (0.28 + grow * 0.72))
+  const hue = e.hueBias + (e.life / e.maxLife) * 18
+
+  c.save()
+  c.translate(e.x, e.y)
+  c.scale(stretchX, stretchY)
+
+  // 外晕（钴蓝）→ 中层电光蓝 → 白青芯
+  const grad = c.createRadialGradient(0, r * 0.08, 0, 0, 0, r)
+  if (isLight) {
+    // 浅底：外圈更深，芯更亮，保证对比
+    const a = fade * (0.7 + energy * 0.3)
+    grad.addColorStop(0, hsla(hue + 30, 60, 96, a))
+    grad.addColorStop(0.12, hsla(hue + 18, 100, 78, a * 0.95))
+    grad.addColorStop(0.35, hsla(hue + 5, 100, 58, a * 0.88))
+    grad.addColorStop(0.62, hsla(hue - 8, 98, 42, a * 0.55))
+    grad.addColorStop(0.85, hsla(hue - 22, 95, 30, a * 0.22))
+    grad.addColorStop(1, hsla(hue - 30, 90, 24, 0))
+  } else {
+    // 深底 + lighter：白芯爆亮，外焰钴蓝晕开（贴近参考）
+    const a = fade * (0.32 + energy * 0.48)
+    grad.addColorStop(0, hsla(hue + 35, 40, 98, a))
+    grad.addColorStop(0.1, hsla(hue + 22, 100, 82, a * 0.95))
+    grad.addColorStop(0.32, hsla(hue + 8, 100, 62, a * 0.85))
+    grad.addColorStop(0.58, hsla(hue - 5, 100, 48, a * 0.5))
+    grad.addColorStop(0.82, hsla(hue - 18, 100, 36, a * 0.2))
+    grad.addColorStop(1, hsla(hue - 28, 100, 28, 0))
+  }
+  c.fillStyle = grad
+  c.beginPath()
+  c.arc(0, 0, r, 0, Math.PI * 2)
+  c.fill()
+  c.restore()
 }
 
 const tick = (ts: number) => {
@@ -154,10 +205,10 @@ const tick = (ts: number) => {
   const isLight = props.light
   const { paddingX, usableW, baselineY, maxH, topY } = stage()
 
-  // 拖尾擦除：浅色擦得慢一点，火舌更连成墙、更绚丽
+  // 拖尾：保留一点残影，火舌才像流体连成墙
   ctx.globalCompositeOperation = 'destination-out'
-  const tauTrail = isLight ? 0.07 : 0.04
-  const trailCap = isLight ? 0.42 : 0.65
+  const tauTrail = isLight ? 0.065 : 0.05
+  const trailCap = isLight ? 0.4 : 0.5
   const trailAlpha = Math.min(trailCap, 1 - Math.exp(-dt / tauTrail)).toFixed(3)
   ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`
   ctx.fillRect(0, 0, width, height)
@@ -175,7 +226,6 @@ const tick = (ts: number) => {
   if (!props.active) target *= 0.3
   energy += (clamp01(target) - energy) * (1 - Math.exp(-dt / 0.08))
 
-  // 裁剪到与柱状特效相同的舞台矩形：左右内边距 + 顶到柱顶 + 底到柱脚（进度条上沿）
   ctx.save()
   ctx.beginPath()
   ctx.rect(paddingX, topY, usableW, maxH)
@@ -183,21 +233,30 @@ const tick = (ts: number) => {
 
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
-  // 只要火舌/火星，不要底部黄色渐变炉心背景
-  // 浅色多生一点粒子，密度上来才有绚丽感
-  const flameSpawn = Math.round(
-    (4 + energy * (isLight ? 18 : 14)) * (props.active ? 1 : 0.35)
-  )
-  for (let i = 0; i < flameSpawn && flames.length < (isLight ? 380 : 320); i++) {
-    flames.push(spawnFlame())
+  // 底部淡蓝大气晕（参考图里的 bloom，不是黄炉心）
+  const bloomH = maxH * 0.28
+  const bloom = ctx.createLinearGradient(0, baselineY - bloomH, 0, baselineY)
+  if (isLight) {
+    bloom.addColorStop(0, hsla(210, 100, 45, 0))
+    bloom.addColorStop(0.55, hsla(205, 100, 48, 0.06 + energy * 0.08))
+    bloom.addColorStop(1, hsla(200, 100, 55, 0.1 + energy * 0.12))
+  } else {
+    bloom.addColorStop(0, hsla(210, 100, 55, 0))
+    bloom.addColorStop(0.5, hsla(205, 100, 60, 0.04 + energy * 0.08))
+    bloom.addColorStop(1, hsla(200, 90, 70, 0.08 + energy * 0.14))
   }
+  ctx.fillStyle = bloom
+  ctx.fillRect(paddingX, baselineY - bloomH, usableW, bloomH)
 
-  const sparkSpawn = Math.round(
-    (1 + energy * (isLight ? 8 : 6)) * (props.active ? 1 : 0.25)
-  )
-  for (let i = 0; i < sparkSpawn && sparks.length < (isLight ? 200 : 160); i++) {
-    sparks.push(spawnSpark())
-  }
+  // 主体火舌 + 细尖卷须
+  const bodySpawn = Math.round((5 + energy * 16) * (props.active ? 1 : 0.35))
+  const wispSpawn = Math.round((3 + energy * 10) * (props.active ? 1 : 0.3))
+  const maxFlames = 420
+  for (let i = 0; i < bodySpawn && flames.length < maxFlames; i++) flames.push(spawnFlame(0))
+  for (let i = 0; i < wispSpawn && flames.length < maxFlames; i++) flames.push(spawnFlame(1))
+
+  const sparkSpawn = Math.round((2 + energy * 8) * (props.active ? 1 : 0.25))
+  for (let i = 0; i < sparkSpawn && sparks.length < 220; i++) sparks.push(spawnSpark())
 
   const nextFlames: Flame[] = []
   for (const e of flames) {
@@ -205,108 +264,72 @@ const tick = (ts: number) => {
     if (e.life >= e.maxLife) continue
 
     const p = e.life / e.maxLife
-    e.vx += Math.sin(time * 3.2 + e.y * 0.025) * 48 * dt
-    e.vy -= 55 * dt
+    // 湍流：左右卷曲，形成参考图里扭动的火舌
+    e.vx += Math.sin(time * 4.2 + e.y * 0.03 + e.x * 0.01) * (e.kind === 1 ? 75 : 42) * dt
+    e.vy -= (e.kind === 1 ? 70 : 48) * dt
     e.x += e.vx * dt
     e.y += e.vy * dt
 
-    // 超出舞台顶部 / 越过柱脚 / 超出左右内边距 → 丢弃
     if (e.y < topY || e.y > baselineY) continue
     if (e.x < paddingX || e.x > paddingX + usableW) continue
 
-    const grow = Math.sin(Math.min(1, p * 1.35) * Math.PI)
-    const r = Math.max(2, e.size * (0.35 + grow * 0.55))
-    const fade = (1 - p) ** 1.8
-    // 浅色蓝焰向上变冷蓝，深色橙焰向上偏红
-    const hue = isLight ? e.hue + p * 12 : e.hue - p * 10
-
-    ctx.save()
-    ctx.translate(e.x, e.y)
-    ctx.scale(0.68, 1.5)
-    const grad = ctx.createRadialGradient(0, 0, r * 0.12, 0, 0, r)
-    if (isLight) {
-      // 浅色蓝焰：外圈深蓝/靛勾边 + 中层亮青蓝 + 芯近白蓝，浅底上对比清晰又绚丽
-      const a = fade * (0.62 + energy * 0.38)
-      const blue = hue // 约 195~230
-      grad.addColorStop(0, hsla(blue + 20, 100, 72, a))
-      grad.addColorStop(0.22, hsla(blue + 8, 100, 58, a * 0.95))
-      grad.addColorStop(0.5, hsla(blue - 5, 98, 46, a * 0.78))
-      grad.addColorStop(0.78, hsla(blue - 18, 95, 34, a * 0.42))
-      grad.addColorStop(1, hsla(blue - 28, 90, 28, 0))
-    } else {
-      const a = fade * (0.28 + energy * 0.42)
-      grad.addColorStop(0, hsla(hue + 36, 100, 90, a))
-      grad.addColorStop(0.22, hsla(hue + 20, 100, 65, a * 0.92))
-      grad.addColorStop(0.55, hsla(hue, 100, 48, a * 0.5))
-      grad.addColorStop(1, hsla(hue - 6, 100, 34, 0))
-    }
-    ctx.fillStyle = grad
-    ctx.beginPath()
-    ctx.arc(0, 0, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
-
+    const fade = (1 - p) ** (e.kind === 1 ? 1.4 : 1.7)
+    drawBlueTongue(ctx, e, fade, isLight)
     nextFlames.push(e)
   }
   flames = nextFlames
 
+  // 火星
   const nextSparks: Spark[] = []
   for (const s of sparks) {
     s.life += dt
     if (s.life >= s.maxLife) continue
-    s.vx += Math.sin(time * 4 + s.x * 0.01) * 18 * dt
-    s.vy -= 20 * dt
+    s.vx += Math.sin(time * 5 + s.x * 0.012) * 22 * dt
+    s.vy -= 24 * dt
     s.x += s.vx * dt
     s.y += s.vy * dt
     if (s.y < topY || s.y > baselineY) continue
     if (s.x < paddingX || s.x > paddingX + usableW) continue
 
     const p = s.life / s.maxLife
-    const a = (1 - p) * (isLight ? 0.85 : 0.75) * (0.45 + energy * 0.55)
-    ctx.fillStyle = isLight
-      ? hsla(210, 100, 48, a)
-      : hsla(32, 100, 62, a)
+    const a = (1 - p) * (isLight ? 0.9 : 0.85) * (0.5 + energy * 0.5)
+    if (s.warm) {
+      ctx.fillStyle = hsla(18 + Math.random() * 16, 100, isLight ? 48 : 58, a * 0.85)
+    } else {
+      ctx.fillStyle = isLight
+        ? hsla(205, 100, 52, a)
+        : hsla(200, 100, 78, a)
+    }
     ctx.beginPath()
-    ctx.arc(s.x, s.y, s.size * (1 - p * 0.4), 0, Math.PI * 2)
+    ctx.arc(s.x, s.y, s.size * (1 - p * 0.35), 0, Math.PI * 2)
     ctx.fill()
     nextSparks.push(s)
   }
   sparks = nextSparks
 
-  // 顶部收口（舞台内）：与柱顶融合；浅色收得轻一点，保住上半段火舌
+  // 顶部收口：火舌尖自然淡出
   ctx.globalCompositeOperation = 'destination-out'
-  const topFade = ctx.createLinearGradient(0, topY, 0, topY + maxH * 0.22)
-  topFade.addColorStop(0, isLight ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.7)')
+  const topFade = ctx.createLinearGradient(0, topY, 0, topY + maxH * 0.2)
+  topFade.addColorStop(0, isLight ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.55)')
   topFade.addColorStop(1, 'rgba(0,0,0,0)')
   ctx.fillStyle = topFade
-  ctx.fillRect(paddingX, topY, usableW, maxH * 0.22)
+  ctx.fillRect(paddingX, topY, usableW, maxH * 0.2)
 
-  // 底部收口：浅色几乎不擦，避免把最绚丽的柱脚抹淡
-  const bottomFade = ctx.createLinearGradient(0, topY, 0, baselineY)
-  if (isLight) {
-    bottomFade.addColorStop(0, 'rgba(0,0,0,0)')
-    bottomFade.addColorStop(0.88, 'rgba(0,0,0,0)')
-    bottomFade.addColorStop(1, 'rgba(0,0,0,0.06)')
-  } else {
-    bottomFade.addColorStop(0, 'rgba(0,0,0,0)')
-    bottomFade.addColorStop(0.72, 'rgba(0,0,0,0.06)')
-    bottomFade.addColorStop(1, 'rgba(0,0,0,0.35)')
-  }
+  // 底部轻微收口，贴近进度条
+  const bottomFade = ctx.createLinearGradient(0, baselineY - maxH * 0.08, 0, baselineY)
+  bottomFade.addColorStop(0, 'rgba(0,0,0,0)')
+  bottomFade.addColorStop(1, isLight ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.12)')
   ctx.fillStyle = bottomFade
-  ctx.fillRect(paddingX, topY, usableW, maxH)
+  ctx.fillRect(paddingX, baselineY - maxH * 0.08, usableW, maxH * 0.08)
 
   ctx.restore()
 
-  // 硬擦除：舞台矩形之外全部清空（尤其是 baseline 以下的控制栏区域）
+  // 硬擦除舞台外（尤其控制栏）
   ctx.globalCompositeOperation = 'destination-out'
   ctx.fillStyle = 'rgba(0,0,0,1)'
-  // 上
   ctx.fillRect(0, 0, width, topY)
-  // 下（控制栏）
   ctx.fillRect(0, baselineY, width, height - baselineY)
-  // 左
   ctx.fillRect(0, topY, paddingX, maxH)
-  // 右
   ctx.fillRect(paddingX + usableW, topY, paddingX + 2, maxH)
 }
 
@@ -329,6 +352,8 @@ onBeforeUnmount(() => {
 watch(() => props.light, () => {
   if (!ctx) return
   ctx.clearRect(0, 0, width, height)
+  flames = []
+  sparks = []
 })
 
 watch(() => props.active, (v) => {
