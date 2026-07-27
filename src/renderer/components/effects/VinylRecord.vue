@@ -2,14 +2,10 @@
   <!-- 经典黑胶：密纹盘面 + 封面标签环 + 中心轴孔 + 完整金属唱臂 -->
   <div class="vinyl" :class="{ 'is-light': light, 'is-playing': active }">
     <div class="vinyl-stage">
-      <div class="vinyl-disc" :style="discStyle">
-        <!-- 盘面基底 -->
+      <div ref="discRef" class="vinyl-disc">
         <div class="vinyl-platter" aria-hidden="true"></div>
-        <!-- 密纹 -->
         <div class="vinyl-grooves" aria-hidden="true"></div>
-        <!-- 外圈亮边 -->
         <div class="vinyl-rim" aria-hidden="true"></div>
-        <!-- 标签环（封面） -->
         <div class="vinyl-label">
           <img
             v-if="coverUrl"
@@ -21,22 +17,17 @@
           <div v-else class="label-fallback">
             <slot name="fallback" />
           </div>
-          <!-- 轴孔：真正镂空感 -->
           <span class="vinyl-spindle" aria-hidden="true">
             <span class="spindle-hole"></span>
           </span>
         </div>
-        <!-- 斜向高光 -->
         <div class="vinyl-sheen" aria-hidden="true"></div>
       </div>
 
-      <!-- 唱臂：SVG 一体绘制，避免 CSS 圆弧残缺 -->
       <svg class="vinyl-arm" viewBox="0 0 100 100" aria-hidden="true">
-        <!-- 底座垫片 -->
         <circle cx="86" cy="10" r="6.2" class="arm-base" />
         <circle cx="86" cy="10" r="3.4" class="arm-pivot" />
         <circle cx="86" cy="10" r="1.2" class="arm-pivot-core" />
-        <!-- 主臂：从枢轴弯向盘面 -->
         <path
           class="arm-rod"
           d="M 86 12
@@ -45,7 +36,6 @@
           fill="none"
           stroke-linecap="round"
         />
-        <!-- 唱头匣 -->
         <rect
           class="arm-head"
           x="33.5"
@@ -55,7 +45,6 @@
           rx="1.1"
           transform="rotate(28 37 66.5)"
         />
-        <!-- 唱针 -->
         <line
           class="arm-stylus"
           x1="36.2"
@@ -70,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
   coverUrl?: string | null
@@ -86,17 +75,25 @@ const props = withDefaults(defineProps<{
 
 defineEmits<{ (e: 'coverError'): void }>()
 
-// 用 JS 累加角度：暂停停在当前角，续播从原角继续
-const angle = ref(0)
+const discRef = ref<HTMLElement | null>(null)
+
+// 直写 DOM transform，避免每帧触发 Vue 响应式更新
+let angle = 0
 let rafId = 0
 let lastTs = 0
 
 const ROTATE_SPEED = 18 // 度/秒
 
+const applyAngle = () => {
+  const el = discRef.value
+  if (el) el.style.transform = `rotate(${angle}deg)`
+}
+
 const step = (ts: number) => {
   const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0)
   lastTs = ts
-  angle.value = (angle.value + ROTATE_SPEED * dt) % 360
+  angle = (angle + ROTATE_SPEED * dt) % 360
+  applyAngle()
   rafId = requestAnimationFrame(step)
 }
 
@@ -105,6 +102,7 @@ const start = () => {
   lastTs = 0
   rafId = requestAnimationFrame((ts) => {
     lastTs = ts
+    applyAngle()
     rafId = requestAnimationFrame(step)
   })
 }
@@ -117,8 +115,6 @@ const stop = () => {
 watch(() => props.active, (v) => (v ? start() : stop()), { immediate: true })
 
 onBeforeUnmount(stop)
-
-const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
 </script>
 
 <style scoped>
@@ -159,7 +155,6 @@ const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
   position: relative;
   width: 100%;
   aspect-ratio: 1;
-  /* 给唱臂枢轴留出右上角，避免被父级裁切 */
   overflow: visible;
 }
 
@@ -188,7 +183,6 @@ const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
     0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
-/* 更密、更像真黑胶的纹路 */
 .vinyl-grooves {
   position: absolute;
   inset: 1.8%;
@@ -249,7 +243,6 @@ const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
 
 .label-cover {
   object-fit: cover;
-  /* 中心挖空露出轴孔 */
   -webkit-mask-image: radial-gradient(circle, transparent 12%, #000 13.2%);
   mask-image: radial-gradient(circle, transparent 12%, #000 13.2%);
 }
@@ -319,7 +312,6 @@ const discStyle = computed(() => ({ transform: `rotate(${angle.value}deg)` }))
   mix-blend-mode: soft-light;
 }
 
-/* 唱臂：覆盖整个舞台，枢轴在右上，整条杆完整可见 */
 .vinyl-arm {
   position: absolute;
   inset: 0;

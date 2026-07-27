@@ -50,7 +50,7 @@
       <!-- 上半部分：左右分栏 -->
       <div class="main-area">
         <!-- 左侧：封面和歌曲信息 -->
-        <div class="left-panel">
+        <div class="left-panel" :class="{ 'is-vinyl': effect === 'vinyl' }">
           <!-- 专辑封面：唱片特效下换成旋转黑胶 -->
           <div class="album-cover-container">
             <VinylRecord
@@ -981,7 +981,11 @@ watch(
   gap: var(--spacing-xl);
   min-width: 0;
   min-height: 0;
-  /* 允许唱片唱臂完整显示；横向仍由 main-area 约束 */
+  overflow: hidden;
+}
+
+/* 仅唱片特效放开裁切，避免唱臂被切；频谱/火焰保持 hidden 防溢出 */
+.left-panel.is-vinyl {
   overflow: visible;
 }
 
@@ -990,7 +994,10 @@ watch(
   max-width: min(100%, 360px);
   flex-shrink: 1;
   min-height: 0;
-  /* 唱片唱臂需要完整显示，不能被裁切 */
+  overflow: hidden;
+}
+
+.left-panel.is-vinyl .album-cover-container {
   overflow: visible;
 }
 

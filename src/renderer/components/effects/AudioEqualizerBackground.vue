@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEqualizer } from '@/composables/useEqualizer'
+import { getNowPlayingStage } from '@/utils/nowPlayingStage'
 
 const props = withDefaults(defineProps<{
   /** 是否处于播放状态（暂停时降低强度） */
@@ -133,13 +134,10 @@ const tick = (ts: number) => {
       })
     : null
 
-  // 布局：底部中央为主的“舞台感”
-  const paddingX = Math.max(18, width * 0.08)
-  const usableW = Math.max(1, width - paddingX * 2)
+  // 布局：底部中央为主的“舞台感”（与火焰共用舞台常量）
+  const { paddingX, usableW, baselineY, maxH } = getNowPlayingStage(width, height)
   const gap = 4
   const barW = Math.max(3, Math.floor((usableW - gap * (bars - 1)) / bars))
-  const baselineY = height * 0.85
-  const maxH = height * 0.62
 
   // 拖尾用的是 destination-out；深色用加法混合出霓虹感，浅色必须用正常混合
   // （加法混合在浅背景上只会把画面洗成白色）
