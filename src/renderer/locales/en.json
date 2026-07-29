@@ -284,6 +284,15 @@
     "fullPath": "Full Path",
     "fileHash": "File Path MD5",
     "hasLyrics": "Has Lyrics",
+    "matchLyrics": "Match Lyrics",
+    "rematchLyrics": "Rematch Lyrics",
+    "matchingLyrics": "Matching lyrics...",
+    "rematchLyricsConfirm": "Rematch lyrics for \"{title}\"? This will overwrite the existing lyrics file.",
+    "matchLyricsSuccess": "Lyrics matched for \"{title}\"",
+    "matchLyricsFailed": "Failed to match lyrics for \"{title}\": {reason}",
+    "matchLyricsInstrumental": "\"{title}\" appears to be instrumental (no lyrics)",
+    "matchLyricsLowSimilarity": "Search result for \"{title}\" is not similar enough; skipped",
+    "matchLyricsAlreadyHas": "\"{title}\" already has lyrics",
     "copyDetails": "Copy Details",
     "cover": "Cover",
     "copySuccess": "Details copied to clipboard",
@@ -387,7 +396,15 @@
   },
   "localMusic": {
     "empty": "No music",
-    "scanFolders": "Scan music folders"
+    "scanFolders": "Scan music folders",
+    "batchMatchLyrics": "Batch Match Lyrics",
+    "matchingLyrics": "Matching lyrics",
+    "batchMatchConfirm": "Online-search and download lyrics for {count} songs without lyrics in the local library (saved as matching .lrc files). Continue?",
+    "noMissingLyrics": "No songs need lyrics matching",
+    "matchDone": "Lyrics matching done: {success} succeeded, {skipped} skipped, {failed} failed",
+    "matchCancelled": "Matching cancelled: {success} succeeded, {skipped} skipped, {failed} failed",
+    "matchSuccessCount": "{count} succeeded",
+    "matchError": "Batch lyrics matching failed"
   },
   "desktopLyrics": {
     "lock": "Lock",

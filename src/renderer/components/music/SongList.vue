@@ -178,6 +178,22 @@
         <Edit :size="16" class="icon" />
         {{ $t('music.editTags') }}
       </div>
+      <div
+        v-if="showLyricsMatch && hasLyrics(contextMenu.music!)"
+        class="menu-item"
+        @click="handleRematchLyrics(contextMenu.music!)"
+      >
+        <FileText :size="16" class="icon" />
+        {{ matchingLyricsId === contextMenu.music!.id ? $t('music.matchingLyrics') : $t('music.rematchLyrics') }}
+      </div>
+      <div
+        v-else-if="showLyricsMatch && !hasLyrics(contextMenu.music!)"
+        class="menu-item"
+        @click="handleMatchLyrics(contextMenu.music!)"
+      >
+        <FileText :size="16" class="icon" />
+        {{ matchingLyricsId === contextMenu.music!.id ? $t('music.matchingLyrics') : $t('music.matchLyrics') }}
+      </div>
       <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
         <FolderOpen :size="16" class="icon" />
         {{ $t('music.openInExplorer') }}
@@ -231,7 +247,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
@@ -243,6 +259,8 @@ const props = defineProps<{
   songs: MusicItem[]
   showRemoveFromPlaylist?: boolean
   playlistId?: number  // 用于批量删除
+  /** 本地音乐页开启：匹配 / 重新匹配歌词 */
+  showLyricsMatch?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -325,6 +343,11 @@ const contextMenu = reactive({
   music: null as MusicItem | null,
   isFavorite: false
 })
+
+/** 正在匹配歌词的歌曲 id（禁用重复点击） */
+const matchingLyricsId = ref<number | null>(null)
+
+const hasLyrics = (music: MusicItem) => !!(music.lyricsPath && music.lyricsPath.trim())
 
 // 批量选择状态
 const selectionMode = ref(false)
@@ -579,6 +602,53 @@ const adjustContextMenuPosition = () => {
 
 const closeContextMenu = () => {
   contextMenu.visible = false
+}
+
+const applyMatchResult = (music: MusicItem, result: { status: string; lyricsPath?: string; message?: string }) => {
+  if ((result.status === 'matched' || result.status === 'linked_local') && result.lyricsPath) {
+    music.lyricsPath = result.lyricsPath
+    emit('songs-updated')
+  }
+  if (result.status === 'matched' || result.status === 'linked_local') {
+    alert(t('music.matchLyricsSuccess', { title: music.title }))
+  } else if (result.status === 'skipped_instrumental') {
+    alert(t('music.matchLyricsInstrumental', { title: music.title }))
+  } else if (result.status === 'skipped_low_similarity') {
+    alert(t('music.matchLyricsLowSimilarity', { title: music.title }))
+  } else if (result.status === 'skipped_has_lyrics') {
+    alert(t('music.matchLyricsAlreadyHas', { title: music.title }))
+  } else {
+    alert(t('music.matchLyricsFailed', { title: music.title, reason: result.message || '' }))
+  }
+}
+
+const handleMatchLyrics = async (music: MusicItem) => {
+  closeContextMenu()
+  if (matchingLyricsId.value != null) return
+  matchingLyricsId.value = music.id
+  try {
+    const result = await window.electronAPI.matchLyrics(music.id, { force: false })
+    applyMatchResult(music, result)
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingLyricsId.value = null
+  }
+}
+
+const handleRematchLyrics = async (music: MusicItem) => {
+  closeContextMenu()
+  if (matchingLyricsId.value != null) return
+  if (!confirm(t('music.rematchLyricsConfirm', { title: music.title }))) return
+  matchingLyricsId.value = music.id
+  try {
+    const result = await window.electronAPI.matchLyrics(music.id, { force: true })
+    applyMatchResult(music, result)
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingLyricsId.value = null
+  }
 }
 
 const openAddToPlaylist = (music: MusicItem) => {

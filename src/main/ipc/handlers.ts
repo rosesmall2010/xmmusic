@@ -8,6 +8,7 @@ import FileExporter from '../services/fileExporter'
 import FileMonitor from '../services/fileMonitor'
 import ShortcutManager from '../services/shortcutManager'
 import LyricsService from '../services/lyricsService'
+import LyricsMatchService from '../services/lyricsMatchService'
 import TrayService from '../services/trayService'
 import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
@@ -17,11 +18,13 @@ import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/m
 import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playlistCover'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
-import type { LyricsData } from '../../shared/types/lyrics'
+import type { LyricsData, LyricsMatchProgress, LyricsMatchSummary } from '../../shared/types/lyrics'
 
 export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
   const lyricsService = new LyricsService()
+  const lyricsMatchService = new LyricsMatchService()
   const metadataEditor = new MetadataEditor()
+  let lyricsMatchRunning = false
   // 窗口控制（不依赖数据库）
   ipcMain.handle('window-minimize', () => {
     mainWindow.minimize()
@@ -1187,6 +1190,80 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('update-music-lyrics-path', async (_, musicId: number, lyricsPath: string) => {
     if (!db) return
     db.updateMusic(musicId, { lyricsPath })
+  })
+
+  /** 单曲匹配 / 重新匹配歌词 */
+  ipcMain.handle('match-lyrics', async (_, musicId: number, options?: { force?: boolean }) => {
+    if (!db) throw new Error('数据库未初始化')
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return lyricsMatchService.matchOne(db, music, { force: options?.force === true })
+  })
+
+  /** 统计本地库中无歌词歌曲数量 */
+  ipcMain.handle('get-music-without-lyrics-count', async () => {
+    if (!db) return 0
+    return db.getMusicWithoutLyricsCount()
+  })
+
+  /**
+   * 批量匹配本地库全部无歌词歌曲
+   * 进度通过 lyrics-match-progress 事件推送
+   */
+  ipcMain.handle('batch-match-missing-lyrics', async () => {
+    if (!db) throw new Error('数据库未初始化')
+    if (lyricsMatchRunning) throw new Error('歌词匹配进行中')
+    lyricsMatchRunning = true
+    lyricsMatchService.resetCancel()
+
+    try {
+      const pageSize = 100
+      const songs: MusicItem[] = []
+      let offset = 0
+      while (true) {
+        const page = db.getMusicWithoutLyrics(offset, pageSize)
+        if (page.length === 0) break
+        songs.push(...page)
+        offset += page.length
+        if (page.length < pageSize) break
+      }
+
+      // 再过滤：DB 有路径但文件已丢的也算无歌词
+      // getMusicWithoutLyrics 只取空路径；orphan 在 load 时才发现，这里另查全部更重，保持粗筛即可
+
+      if (songs.length === 0) {
+        const empty: LyricsMatchSummary = {
+          total: 0,
+          success: 0,
+          failed: 0,
+          skipped: 0,
+          cancelled: false,
+          results: []
+        }
+        return empty
+      }
+
+      const summary = await lyricsMatchService.matchBatch(db, songs, {
+        force: false,
+        onProgress: (progress: LyricsMatchProgress) => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('lyrics-match-progress', progress)
+          }
+        }
+      })
+
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('music-list-refresh')
+      }
+      return summary
+    } finally {
+      lyricsMatchRunning = false
+    }
+  })
+
+  ipcMain.handle('cancel-lyrics-match', async () => {
+    lyricsMatchService.cancel()
+    return true
   })
 
   ipcMain.handle('delete-music-file', async (_, musicId: number) => {

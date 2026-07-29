@@ -284,6 +284,15 @@
     "fullPath": "完整路径",
     "fileHash": "文件路径MD5",
     "hasLyrics": "是否有歌词",
+    "matchLyrics": "匹配歌词",
+    "rematchLyrics": "重新匹配歌词",
+    "matchingLyrics": "正在匹配歌词...",
+    "rematchLyricsConfirm": "确定重新匹配「{title}」的歌词？将覆盖现有歌词文件。",
+    "matchLyricsSuccess": "「{title}」歌词匹配成功",
+    "matchLyricsFailed": "「{title}」歌词匹配失败：{reason}",
+    "matchLyricsInstrumental": "「{title}」检测为纯音乐，无歌词",
+    "matchLyricsLowSimilarity": "「{title}」搜索结果相似度过低，已跳过",
+    "matchLyricsAlreadyHas": "「{title}」已有歌词",
     "copyDetails": "复制详细信息",
     "cover": "封面",
     "copySuccess": "详细信息已复制到剪贴板",
@@ -387,7 +396,15 @@
   },
   "localMusic": {
     "empty": "暂无音乐",
-    "scanFolders": "扫描音乐文件夹"
+    "scanFolders": "扫描音乐文件夹",
+    "batchMatchLyrics": "批量匹配歌词",
+    "matchingLyrics": "正在匹配歌词",
+    "batchMatchConfirm": "将对本地库中 {count} 首无歌词歌曲在线搜索并下载歌词（保存为同名 .lrc）。是否继续？",
+    "noMissingLyrics": "当前没有需要匹配歌词的歌曲",
+    "matchDone": "歌词匹配完成：成功 {success}，跳过 {skipped}，失败 {failed}",
+    "matchCancelled": "已取消匹配：成功 {success}，跳过 {skipped}，失败 {failed}",
+    "matchSuccessCount": "成功 {count}",
+    "matchError": "批量匹配歌词失败"
   },
   "desktopLyrics": {
     "lock": "锁定",

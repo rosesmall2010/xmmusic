@@ -6,13 +6,20 @@
         <div class="stats">{{ $t('sidebar.totalSongs', { count: totalCount }) }}</div>
       </div>
       <div class="header-actions">
-        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0">
+        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0 || isMatchingLyrics">
           {{ $t('settings.clearAll') }}
+        </button>
+        <button
+          class="btn-secondary"
+          @click="handleBatchMatchLyrics"
+          :disabled="totalCount === 0 || isScanning || isMatchingLyrics"
+        >
+          {{ isMatchingLyrics ? $t('localMusic.matchingLyrics') : $t('localMusic.batchMatchLyrics') }}
         </button>
         <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0">
           {{ $t('player.playAll') }}
         </button>
-        <button class="btn-primary" @click="handleScan" :disabled="isScanning">
+        <button class="btn-primary" @click="handleScan" :disabled="isScanning || isMatchingLyrics">
           {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
         </button>
         <button class="btn-secondary" @click="openDirManageDialog">
@@ -32,8 +39,34 @@
       </div>
     </div>
 
+    <!-- 歌词批量匹配进度 -->
+    <div v-if="isMatchingLyrics && lyricsMatchProgress" class="scan-progress-bar lyrics-match-progress">
+      <div class="progress-info">
+        <span class="current-file" :title="lyricsMatchProgress.currentTitle">
+          {{ $t('localMusic.matchingLyrics') }}: {{ lyricsMatchProgress.currentTitle }}
+        </span>
+        <span class="progress-stats">
+          {{ lyricsMatchProgress.current }} / {{ lyricsMatchProgress.total }}
+          · {{ $t('localMusic.matchSuccessCount', { count: lyricsMatchProgress.success }) }}
+        </span>
+      </div>
+      <div class="progress-track">
+        <div
+          class="progress-fill"
+          :style="{ width: `${lyricsMatchProgress.total ? (lyricsMatchProgress.current / lyricsMatchProgress.total) * 100 : 0}%` }"
+        ></div>
+      </div>
+      <button class="btn-link cancel-match" @click="cancelBatchMatchLyrics">{{ $t('common.cancel') }}</button>
+    </div>
+
     <div class="music-list-container">
-      <SongList :songs="musicList" @play="playMusic" @load-more="loadMore" @songs-updated="handleSongsUpdated">
+      <SongList
+        :songs="musicList"
+        :show-lyrics-match="true"
+        @play="playMusic"
+        @load-more="loadMore"
+        @songs-updated="handleSongsUpdated"
+      >
         <template #empty>
           <p>{{ $t('localMusic.empty') }}</p>
           <button class="btn-link" @click="handleScan">{{ $t('localMusic.scanFolders') }}</button>
@@ -177,6 +210,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
+import type { LyricsMatchProgress } from '@shared/types/lyrics'
 
 const { t } = useI18n()
 const musicStore = useMusicStore()
@@ -190,6 +224,10 @@ const totalCount = computed(() => musicStore.totalCount)
 // 扫描状态
 const isScanning = ref(false)
 const scanProgress = ref<ScanProgress | null>(null)
+
+/** 批量匹配无歌词 */
+const isMatchingLyrics = ref(false)
+const lyricsMatchProgress = ref<LyricsMatchProgress | null>(null)
 
 // 目录管理对话框状态
 const showDirManageDialog = ref(false)
@@ -248,6 +286,7 @@ onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
   window.electronAPI.removeScanProgress()
   window.electronAPI.removeScanStateChanged()
+  window.electronAPI.removeLyricsMatchProgress()
 })
 
 const startBackgroundLoading = async () => {
@@ -316,6 +355,66 @@ const loadMore = async () => {
   // This is now handled by background loading, but we keep it for manual trigger if needed
   if (!musicStore.loading && musicStore.hasMore) {
     await musicStore.loadMusic(musicStore.currentOffset, 20)
+  }
+}
+
+const handleBatchMatchLyrics = async () => {
+  if (isMatchingLyrics.value || isScanning.value) return
+  try {
+    const count = await window.electronAPI.getMusicWithoutLyricsCount()
+    if (count <= 0) {
+      alert(t('localMusic.noMissingLyrics'))
+      return
+    }
+    if (!confirm(t('localMusic.batchMatchConfirm', { count }))) return
+
+    isMatchingLyrics.value = true
+    lyricsMatchProgress.value = {
+      current: 0,
+      total: count,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      currentTitle: ''
+    }
+    window.electronAPI.removeLyricsMatchProgress()
+    window.electronAPI.onLyricsMatchProgress((progress) => {
+      lyricsMatchProgress.value = progress
+    })
+
+    const summary = await window.electronAPI.batchMatchMissingLyrics()
+    await musicStore.loadMusic(0, 20, true)
+    startBackgroundLoading()
+
+    if (summary.cancelled) {
+      alert(t('localMusic.matchCancelled', {
+        success: summary.success,
+        failed: summary.failed,
+        skipped: summary.skipped
+      }))
+    } else if (summary.total === 0) {
+      alert(t('localMusic.noMissingLyrics'))
+    } else {
+      alert(t('localMusic.matchDone', {
+        success: summary.success,
+        failed: summary.failed,
+        skipped: summary.skipped
+      }))
+    }
+  } catch (error: any) {
+    alert(t('localMusic.matchError') + ': ' + (error?.message || error))
+  } finally {
+    isMatchingLyrics.value = false
+    lyricsMatchProgress.value = null
+    window.electronAPI.removeLyricsMatchProgress()
+  }
+}
+
+const cancelBatchMatchLyrics = async () => {
+  try {
+    await window.electronAPI.cancelLyricsMatch()
+  } catch {
+    // ignore
   }
 }
 
@@ -396,9 +495,10 @@ const handlePlayAll = async () => {
   }
 }
 
-const handleSongsUpdated = () => {
-  // 这个是从 SongList 发出的事件，只需要触发数据更新
-  // 实际的更新由 music-metadata-updated 事件处理
+const handleSongsUpdated = async () => {
+  // 右键匹配歌词等操作后刷新列表，保证 lyricsPath 等状态同步
+  await musicStore.loadMusic(0, Math.max(20, musicStore.musicList.length || 20), true)
+  startBackgroundLoading()
 }
 
 // 监听元数据更新事件，只更新被修改的歌曲
@@ -726,6 +826,17 @@ const selectDirPath = async () => {
   height: 100%;
   background: var(--color-primary);
   transition: width 0.2s ease;
+}
+
+.lyrics-match-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.lyrics-match-progress .cancel-match {
+  align-self: flex-end;
+  font-size: var(--font-size-xs);
 }
 
 /* 目录管理对话框样式 */

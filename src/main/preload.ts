@@ -8,7 +8,7 @@ import type {
   PlaylistImportResult
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
-import type { LyricsData } from '@shared/types/lyrics'
+import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary } from '@shared/types/lyrics'
 import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types/statistics'
 
 // 暴露安全的 API 给渲染进程
@@ -259,6 +259,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   parseLyricsFile: (filePath: string) => ipcRenderer.invoke('parse-lyrics-file', filePath),
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) =>
     ipcRenderer.invoke('update-music-lyrics-path', musicId, lyricsPath),
+  matchLyrics: (musicId: number, options?: { force?: boolean }) =>
+    ipcRenderer.invoke('match-lyrics', musicId, options),
+  getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
+  batchMatchMissingLyrics: () => ipcRenderer.invoke('batch-match-missing-lyrics'),
+  cancelLyricsMatch: () => ipcRenderer.invoke('cancel-lyrics-match'),
+  onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => {
+    ipcRenderer.on('lyrics-match-progress', (_, progress) => callback(progress))
+  },
+  removeLyricsMatchProgress: () => {
+    ipcRenderer.removeAllListeners('lyrics-match-progress')
+  },
   // 系统托盘功能
   updateTrayPlayState: (isPlaying: boolean) => ipcRenderer.send('update-tray-play-state', isPlaying),
   updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => ipcRenderer.send('update-tray-current-music', music),
@@ -419,6 +430,12 @@ declare global {
       loadLyrics: (musicId: number) => Promise<LyricsData | null>
       parseLyricsFile: (filePath: string) => Promise<LyricsData>
       updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
+      matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<LyricsMatchResult>
+      getMusicWithoutLyricsCount: () => Promise<number>
+      batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>
+      cancelLyricsMatch: () => Promise<boolean>
+      onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => void
+      removeLyricsMatchProgress: () => void
       updateTrayPlayState: (isPlaying: boolean) => void
       updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => void
       onTrayAction: (callback: (action: string) => void) => void

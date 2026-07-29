@@ -846,6 +846,39 @@ export default class MusicDatabase {
     return result.count
   }
 
+  /**
+   * 统计无歌词（或歌词文件已丢失）的歌曲数
+   * 具体文件是否存在由匹配服务再校验；这里按 DB 字段粗筛
+   */
+  getMusicWithoutLyricsCount(): number {
+    const stmt = this.db!.prepare(`
+      SELECT COUNT(*) as count FROM all_music
+      WHERE is_duplicate = 0
+        AND (lyrics_path IS NULL OR lyrics_path = '')
+    `)
+    return (stmt.get() as { count: number }).count
+  }
+
+  /**
+   * 分页取无歌词歌曲（用于批量在线匹配）
+   */
+  getMusicWithoutLyrics(offset: number, limit: number): MusicItem[] {
+    const stmt = this.db!.prepare(`
+      SELECT am.*
+      FROM all_music am
+      WHERE am.is_duplicate = 0
+        AND (am.lyrics_path IS NULL OR am.lyrics_path = '')
+      ORDER BY am.id ASC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      return musicItem as MusicItem
+    })
+  }
+
   searchMusic(query: string, limit: number = 50): MusicItem[] {
     // 如果查询为空，返回空数组
     if (!query || query.trim() === '') {
