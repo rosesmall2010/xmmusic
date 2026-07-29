@@ -5,10 +5,10 @@ import { setLocale } from '@/locales'
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
 /** 全屏播放页的视觉特效 */
-export type NowPlayingEffect = 'spectrum' | 'flame' | 'vinyl'
+export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl'
 
 /** 特效切换顺序：按钮每次点击按此顺序循环 */
-export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'vinyl']
+export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl']
 
 // 检测系统语言
 function detectSystemLanguage(): 'zh' | 'en' {

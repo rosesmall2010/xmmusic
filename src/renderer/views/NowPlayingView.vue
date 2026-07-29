@@ -4,6 +4,7 @@
     <div class="background-effects" aria-hidden="true">
       <AudioEqualizerBackground v-if="effect === 'spectrum'" :active="isPlaying" :light="isLight" />
       <FlameBackground v-else-if="effect === 'flame'" :active="isPlaying" :light="isLight" />
+      <LightningBackground v-else-if="effect === 'lightning'" :active="isPlaying" :light="isLight" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
@@ -228,10 +229,11 @@ import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
 import FlameBackground from '@/components/effects/FlameBackground.vue'
+import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Disc3 } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3 } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 
@@ -270,6 +272,7 @@ const effect = computed(() => settingsStore.nowPlayingEffect)
 
 const EffectIcon = computed(() => {
   if (effect.value === 'flame') return Flame
+  if (effect.value === 'lightning') return Zap
   if (effect.value === 'vinyl') return Disc3
   return AudioLines
 })
@@ -989,7 +992,7 @@ watch(
   overflow: hidden;
 }
 
-/* 仅唱片特效放开裁切，避免唱臂被切；频谱/火焰保持 hidden 防溢出 */
+/* 仅唱片特效放开裁切，避免唱臂被切；频谱/火焰/闪电保持 hidden 防溢出 */
 .left-panel.is-vinyl {
   overflow: visible;
 }

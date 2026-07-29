@@ -89,6 +89,7 @@
     "effect": {
       "spectrum": "Neon Spectrum",
       "flame": "Flame",
+      "lightning": "Lightning",
       "vinyl": "Classic Vinyl"
     }
   },
