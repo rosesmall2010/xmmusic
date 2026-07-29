@@ -96,7 +96,7 @@ export default class LyricsService {
    * 检测文件编码
    * 优先识别合法 UTF-8；仅当 UTF-8 非法时才回落 GBK（旧歌词常见）
    */
-  detectEncoding(filePath: string): 'utf8' | 'gbk' {
+  detectEncoding(filePath: string): 'utf8' | 'gbk' | 'utf16le' | 'utf16be' {
     try {
       const buffer = readFileSync(filePath)
 
@@ -105,10 +105,10 @@ export default class LyricsService {
         return 'utf8'
       }
       if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-        return 'utf8'
+        return 'utf16le'
       }
       if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
-        return 'utf8'
+        return 'utf16be'
       }
 
       // 2. 严格校验是否为合法 UTF-8（原先误写 includes('')，恒真，导致无 BOM 的 UTF-8 全被判成 GBK）
@@ -146,7 +146,9 @@ export default class LyricsService {
 
     // 如果解析失败（没有歌词行），且没有指定编码，尝试切换编码重试
     if ((!lyricsData.lines || lyricsData.lines.length === 0) && !encoding) {
-      const altEncoding = detectedEncoding === 'utf8' ? 'gbk' : 'utf8'
+      const altEncoding = detectedEncoding === 'utf8' || detectedEncoding.startsWith('utf16')
+        ? 'gbk'
+        : 'utf8'
       console.log(`歌词解析结果为空，尝试切换编码重试: ${detectedEncoding} -> ${altEncoding}`)
       const altLyricsData = this.tryParse(filePath, altEncoding)
 
@@ -165,7 +167,13 @@ export default class LyricsService {
     try {
       const buffer = readFileSync(filePath)
       if (encoding === 'utf8') {
-        content = buffer.toString('utf8')
+        // 跳过 UTF-8 BOM
+        const start = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf
+          ? 3
+          : 0
+        content = buffer.subarray(start).toString('utf8')
+      } else if (encoding === 'utf16le' || encoding === 'utf16be') {
+        content = iconv.decode(buffer, encoding)
       } else {
         content = iconv.decode(buffer, encoding)
       }

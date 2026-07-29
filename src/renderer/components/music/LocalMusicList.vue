@@ -250,8 +250,8 @@ const isDirExists = computed(() => {
 })
 
 onMounted(async () => {
-  // Initial load of 20 items
-  await musicStore.loadMusic(0, 20)
+  // 回页强制刷新，避免卸载期间批量匹配完成刷新事件丢失导致 lyricsPath 过期
+  await musicStore.loadMusic(0, 20, true)
 
   // 加载目录列表
   try {
