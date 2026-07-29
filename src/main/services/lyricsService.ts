@@ -94,47 +94,45 @@ export default class LyricsService {
 
   /**
    * 检测文件编码
-   */
-  /**
-   * 检测文件编码
+   * 优先识别合法 UTF-8；仅当 UTF-8 非法时才回落 GBK（旧歌词常见）
    */
   detectEncoding(filePath: string): 'utf8' | 'gbk' {
     try {
       const buffer = readFileSync(filePath)
 
-      // 1. 检查 BOM
-      // UTF-8 BOM
-      if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+      // 1. BOM
+      if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
         return 'utf8'
       }
-      // UTF-16 LE BOM
-      if (buffer[0] === 0xff && buffer[1] === 0xfe) {
-        return 'utf8' // iconv-lite 会自动处理
+      if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+        return 'utf8'
       }
-      // UTF-16 BE BOM
-      if (buffer[0] === 0xfe && buffer[1] === 0xff) {
-        return 'utf8' // iconv-lite 会自动处理
-      }
-
-      // 2. 尝试 UTF-8 解码
-      // 检查是否包含无效的 UTF-8 序列（会被替换为 ）
-      const utf8Text = buffer.toString('utf8')
-      if (utf8Text.includes('')) {
-        return 'gbk'
-      }
-
-      // 3. 检查是否包含中文字符
-      // 如果是有效的 UTF-8 且包含中文，那就是 UTF-8
-      if (/[\u4e00-\u9fa5]/.test(utf8Text)) {
+      if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
         return 'utf8'
       }
 
-      // 4. 纯 ASCII 或其他情况，默认 UTF-8
-      // 如果是纯 ASCII，UTF-8 和 GBK 是一样的
-      return 'utf8'
+      // 2. 严格校验是否为合法 UTF-8（原先误写 includes('')，恒真，导致无 BOM 的 UTF-8 全被判成 GBK）
+      if (this.isValidUtf8(buffer)) {
+        return 'utf8'
+      }
+
+      return 'gbk'
     } catch (error) {
       console.error('检测编码失败:', error)
-      return 'utf8' // 默认
+      return 'utf8'
+    }
+  }
+
+  /** Node Buffer 按 utf8 解码后若出现 U+FFFD，或 TextDecoder 严格模式失败，则非法 */
+  private isValidUtf8(buffer: Buffer): boolean {
+    try {
+      const decoder = new TextDecoder('utf-8', { fatal: true })
+      decoder.decode(buffer)
+      return true
+    } catch {
+      // TextDecoder fatal 不可用时，用替换符探测
+      const text = buffer.toString('utf8')
+      return !text.includes('\uFFFD')
     }
   }
 
