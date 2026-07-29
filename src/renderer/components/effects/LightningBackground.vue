@@ -10,7 +10,7 @@ import { getNowPlayingStage, type NowPlayingStage } from '@/utils/nowPlayingStag
 const props = withDefaults(defineProps<{
   /** 是否处于播放状态（暂停时压低闪电） */
   active?: boolean
-  /** 浅色主题：正常混合；深色用加法混合增强电光 */
+  /** 浅色主题：深色电弧；深色主题：亮色电光；均不加闪屏背景 */
   light?: boolean
 }>(), {
   active: false,
@@ -42,7 +42,6 @@ let spectrum: Uint8Array | null = null
 let bandEnergy: number[] = []
 let prevBand: number[] = []
 let bolts: Bolt[] = []
-let flash = 0
 let energy = 0
 let time = 0
 let lastTs = 0
@@ -206,21 +205,30 @@ const drawBolt = (c: CanvasRenderingContext2D, bolt: Bolt, isLight: boolean) => 
   const lifeP = bolt.life / bolt.maxLife
   // 闪一下再衰减
   const pulse = lifeP < 0.18 ? 1 : Math.max(0, 1 - (lifeP - 0.18) / 0.82)
-  const a = pulse * bolt.intensity * (isLight ? 0.95 : 1)
+  const a = pulse * bolt.intensity
 
-  // 外晕 → 内芯
-  if (!isLight) {
-    strokePath(c, bolt.points, 5.5 + bolt.intensity * 4, hsla(bolt.hue, 100, 55, a * 0.22))
+  if (isLight) {
+    // 浅色主题：深色闪电（靛青外晕 → 近黑芯），无发光背景
+    strokePath(c, bolt.points, 4.2 + bolt.intensity * 2.5, hsla(bolt.hue, 55, 28, a * 0.35))
+    strokePath(c, bolt.points, 2.2 + bolt.intensity * 1.6, hsla(bolt.hue + 8, 65, 18, a * 0.88))
+    strokePath(c, bolt.points, 1.05, hsla(bolt.hue + 15, 35, 8, a))
+    for (const br of bolt.branches) {
+      strokePath(c, br, 2.4, hsla(bolt.hue, 50, 26, a * 0.28))
+      strokePath(c, br, 1.2, hsla(bolt.hue + 5, 60, 16, a * 0.75))
+      strokePath(c, br, 0.65, hsla(bolt.hue + 12, 30, 7, a * 0.9))
+    }
+    return
   }
-  strokePath(c, bolt.points, 2.2 + bolt.intensity * 2.2, hsla(bolt.hue, 100, isLight ? 42 : 70, a * 0.75))
-  strokePath(c, bolt.points, 1.1, hsla(bolt.hue + 20, 80, isLight ? 88 : 96, a))
+
+  // 深色主题：亮色电光（外晕 → 白芯）
+  strokePath(c, bolt.points, 5.5 + bolt.intensity * 4, hsla(bolt.hue, 100, 55, a * 0.22))
+  strokePath(c, bolt.points, 2.2 + bolt.intensity * 2.2, hsla(bolt.hue, 100, 70, a * 0.75))
+  strokePath(c, bolt.points, 1.1, hsla(bolt.hue + 20, 80, 96, a))
 
   for (const br of bolt.branches) {
-    if (!isLight) {
-      strokePath(c, br, 3.2, hsla(bolt.hue, 100, 55, a * 0.15))
-    }
-    strokePath(c, br, 1.4, hsla(bolt.hue, 95, isLight ? 45 : 72, a * 0.65))
-    strokePath(c, br, 0.7, hsla(bolt.hue + 15, 70, isLight ? 90 : 96, a * 0.85))
+    strokePath(c, br, 3.2, hsla(bolt.hue, 100, 55, a * 0.15))
+    strokePath(c, br, 1.4, hsla(bolt.hue, 95, 72, a * 0.65))
+    strokePath(c, br, 0.7, hsla(bolt.hue + 15, 70, 96, a * 0.85))
   }
 }
 
@@ -274,7 +282,6 @@ const tick = (ts: number) => {
       if (Math.random() > 0.55 + bandEnergy[c.i] * 0.4) continue
       const local = bandEnergy[c.i]
       bolts.push(spawnBolt(c.i, local, stage))
-      flash = Math.max(flash, 0.25 + local * 0.55)
       spawned++
     }
     // 真频谱跟拍更密；假频谱加长冷却，避免脉冲串连成暴雨
@@ -296,35 +303,16 @@ const tick = (ts: number) => {
   ) {
     const bi = Math.floor(Math.random() * bandEnergy.length)
     bolts.push(spawnBolt(bi, Math.max(0.35, bandEnergy[bi]), stage))
-    flash = Math.max(flash, 0.15)
     spawnCooldown = 0.12
   }
-
-  flash = Math.max(0, flash - dt * 3.2)
 
   ctx.save()
   ctx.beginPath()
   ctx.rect(paddingX, topY, usableW, maxH)
   ctx.clip()
 
+  // 仅绘制闪电本身，不加闪屏/晕底背景；深色用加法混合提亮电光
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
-
-  // 强音闪屏柔光
-  if (flash > 0.02) {
-    const g = ctx.createRadialGradient(
-      paddingX + usableW * 0.5,
-      topY + maxH * 0.2,
-      0,
-      paddingX + usableW * 0.5,
-      topY + maxH * 0.35,
-      usableW * 0.55
-    )
-    const fa = flash * (isLight ? 0.18 : 0.28)
-    g.addColorStop(0, hsla(200, 100, isLight ? 70 : 80, fa))
-    g.addColorStop(1, hsla(220, 100, 50, 0))
-    ctx.fillStyle = g
-    ctx.fillRect(paddingX, topY, usableW, maxH)
-  }
 
   const next: Bolt[] = []
   for (const bolt of bolts) {
@@ -374,7 +362,6 @@ watch(() => props.light, () => {
   if (!ctx) return
   ctx.clearRect(0, 0, width, height)
   bolts = []
-  flash = 0
 })
 
 watch(() => props.active, (v) => {
