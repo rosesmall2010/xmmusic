@@ -116,14 +116,15 @@ const updateBands = (dt: number) => {
       const bin = Math.floor(startBin + (endBin - startBin) * t01)
       v01 = data[Math.max(0, Math.min(len - 1, bin))] / 255
     } else {
-      // 无真实频谱：多频段假数据，仍有舞台感
+      // 无真实频谱：多频段假数据，与霓虹频谱一样加中心聚焦
       const t01 = i / Math.max(1, bands - 1)
-      v01 = clamp01(
+      const wave =
         0.32 +
         0.28 * Math.sin(time * 2.4 + t01 * 6.2) +
         0.18 * Math.sin(time * 5.1 + t01 * 11) +
         0.12 * Math.sin(time * 8.7 + i * 0.4)
-      )
+      const centerBoost = 1 - Math.abs(t01 - 0.5) * 0.7
+      v01 = clamp01(wave * centerBoost)
     }
 
     const target = clamp01(v01 * 1.4) * activeFactor
@@ -274,15 +275,14 @@ const tick = (ts: number) => {
 
   ctx.globalCompositeOperation = isLight ? 'source-over' : 'lighter'
 
-  // 生成量随全局能量与各频段峰值变化，节拍感更明显
+  // 生成量约对齐分频前档位（强音合计约 25/帧上限），高度/位置仍由分频带驱动节拍感
   const peak = bandEnergy.reduce((m, v) => (v > m ? v : m), 0)
-  const spawnBoost = 0.55 + energy * 0.7 + peak * 0.55
-  const bodySpawn = Math.round((2 + spawnBoost * 9) * (props.active ? 1 : 0.35))
-  const wispSpawn = Math.round((1 + spawnBoost * 6) * (props.active ? 1 : 0.3))
+  const bodySpawn = Math.round((2.5 + energy * 8 + peak * 2) * (props.active ? 1 : 0.35))
+  const wispSpawn = Math.round((1.5 + energy * 5 + peak) * (props.active ? 1 : 0.3))
   for (let i = 0; i < bodySpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(0, stage))
   for (let i = 0; i < wispSpawn && flames.length < MAX_FLAMES; i++) flames.push(spawnFlame(1, stage))
 
-  const sparkSpawn = Math.round((1 + spawnBoost * 5) * (props.active ? 1 : 0.25))
+  const sparkSpawn = Math.round((1 + energy * 4) * (props.active ? 1 : 0.25))
   for (let i = 0; i < sparkSpawn && sparks.length < MAX_SPARKS; i++) sparks.push(spawnSpark(stage))
 
   const nextFlames: Flame[] = []

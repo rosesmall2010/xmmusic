@@ -47,6 +47,8 @@ let energy = 0
 let time = 0
 let lastTs = 0
 let spawnCooldown = 0
+/** 当前帧是否拿到真实 FFT（未开音效时为 false，假频谱需更严的突增判定） */
+let hasRealSpectrum = false
 
 const MAX_BOLTS = 14
 
@@ -92,6 +94,7 @@ const updateBands = (dt: number) => {
   const data = getFrequency()
   const activeFactor = props.active ? 1 : 0.25
   const len = data?.length ?? 0
+  hasRealSpectrum = !!(data && len > 0)
   const startBin = Math.floor(len * 0.02)
   const endBin = Math.max(startBin + 1, Math.floor(len * 0.55))
 
@@ -99,23 +102,26 @@ const updateBands = (dt: number) => {
   for (let i = 0; i < bands; i++) {
     prevBand[i] = bandEnergy[i]
     let v01: number
-    if (data && len > 0) {
-      const t01 = i / Math.max(1, bands - 1)
+    const t01 = i / Math.max(1, bands - 1)
+    const centerBoost = 1 - Math.abs(t01 - 0.5) * 0.7
+    if (hasRealSpectrum) {
       const bin = Math.floor(startBin + (endBin - startBin) * t01)
-      v01 = data[Math.max(0, Math.min(len - 1, bin))] / 255
+      v01 = data![Math.max(0, Math.min(len - 1, bin))] / 255
     } else {
-      const t01 = i / Math.max(1, bands - 1)
-      v01 = clamp01(
-        0.28 +
-        0.3 * Math.sin(time * 2.6 + t01 * 5.5) +
-        0.2 * Math.sin(time * 6.8 + t01 * 13) +
-        0.15 * Math.sin(time * 11.2 + i * 0.55)
-      )
+      // 假数据做成稀疏脉冲（大部分时间贴近静默），避免正弦常驻中高值导致每帧过击打阈值
+      const phase = time * 1.7 + t01 * 4.5 + i * 0.19
+      const pulse = Math.sin(phase)
+      const spike = pulse > 0.91 ? (pulse - 0.91) / 0.09 : 0
+      const rare = Math.sin(time * 0.55 + i * 1.4) > 0.985 ? 0.7 : 0
+      v01 = clamp01((spike * 0.95 + rare * 0.55) * centerBoost)
     }
 
     const target = clamp01(v01 * 1.45) * activeFactor
+    // 假频谱上升快、下落也快，突增后迅速回落，才能形成「击打」而非常驻
     const rising = target > bandEnergy[i]
-    const tau = props.active ? (rising ? 0.04 : 0.1) : 0.28
+    const tau = props.active
+      ? (hasRealSpectrum ? (rising ? 0.04 : 0.1) : (rising ? 0.03 : 0.06))
+      : 0.28
     const k = 1 - Math.exp(-dt / tau)
     bandEnergy[i] += (target - bandEnergy[i]) * k
     sum += bandEnergy[i]
@@ -240,24 +246,26 @@ const tick = (ts: number) => {
 
   updateBands(dt)
 
-  // 频带突增触发闪电；全局能量高时放宽阈值
+  // 频带突增触发闪电；假频谱必须「陡升」才算击打，禁止靠常驻高值连闪
   const peak = bandEnergy.reduce((m, v) => (v > m ? v : m), 0)
   const strikeThreshold = props.active
-    ? Math.max(0.32, 0.52 - energy * 0.22)
+    ? (hasRealSpectrum ? Math.max(0.32, 0.52 - energy * 0.22) : 0.42)
     : 0.85
+  const minRise = hasRealSpectrum ? 0.04 : 0.14
   const candidates: { i: number; score: number }[] = []
   for (let i = 0; i < bandEnergy.length; i++) {
     const cur = bandEnergy[i]
     const prev = prevBand[i] ?? 0
     const rise = cur - prev
-    if (cur >= strikeThreshold && (rise > 0.04 || cur > 0.72)) {
-      candidates.push({ i, score: cur + rise * 2.5 })
-    }
+    const hit = hasRealSpectrum
+      ? cur >= strikeThreshold && (rise > minRise || cur > 0.78)
+      : cur >= strikeThreshold && rise > minRise
+    if (hit) candidates.push({ i, score: cur + rise * 2.5 })
   }
   candidates.sort((a, b) => b.score - a.score)
 
   const maxSpawn = props.active
-    ? Math.min(4, 1 + Math.floor(peak * 3 + energy * 2))
+    ? Math.min(hasRealSpectrum ? 4 : 2, 1 + Math.floor(peak * (hasRealSpectrum ? 3 : 1.5) + energy * (hasRealSpectrum ? 2 : 0.8)))
     : 0
   if (spawnCooldown <= 0 && candidates.length > 0 && bolts.length < MAX_BOLTS) {
     let spawned = 0
@@ -269,12 +277,23 @@ const tick = (ts: number) => {
       flash = Math.max(flash, 0.25 + local * 0.55)
       spawned++
     }
-    // 节拍密集时冷却更短
-    spawnCooldown = props.active ? Math.max(0.028, 0.09 - energy * 0.06) : 0.2
+    // 真频谱跟拍更密；假频谱加长冷却，避免脉冲串连成暴雨
+    spawnCooldown = props.active
+      ? (hasRealSpectrum
+        ? Math.max(0.028, 0.09 - energy * 0.06)
+        : Math.max(0.2, 0.38 - peak * 0.08))
+      : 0.2
   }
 
-  // 无真人声频但需要一点生命感：低频段偶尔弱闪
-  if (props.active && !candidates.length && energy > 0.35 && spawnCooldown <= 0 && Math.random() < energy * 0.08) {
+  // 仅真实频谱：无候选时偶尔弱闪保舞台感；假频谱靠稀疏脉冲即可，不再兜底刷闪
+  if (
+    hasRealSpectrum &&
+    props.active &&
+    !candidates.length &&
+    energy > 0.35 &&
+    spawnCooldown <= 0 &&
+    Math.random() < energy * 0.08
+  ) {
     const bi = Math.floor(Math.random() * bandEnergy.length)
     bolts.push(spawnBolt(bi, Math.max(0.35, bandEnergy[bi]), stage))
     flash = Math.max(flash, 0.15)
