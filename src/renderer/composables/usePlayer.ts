@@ -171,13 +171,10 @@ export function usePlayer() {
       stopProgressUpdate()
       const next = playerStore.getNext()
       if (next) {
-        const index = playerStore.queue.findIndex(m => m.id === next.id)
-        if (index >= 0) {
-          playerStore.setCurrentQueueIndex(index)
-          setTimeout(async () => {
-            await play(next)
-          }, 500)
-        }
+        playerStore.setCurrentQueueIndex(next.index)
+        setTimeout(async () => {
+          await play(next.music)
+        }, 500)
       }
     }
 
@@ -284,13 +281,10 @@ export function usePlayer() {
           stopProgressUpdate()
           const next = playerStore.getNext()
           if (next) {
-            const index = playerStore.queue.findIndex(m => m.id === next.id)
-            if (index >= 0) {
-              playerStore.setCurrentQueueIndex(index)
-              setTimeout(async () => {
-                await play(next)
-              }, 500)
-            }
+            playerStore.setCurrentQueueIndex(next.index)
+            setTimeout(async () => {
+              await play(next.music)
+            }, 500)
           }
         },
         onloaderror: async (_id, error) => {
@@ -323,13 +317,10 @@ export function usePlayer() {
 
           const next = playerStore.getNext()
           if (next) {
-            const index = playerStore.queue.findIndex(m => m.id === next.id)
-            if (index >= 0) {
-              playerStore.setCurrentQueueIndex(index)
-              setTimeout(async () => {
-                await play(next)
-              }, 1000)
-            }
+            playerStore.setCurrentQueueIndex(next.index)
+            setTimeout(async () => {
+              await play(next.music)
+            }, 1000)
           }
         }
       })
@@ -347,13 +338,10 @@ export function usePlayer() {
 
       const next = playerStore.getNext()
       if (next) {
-        const index = playerStore.queue.findIndex(m => m.id === next.id)
-        if (index >= 0) {
-          playerStore.setCurrentQueueIndex(index)
-          setTimeout(async () => {
-            await play(next)
-          }, 1000)
-        }
+        playerStore.setCurrentQueueIndex(next.index)
+        setTimeout(async () => {
+          await play(next.music)
+        }, 1000)
       }
     }
   }

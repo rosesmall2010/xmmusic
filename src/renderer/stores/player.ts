@@ -97,74 +97,98 @@ export const usePlayerStore = defineStore('player', () => {
     playMode.value = modes[nextIndex]
   }
 
-  // 获取下一首
-  function getNext(): MusicItem | null {
-    if (queue.value.length === 0) return null
-
-    if (playMode.value === 'single') {
-      // 单曲循环：返回当前歌曲
-      return currentMusic.value
-    } else if (playMode.value === 'random') {
-      // 列表随机：当队列大于 1 时，下一首一定不是刚刚播放的那一首
-      const len = queue.value.length
-      if (len === 1) return queue.value[0]
-
-      const currentIndex = currentQueueIndex.value
-      // 如果当前索引无效，直接随机
-      if (currentIndex < 0 || currentIndex >= len) {
-        const randomIndex = Math.floor(Math.random() * len)
-        return queue.value[randomIndex]
-      }
-
-      // 生成 [0, len-2]，再映射到跳过 currentIndex 的实际索引
-      const r = Math.floor(Math.random() * (len - 1))
-      const nextIndex = r >= currentIndex ? r + 1 : r
-      return queue.value[nextIndex]
-    } else if (playMode.value === 'repeat') {
-      // 列表循环：播放完最后一首后回到第一首
-      const nextIndex = currentQueueIndex.value + 1
-      if (nextIndex < queue.value.length) {
-        return queue.value[nextIndex]
-      } else {
-        return queue.value[0] // 循环到第一首
-      }
-    } else {
-      // sequential: 列表顺序播放
-      const nextIndex = currentQueueIndex.value + 1
-      if (nextIndex < queue.value.length) {
-        return queue.value[nextIndex]
-      }
-      return null
+  /** 解析当前队列下标：索引无效时按 currentMusic.id 回退，避免切歌偏离模式 */
+  function resolveCurrentIndex(): number {
+    const len = queue.value.length
+    if (len === 0) return -1
+    const idx = currentQueueIndex.value
+    if (idx >= 0 && idx < len) return idx
+    if (currentMusic.value) {
+      return queue.value.findIndex(m => m.id === currentMusic.value!.id)
     }
+    return -1
   }
 
-  // 获取上一首
-  function getPrevious(): MusicItem | null {
-    if (queue.value.length === 0) return null
-
-    if (playMode.value === 'single') {
-      // 单曲循环：返回当前歌曲
-      return currentMusic.value
-    } else if (playMode.value === 'random') {
-      // 列表随机：随机选择一首
-      const randomIndex = Math.floor(Math.random() * queue.value.length)
-      return queue.value[randomIndex]
-    } else if (playMode.value === 'repeat') {
-      // 列表循环：从第一首往前时跳到最后一首
-      const prevIndex = currentQueueIndex.value - 1
-      if (prevIndex >= 0) {
-        return queue.value[prevIndex]
-      } else {
-        return queue.value[queue.value.length - 1] // 循环到最后一首
-      }
-    } else {
-      // sequential: 列表顺序播放
-      const prevIndex = currentQueueIndex.value - 1
-      if (prevIndex >= 0) {
-        return queue.value[prevIndex]
-      }
-      return null
+  /** 随机一首（队列 > 1 时避开当前下标） */
+  function pickRandomIndex(excludeIndex: number): number {
+    const len = queue.value.length
+    if (len <= 1) return 0
+    if (excludeIndex < 0 || excludeIndex >= len) {
+      return Math.floor(Math.random() * len)
     }
+    const r = Math.floor(Math.random() * (len - 1))
+    return r >= excludeIndex ? r + 1 : r
+  }
+
+  /**
+   * 按播放模式取下一首（含队列下标，避免同 id 多条时 findIndex 找错）
+   * - sequential：顺序，末尾不再前进
+   * - random：随机（避开当前）
+   * - repeat：顺序循环，末尾回到第一首
+   * - single：始终当前曲（手动/自动一致，重新播本曲）
+   */
+  function getNext(): { music: MusicItem; index: number } | null {
+    const len = queue.value.length
+    if (len === 0) return null
+
+    const currentIndex = resolveCurrentIndex()
+    const mode = playMode.value
+
+    if (mode === 'single') {
+      if (currentIndex >= 0) return { music: queue.value[currentIndex], index: currentIndex }
+      return currentMusic.value ? { music: currentMusic.value, index: 0 } : null
+    }
+
+    if (mode === 'random') {
+      const nextIndex = pickRandomIndex(currentIndex)
+      return { music: queue.value[nextIndex], index: nextIndex }
+    }
+
+    if (mode === 'repeat') {
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % len
+      return { music: queue.value[nextIndex], index: nextIndex }
+    }
+
+    // sequential：到末尾不切换
+    if (currentIndex < 0) return { music: queue.value[0], index: 0 }
+    const nextIndex = currentIndex + 1
+    if (nextIndex >= len) return null
+    return { music: queue.value[nextIndex], index: nextIndex }
+  }
+
+  /**
+   * 按播放模式取上一首
+   * - sequential：顺序，开头不再后退
+   * - random：随机（避开当前）
+   * - repeat：顺序循环，开头跳到最后一首
+   * - single：始终当前曲
+   */
+  function getPrevious(): { music: MusicItem; index: number } | null {
+    const len = queue.value.length
+    if (len === 0) return null
+
+    const currentIndex = resolveCurrentIndex()
+    const mode = playMode.value
+
+    if (mode === 'single') {
+      if (currentIndex >= 0) return { music: queue.value[currentIndex], index: currentIndex }
+      return currentMusic.value ? { music: currentMusic.value, index: 0 } : null
+    }
+
+    if (mode === 'random') {
+      const prevIndex = pickRandomIndex(currentIndex)
+      return { music: queue.value[prevIndex], index: prevIndex }
+    }
+
+    if (mode === 'repeat') {
+      const prevIndex = currentIndex <= 0 ? len - 1 : currentIndex - 1
+      return { music: queue.value[prevIndex], index: prevIndex }
+    }
+
+    // sequential：到开头不切换
+    if (currentIndex <= 0) return null
+    const prevIndex = currentIndex - 1
+    return { music: queue.value[prevIndex], index: prevIndex }
   }
 
   const applyState = (state?: any) => {

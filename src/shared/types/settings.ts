@@ -6,7 +6,7 @@ export interface AppSettings {
   theme: 'light' | 'dark'
   language: 'zh' | 'en'
   volume: number
-  playMode: 'sequential' | 'random' | 'repeat'
+  playMode: 'sequential' | 'random' | 'repeat' | 'single'
   autoPlay: boolean
   gaplessPlayback: boolean
   showLyrics: boolean
