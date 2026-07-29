@@ -171,7 +171,7 @@ export function usePlayer() {
       stopProgressUpdate()
       const next = playerStore.getNext()
       if (next) {
-        playerStore.setCurrentQueueIndex(next.index)
+        if (next.index >= 0) playerStore.setCurrentQueueIndex(next.index)
         setTimeout(async () => {
           await play(next.music)
         }, 500)
@@ -281,7 +281,7 @@ export function usePlayer() {
           stopProgressUpdate()
           const next = playerStore.getNext()
           if (next) {
-            playerStore.setCurrentQueueIndex(next.index)
+            if (next.index >= 0) playerStore.setCurrentQueueIndex(next.index)
             setTimeout(async () => {
               await play(next.music)
             }, 500)
@@ -315,7 +315,7 @@ export function usePlayer() {
           stopProgressUpdate()
           isPlaybackInProgress = false
 
-          const next = playerStore.getNext()
+          const next = playerStore.getNextSkippingCurrent()
           if (next) {
             playerStore.setCurrentQueueIndex(next.index)
             setTimeout(async () => {
@@ -336,7 +336,7 @@ export function usePlayer() {
       stopProgressUpdate()
       isPlaybackInProgress = false
 
-      const next = playerStore.getNext()
+      const next = playerStore.getNextSkippingCurrent()
       if (next) {
         playerStore.setCurrentQueueIndex(next.index)
         setTimeout(async () => {

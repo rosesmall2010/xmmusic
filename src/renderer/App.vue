@@ -287,7 +287,7 @@ function handleTrayAction(action: string) {
 async function handlePrevious() {
   const prev = playerStore.getPrevious()
   if (prev) {
-    playerStore.setCurrentQueueIndex(prev.index)
+    if (prev.index >= 0) playerStore.setCurrentQueueIndex(prev.index)
     await player.play(prev.music)
   }
 }
@@ -295,7 +295,7 @@ async function handlePrevious() {
 async function handleNext() {
   const next = playerStore.getNext()
   if (next) {
-    playerStore.setCurrentQueueIndex(next.index)
+    if (next.index >= 0) playerStore.setCurrentQueueIndex(next.index)
     await player.play(next.music)
   }
 }

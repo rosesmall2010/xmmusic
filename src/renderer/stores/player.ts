@@ -136,7 +136,8 @@ export const usePlayerStore = defineStore('player', () => {
 
     if (mode === 'single') {
       if (currentIndex >= 0) return { music: queue.value[currentIndex], index: currentIndex }
-      return currentMusic.value ? { music: currentMusic.value, index: 0 } : null
+      // 当前曲不在队列：不伪造 index:0，否则调用方 setCurrentQueueIndex(0) 会误切到队首
+      return currentMusic.value ? { music: currentMusic.value, index: -1 } : null
     }
 
     if (mode === 'random') {
@@ -172,7 +173,8 @@ export const usePlayerStore = defineStore('player', () => {
 
     if (mode === 'single') {
       if (currentIndex >= 0) return { music: queue.value[currentIndex], index: currentIndex }
-      return currentMusic.value ? { music: currentMusic.value, index: 0 } : null
+      // 当前曲不在队列：不伪造 index:0，否则调用方 setCurrentQueueIndex(0) 会误切到队首
+      return currentMusic.value ? { music: currentMusic.value, index: -1 } : null
     }
 
     if (mode === 'random') {
@@ -189,6 +191,24 @@ export const usePlayerStore = defineStore('player', () => {
     if (currentIndex <= 0) return null
     const prevIndex = currentIndex - 1
     return { music: queue.value[prevIndex], index: prevIndex }
+  }
+
+  /**
+   * 播放失败时跳过当前曲（避免单曲循环/仅一首损坏时死循环重试）
+   * 队列仅 1 首则停止；随机避开当前；其余按列表往后跳并绕回
+   */
+  function getNextSkippingCurrent(): { music: MusicItem; index: number } | null {
+    const len = queue.value.length
+    if (len <= 1) return null
+
+    const currentIndex = resolveCurrentIndex()
+    if (playMode.value === 'random') {
+      const nextIndex = pickRandomIndex(currentIndex)
+      return { music: queue.value[nextIndex], index: nextIndex }
+    }
+
+    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % len
+    return { music: queue.value[nextIndex], index: nextIndex }
   }
 
   const applyState = (state?: any) => {
@@ -373,6 +393,7 @@ export const usePlayerStore = defineStore('player', () => {
     setCurrentQueueIndex,
     getNext,
     getPrevious,
+    getNextSkippingCurrent,
     togglePlayMode,
     initialize,
     resumePosition,

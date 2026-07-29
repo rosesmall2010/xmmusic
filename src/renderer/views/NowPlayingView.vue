@@ -446,7 +446,7 @@ const togglePlay = async () => {
 const previous = async () => {
   const prev = playerStore.getPrevious()
   if (prev) {
-    playerStore.setCurrentQueueIndex(prev.index)
+    if (prev.index >= 0) playerStore.setCurrentQueueIndex(prev.index)
     await play(prev.music)
   }
 }
@@ -454,7 +454,7 @@ const previous = async () => {
 const next = async () => {
   const nextMusic = playerStore.getNext()
   if (nextMusic) {
-    playerStore.setCurrentQueueIndex(nextMusic.index)
+    if (nextMusic.index >= 0) playerStore.setCurrentQueueIndex(nextMusic.index)
     await play(nextMusic.music)
   }
 }
