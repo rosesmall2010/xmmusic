@@ -692,6 +692,8 @@ const afterLyricsMatched = async (targetMusicId: number, lyricsPath?: string) =>
   if (currentMusic.value?.id === targetMusicId) {
     await loadLyrics()
     rightPanelMode.value = 'lyrics'
+    // loadLyrics 会把高亮置 -1；若本来就在歌词面板则 watch 不触发，需按进度重新对齐
+    syncLyricIndex(currentTime.value, true)
   }
 }
 
@@ -855,6 +857,9 @@ watch(currentMusic, async (music, prev, onCleanup) => {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
     if (cancelled) return
     await loadLyrics()
+    if (cancelled) return
+    // 切歌/重载后若进度未变（暂停），currentTime watch 不会补高亮
+    syncLyricIndex(currentTime.value, true)
     if (cancelled) return
 
     if (music.coverPath) {
