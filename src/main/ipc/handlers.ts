@@ -25,6 +25,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   const lyricsMatchService = new LyricsMatchService()
   const metadataEditor = new MetadataEditor()
   let lyricsMatchRunning = false
+  /** 仅批量任务置位，供离开再回来恢复进度条 */
+  let batchLyricsMatchActive = false
+  let lyricsMatchLastProgress: LyricsMatchProgress | null = null
 
   const assertLyricsMatchIdle = () => {
     if (lyricsMatchRunning) throw new Error('歌词匹配进行中，请稍候')
@@ -1246,73 +1249,92 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   /**
    * 批量匹配本地库全部无歌词歌曲
-   * 进度通过 lyrics-match-progress 事件推送
+   * 进度通过 lyrics-match-progress 事件推送；结束发 lyrics-match-finished
    */
   ipcMain.handle('batch-match-missing-lyrics', async () => {
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
       lyricsMatchService.resetCancel()
+      batchLyricsMatchActive = true
+      lyricsMatchLastProgress = null
 
-      const pageSize = 100
-      const songs: MusicItem[] = []
-      const seen = new Set<number>()
+      try {
+        const pageSize = 100
+        const songs: MusicItem[] = []
+        const seen = new Set<number>()
 
-      let offset = 0
-      while (true) {
-        const page = db.getMusicWithoutLyrics(offset, pageSize)
-        if (page.length === 0) break
-        for (const m of page) {
-          if (!seen.has(m.id)) {
-            seen.add(m.id)
-            songs.push(m)
+        let offset = 0
+        while (true) {
+          const page = db.getMusicWithoutLyrics(offset, pageSize)
+          if (page.length === 0) break
+          for (const m of page) {
+            if (!seen.has(m.id)) {
+              seen.add(m.id)
+              songs.push(m)
+            }
           }
+          offset += page.length
+          if (page.length < pageSize) break
         }
-        offset += page.length
-        if (page.length < pageSize) break
-      }
 
-      // 路径写在库里但文件已丢失 → 一并纳入批量匹配
-      offset = 0
-      while (true) {
-        const page = db.getMusicWithClaimedLyricsPath(offset, pageSize)
-        if (page.length === 0) break
-        for (const m of page) {
-          if (seen.has(m.id)) continue
-          if (m.lyricsPath && !existsSync(m.lyricsPath)) {
-            seen.add(m.id)
-            songs.push(m)
+        // 路径写在库里但文件已丢失 → 一并纳入批量匹配
+        offset = 0
+        while (true) {
+          const page = db.getMusicWithClaimedLyricsPath(offset, pageSize)
+          if (page.length === 0) break
+          for (const m of page) {
+            if (seen.has(m.id)) continue
+            if (m.lyricsPath && !existsSync(m.lyricsPath)) {
+              seen.add(m.id)
+              songs.push(m)
+            }
           }
+          offset += page.length
+          if (page.length < pageSize) break
         }
-        offset += page.length
-        if (page.length < pageSize) break
-      }
 
-      if (songs.length === 0) {
-        const empty: LyricsMatchSummary = {
-          total: 0,
-          success: 0,
-          failed: 0,
-          skipped: 0,
-          cancelled: false,
-          results: []
-        }
-        return empty
-      }
-
-      const summary = await lyricsMatchService.matchBatch(db, songs, {
-        force: false,
-        onProgress: (progress: LyricsMatchProgress) => {
+        if (songs.length === 0) {
+          const empty: LyricsMatchSummary = {
+            total: 0,
+            success: 0,
+            failed: 0,
+            skipped: 0,
+            cancelled: false,
+            results: []
+          }
           if (!mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('lyrics-match-progress', progress)
+            mainWindow.webContents.send('lyrics-match-finished', empty)
           }
+          return empty
         }
-      })
 
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('music-list-refresh')
+        const summary = await lyricsMatchService.matchBatch(db, songs, {
+          force: false,
+          onProgress: (progress: LyricsMatchProgress) => {
+            lyricsMatchLastProgress = progress
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lyrics-match-progress', progress)
+            }
+          }
+        })
+
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('music-list-refresh')
+          mainWindow.webContents.send('lyrics-match-finished', summary)
+        }
+        return summary
+      } finally {
+        batchLyricsMatchActive = false
+        lyricsMatchLastProgress = null
       }
-      return summary
     })
+  })
+
+  ipcMain.handle('get-lyrics-match-state', async () => {
+    return {
+      isRunning: batchLyricsMatchActive,
+      progress: lyricsMatchLastProgress
+    }
   })
 
   ipcMain.handle('cancel-lyrics-match', async () => {

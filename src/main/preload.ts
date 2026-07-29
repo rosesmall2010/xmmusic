@@ -268,11 +268,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
   batchMatchMissingLyrics: () => ipcRenderer.invoke('batch-match-missing-lyrics'),
   cancelLyricsMatch: () => ipcRenderer.invoke('cancel-lyrics-match'),
+  getLyricsMatchState: () => ipcRenderer.invoke('get-lyrics-match-state'),
   onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => {
     ipcRenderer.on('lyrics-match-progress', (_, progress) => callback(progress))
   },
   removeLyricsMatchProgress: () => {
     ipcRenderer.removeAllListeners('lyrics-match-progress')
+  },
+  onLyricsMatchFinished: (callback: (summary: LyricsMatchSummary) => void) => {
+    ipcRenderer.on('lyrics-match-finished', (_, summary) => callback(summary))
+  },
+  removeLyricsMatchFinished: () => {
+    ipcRenderer.removeAllListeners('lyrics-match-finished')
   },
   // 系统托盘功能
   updateTrayPlayState: (isPlaying: boolean) => ipcRenderer.send('update-tray-play-state', isPlaying),
@@ -443,8 +450,11 @@ declare global {
       getMusicWithoutLyricsCount: () => Promise<number>
       batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>
       cancelLyricsMatch: () => Promise<boolean>
+      getLyricsMatchState: () => Promise<{ isRunning: boolean; progress: LyricsMatchProgress | null }>
       onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => void
       removeLyricsMatchProgress: () => void
+      onLyricsMatchFinished: (callback: (summary: LyricsMatchSummary) => void) => void
+      removeLyricsMatchFinished: () => void
       updateTrayPlayState: (isPlaying: boolean) => void
       updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => void
       onTrayAction: (callback: (action: string) => void) => void

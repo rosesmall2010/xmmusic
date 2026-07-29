@@ -208,14 +208,15 @@ import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
+import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
-import type { LyricsMatchProgress } from '@shared/types/lyrics'
 
 const { t } = useI18n()
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
+const lyricsMatchStore = useLyricsMatchStore()
 const { play } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
@@ -225,9 +226,9 @@ const totalCount = computed(() => musicStore.totalCount)
 const isScanning = ref(false)
 const scanProgress = ref<ScanProgress | null>(null)
 
-/** 批量匹配无歌词 */
-const isMatchingLyrics = ref(false)
-const lyricsMatchProgress = ref<LyricsMatchProgress | null>(null)
+/** 批量匹配无歌词（状态在 store，离开页面再回来仍可见） */
+const isMatchingLyrics = computed(() => lyricsMatchStore.isMatching)
+const lyricsMatchProgress = computed(() => lyricsMatchStore.progress)
 
 // 目录管理对话框状态
 const showDirManageDialog = ref(false)
@@ -265,6 +266,9 @@ onMounted(async () => {
   // 监听元数据更新事件
   window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
 
+  // 同步批量匹配状态（离开再回来时恢复进度条）
+  await lyricsMatchStore.syncFromMain()
+
   // 监听扫描进度
   window.electronAPI.onScanProgress((progress) => {
     isScanning.value = true
@@ -286,7 +290,7 @@ onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
   window.electronAPI.removeScanProgress()
   window.electronAPI.removeScanStateChanged()
-  window.electronAPI.removeLyricsMatchProgress()
+  // 不移除 lyrics-match 监听：由 lyricsMatchStore 跨路由持有
 })
 
 const startBackgroundLoading = async () => {
@@ -368,21 +372,16 @@ const handleBatchMatchLyrics = async () => {
     }
     if (!confirm(t('localMusic.batchMatchConfirm', { count }))) return
 
-    isMatchingLyrics.value = true
-    lyricsMatchProgress.value = {
+    lyricsMatchStore.setOptimisticProgress({
       current: 0,
       total: count,
       success: 0,
       failed: 0,
       skipped: 0,
       currentTitle: ''
-    }
-    window.electronAPI.removeLyricsMatchProgress()
-    window.electronAPI.onLyricsMatchProgress((progress) => {
-      lyricsMatchProgress.value = progress
     })
 
-    const summary = await window.electronAPI.batchMatchMissingLyrics()
+    const summary = await lyricsMatchStore.startBatchMatch()
     await musicStore.loadMusic(0, 20, true)
     startBackgroundLoading()
 
@@ -403,19 +402,11 @@ const handleBatchMatchLyrics = async () => {
     }
   } catch (error: any) {
     alert(t('localMusic.matchError') + ': ' + (error?.message || error))
-  } finally {
-    isMatchingLyrics.value = false
-    lyricsMatchProgress.value = null
-    window.electronAPI.removeLyricsMatchProgress()
   }
 }
 
 const cancelBatchMatchLyrics = async () => {
-  try {
-    await window.electronAPI.cancelLyricsMatch()
-  } catch {
-    // ignore
-  }
+  await lyricsMatchStore.cancel()
 }
 
 const handleScan = async () => {
