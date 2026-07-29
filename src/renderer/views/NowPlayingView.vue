@@ -238,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
@@ -802,12 +802,38 @@ const handleOnlineMatchLyrics = async () => {
   }
 }
 
-const scrollToCurrentLyric = () => {
-  if (!lyricsContainerRef.value || currentLyricIndex.value === -1) return
+const scrollToCurrentLyric = (instant = false) => {
+  // 隐藏面板时 scrollIntoView 无效/错位，只在歌词面板可见时滚动
+  if (rightPanelMode.value !== 'lyrics') return
+  if (!lyricsContainerRef.value || currentLyricIndex.value < 0) return
 
   const activeLine = lyricsContainerRef.value.children[currentLyricIndex.value] as HTMLElement
   if (activeLine) {
-    activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    activeLine.scrollIntoView({
+      behavior: instant ? 'instant' : 'smooth',
+      block: 'center'
+    })
+  }
+}
+
+/** 按播放进度同步高亮行；forceScroll 用于从队列切回歌词时强制滚到可见区 */
+const syncLyricIndex = (time: number, forceScroll = false) => {
+  if (lyrics.value.length === 0) return
+
+  let index = lyrics.value.findIndex(line => line.time > time)
+  if (index === -1) {
+    index = lyrics.value.length - 1
+  } else {
+    index = Math.max(0, index - 1)
+  }
+
+  const changed = index !== currentLyricIndex.value
+  if (changed) currentLyricIndex.value = index
+
+  if ((changed || forceScroll) && rightPanelMode.value === 'lyrics') {
+    nextTick(() => {
+      requestAnimationFrame(() => scrollToCurrentLyric(forceScroll))
+    })
   }
 }
 
@@ -873,23 +899,7 @@ watch(
 
 // 监听播放进度更新歌词
 watch(currentTime, (time) => {
-  if (lyrics.value.length === 0) return
-
-  // 找到当前时间对应的歌词行
-  let index = lyrics.value.findIndex(line => line.time > time)
-
-  if (index === -1) {
-    // 如果没找到比当前时间大的，说明是最后一行
-    index = lyrics.value.length - 1
-  } else {
-    // 否则是前一行
-    index = Math.max(0, index - 1)
-  }
-
-  if (index !== currentLyricIndex.value) {
-    currentLyricIndex.value = index
-    scrollToCurrentLyric()
-  }
+  syncLyricIndex(time)
 })
 
 // 监听当前队列索引变化，自动滚动到当前播放的歌曲
@@ -902,12 +912,14 @@ watch(currentQueueIndex, () => {
   }
 })
 
-// 监听右侧面板切换，切换到队列时滚动到当前歌曲
+// 切换到队列 → 滚到当前曲；切回歌词 → 按当前进度对齐并滚到可见区
 watch(rightPanelMode, (mode) => {
   if (mode === 'queue') {
     setTimeout(() => {
       scrollToCurrentQueueItem()
     }, 100)
+  } else if (mode === 'lyrics') {
+    syncLyricIndex(currentTime.value, true)
   }
 })
 
