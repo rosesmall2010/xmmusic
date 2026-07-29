@@ -25,6 +25,20 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   const lyricsMatchService = new LyricsMatchService()
   const metadataEditor = new MetadataEditor()
   let lyricsMatchRunning = false
+
+  const assertLyricsMatchIdle = () => {
+    if (lyricsMatchRunning) throw new Error('歌词匹配进行中，请稍候')
+  }
+
+  const withLyricsMatchLock = async <T>(fn: () => Promise<T>): Promise<T> => {
+    assertLyricsMatchIdle()
+    lyricsMatchRunning = true
+    try {
+      return await fn()
+    } finally {
+      lyricsMatchRunning = false
+    }
+  }
   // 窗口控制（不依赖数据库）
   ipcMain.handle('window-minimize', () => {
     mainWindow.minimize()
@@ -1195,14 +1209,17 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   /** 单曲匹配 / 重新匹配歌词 */
   ipcMain.handle('match-lyrics', async (_, musicId: number, options?: { force?: boolean }) => {
     if (!db) throw new Error('数据库未初始化')
-    const music = db.getMusicById(musicId)
-    if (!music) throw new Error('音乐不存在')
-    return lyricsMatchService.matchOne(db, music, { force: options?.force === true })
+    return withLyricsMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return lyricsMatchService.matchOne(db, music, { force: options?.force === true })
+    })
   })
 
   /** 搜索在线歌词候选（供全屏播放手动选择） */
   ipcMain.handle('search-lyrics-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
+    assertLyricsMatchIdle()
     const music = db.getMusicById(musicId)
     if (!music) throw new Error('音乐不存在')
     return {
@@ -1214,9 +1231,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   /** 应用用户选中的候选歌词 */
   ipcMain.handle('apply-lyrics-candidate', async (_, musicId: number, songId: number) => {
     if (!db) throw new Error('数据库未初始化')
-    const music = db.getMusicById(musicId)
-    if (!music) throw new Error('音乐不存在')
-    return lyricsMatchService.applyCandidate(db, music, songId)
+    return withLyricsMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return lyricsMatchService.applyCandidate(db, music, songId)
+    })
   })
 
   /** 统计本地库中无歌词歌曲数量 */
@@ -1231,24 +1250,42 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
    */
   ipcMain.handle('batch-match-missing-lyrics', async () => {
     if (!db) throw new Error('数据库未初始化')
-    if (lyricsMatchRunning) throw new Error('歌词匹配进行中')
-    lyricsMatchRunning = true
-    lyricsMatchService.resetCancel()
+    return withLyricsMatchLock(async () => {
+      lyricsMatchService.resetCancel()
 
-    try {
       const pageSize = 100
       const songs: MusicItem[] = []
+      const seen = new Set<number>()
+
       let offset = 0
       while (true) {
         const page = db.getMusicWithoutLyrics(offset, pageSize)
         if (page.length === 0) break
-        songs.push(...page)
+        for (const m of page) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id)
+            songs.push(m)
+          }
+        }
         offset += page.length
         if (page.length < pageSize) break
       }
 
-      // 再过滤：DB 有路径但文件已丢的也算无歌词
-      // getMusicWithoutLyrics 只取空路径；orphan 在 load 时才发现，这里另查全部更重，保持粗筛即可
+      // 路径写在库里但文件已丢失 → 一并纳入批量匹配
+      offset = 0
+      while (true) {
+        const page = db.getMusicWithClaimedLyricsPath(offset, pageSize)
+        if (page.length === 0) break
+        for (const m of page) {
+          if (seen.has(m.id)) continue
+          if (m.lyricsPath && !existsSync(m.lyricsPath)) {
+            seen.add(m.id)
+            songs.push(m)
+          }
+        }
+        offset += page.length
+        if (page.length < pageSize) break
+      }
 
       if (songs.length === 0) {
         const empty: LyricsMatchSummary = {
@@ -1275,9 +1312,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         mainWindow.webContents.send('music-list-refresh')
       }
       return summary
-    } finally {
-      lyricsMatchRunning = false
-    }
+    })
   })
 
   ipcMain.handle('cancel-lyrics-match', async () => {

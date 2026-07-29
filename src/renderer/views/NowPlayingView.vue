@@ -199,7 +199,7 @@
           <button
             class="btn-control btn-secondary"
             @click="handleOnlineMatchLyrics"
-            :disabled="!currentMusic || matchingLyrics"
+            :disabled="!currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate"
             :title="matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline')"
           >
             <FileText :size="20" />
@@ -228,10 +228,10 @@
 
     <LyricsMatchSelectModal
       :show="showLyricsPick"
-      :music-title="currentMusic?.title || ''"
+      :music-title="lyricsMatchTargetTitle || currentMusic?.title || ''"
       :candidates="lyricsCandidates"
       :applying="applyingLyricsCandidate"
-      @close="showLyricsPick = false"
+      @close="closeLyricsPick"
       @select="onSelectLyricsCandidate"
     />
   </div>
@@ -314,6 +314,9 @@ const matchingLyrics = ref(false)
 const showLyricsPick = ref(false)
 const lyricsCandidates = ref<LyricsMatchCandidate[]>([])
 const applyingLyricsCandidate = ref(false)
+/** 本次匹配锁定的曲目 id，防止切歌后把候选写到新歌 */
+const lyricsMatchTargetId = ref<number | null>(null)
+const lyricsMatchTargetTitle = ref('')
 const volumeValue = computed<number>({
   get: () => playerStore.volume,
   set: (v) => {
@@ -682,34 +685,50 @@ const loadLyrics = async () => {
 }
 
 /** 应用匹配结果后刷新歌词面板与当前曲元数据 */
-const afterLyricsMatched = async (lyricsPath?: string) => {
-  if (currentMusic.value && lyricsPath) {
+const afterLyricsMatched = async (targetMusicId: number, lyricsPath?: string) => {
+  if (currentMusic.value?.id === targetMusicId && lyricsPath) {
     currentMusic.value.lyricsPath = lyricsPath
   }
-  await loadLyrics()
-  rightPanelMode.value = 'lyrics'
+  if (currentMusic.value?.id === targetMusicId) {
+    await loadLyrics()
+    rightPanelMode.value = 'lyrics'
+  }
 }
 
-const applyLyricsSongId = async (songId: number) => {
-  if (!currentMusic.value) return
+const closeLyricsPick = () => {
+  showLyricsPick.value = false
+  lyricsCandidates.value = []
+  lyricsMatchTargetId.value = null
+  lyricsMatchTargetTitle.value = ''
+}
+
+const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTitle: string) => {
+  // 切歌后丢弃过期候选，避免写错曲目
+  if (currentMusic.value?.id !== targetMusicId) {
+    closeLyricsPick()
+    return
+  }
   applyingLyricsCandidate.value = true
   try {
-    const result = await window.electronAPI.applyLyricsCandidate(currentMusic.value.id, songId)
+    const result = await window.electronAPI.applyLyricsCandidate(targetMusicId, songId)
+    if (currentMusic.value?.id !== targetMusicId) {
+      closeLyricsPick()
+      return
+    }
     if (result.status === 'matched') {
-      showLyricsPick.value = false
-      await afterLyricsMatched(result.lyricsPath)
-      // 轻提示即可，避免打扰播放
+      closeLyricsPick()
+      await afterLyricsMatched(targetMusicId, result.lyricsPath)
     } else if (result.status === 'skipped_instrumental') {
-      alert(t('music.matchLyricsInstrumental', { title: currentMusic.value.title }))
+      alert(t('music.matchLyricsInstrumental', { title: targetTitle }))
     } else {
       alert(t('music.matchLyricsFailed', {
-        title: currentMusic.value.title,
+        title: targetTitle,
         reason: result.message || ''
       }))
     }
   } catch (error: any) {
     alert(t('music.matchLyricsFailed', {
-      title: currentMusic.value.title,
+      title: targetTitle,
       reason: error?.message || error
     }))
   } finally {
@@ -718,7 +737,10 @@ const applyLyricsSongId = async (songId: number) => {
 }
 
 const onSelectLyricsCandidate = async (songId: number) => {
-  await applyLyricsSongId(songId)
+  const id = lyricsMatchTargetId.value
+  const title = lyricsMatchTargetTitle.value
+  if (id == null) return
+  await applyLyricsSongId(songId, id, title)
 }
 
 /**
@@ -727,12 +749,27 @@ const onSelectLyricsCandidate = async (songId: number) => {
  * - 多条候选弹出选择对话框；仅一条则直接应用
  */
 const handleOnlineMatchLyrics = async () => {
-  if (!currentMusic.value || matchingLyrics.value) return
+  if (
+    !currentMusic.value ||
+    matchingLyrics.value ||
+    showLyricsPick.value ||
+    applyingLyricsCandidate.value
+  ) return
+
+  const targetId = currentMusic.value.id
+  const targetTitle = currentMusic.value.title
+  lyricsMatchTargetId.value = targetId
+  lyricsMatchTargetTitle.value = targetTitle
   matchingLyrics.value = true
+
   try {
-    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(
-      currentMusic.value.id
-    )
+    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(targetId)
+
+    // 搜索返回后若已切歌，放弃本次结果
+    if (currentMusic.value?.id !== targetId) {
+      closeLyricsPick()
+      return
+    }
 
     if (!candidates.length) {
       alert(t('nowPlaying.noLyricsCandidates'))
@@ -740,12 +777,15 @@ const handleOnlineMatchLyrics = async () => {
     }
 
     if (hasExistingLyrics) {
-      const ok = confirm(t('nowPlaying.replaceLyricsConfirm', { title: currentMusic.value.title }))
-      if (!ok) return
+      const ok = confirm(t('nowPlaying.replaceLyricsConfirm', { title: targetTitle }))
+      if (!ok || currentMusic.value?.id !== targetId) {
+        closeLyricsPick()
+        return
+      }
     }
 
     if (candidates.length === 1) {
-      await applyLyricsSongId(candidates[0].songId)
+      await applyLyricsSongId(candidates[0].songId, targetId, targetTitle)
       return
     }
 
@@ -753,9 +793,10 @@ const handleOnlineMatchLyrics = async () => {
     showLyricsPick.value = true
   } catch (error: any) {
     alert(t('music.matchLyricsFailed', {
-      title: currentMusic.value.title,
+      title: targetTitle,
       reason: error?.message || error
     }))
+    closeLyricsPick()
   } finally {
     matchingLyrics.value = false
   }
@@ -771,7 +812,14 @@ const scrollToCurrentLyric = () => {
 }
 
 // 监听当前音乐变化
-watch(currentMusic, async (music, _prev, onCleanup) => {
+watch(currentMusic, async (music, prev, onCleanup) => {
+  // 切歌时关闭未完成的歌词选择，防止把候选写到新曲
+  if (prev && music && prev.id !== music.id) {
+    if (showLyricsPick.value || lyricsMatchTargetId.value != null) {
+      closeLyricsPick()
+    }
+  }
+
   let cancelled = false
   onCleanup(() => {
     cancelled = true

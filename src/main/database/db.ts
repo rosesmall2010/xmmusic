@@ -848,19 +848,33 @@ export default class MusicDatabase {
 
   /**
    * 统计无歌词（或歌词文件已丢失）的歌曲数
-   * 具体文件是否存在由匹配服务再校验；这里按 DB 字段粗筛
+   * 空路径用 SQL；路径失效需回磁盘核对
    */
   getMusicWithoutLyricsCount(): number {
-    const stmt = this.db!.prepare(`
+    const emptyStmt = this.db!.prepare(`
       SELECT COUNT(*) as count FROM all_music
       WHERE is_duplicate = 0
         AND (lyrics_path IS NULL OR lyrics_path = '')
     `)
-    return (stmt.get() as { count: number }).count
+    let count = (emptyStmt.get() as { count: number }).count
+
+    // 有路径但文件已丢的，也算待匹配
+    const pageSize = 200
+    let offset = 0
+    while (true) {
+      const page = this.getMusicWithClaimedLyricsPath(offset, pageSize)
+      if (page.length === 0) break
+      for (const m of page) {
+        if (m.lyricsPath && !existsSync(m.lyricsPath)) count++
+      }
+      offset += page.length
+      if (page.length < pageSize) break
+    }
+    return count
   }
 
   /**
-   * 分页取无歌词歌曲（用于批量在线匹配）
+   * 分页取无歌词歌曲（lyrics_path 为空）
    */
   getMusicWithoutLyrics(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
@@ -868,6 +882,27 @@ export default class MusicDatabase {
       FROM all_music am
       WHERE am.is_duplicate = 0
         AND (am.lyrics_path IS NULL OR am.lyrics_path = '')
+      ORDER BY am.id ASC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      return musicItem as MusicItem
+    })
+  }
+
+  /**
+   * 分页取「声称有歌词路径」的歌曲（用于筛出路径失效的孤儿记录）
+   */
+  getMusicWithClaimedLyricsPath(offset: number, limit: number): MusicItem[] {
+    const stmt = this.db!.prepare(`
+      SELECT am.*
+      FROM all_music am
+      WHERE am.is_duplicate = 0
+        AND am.lyrics_path IS NOT NULL
+        AND am.lyrics_path != ''
       ORDER BY am.id ASC
       LIMIT ? OFFSET ?
     `)
