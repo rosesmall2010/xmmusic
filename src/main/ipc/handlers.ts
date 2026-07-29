@@ -1200,6 +1200,25 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return lyricsMatchService.matchOne(db, music, { force: options?.force === true })
   })
 
+  /** 搜索在线歌词候选（供全屏播放手动选择） */
+  ipcMain.handle('search-lyrics-candidates', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return {
+      hasExistingLyrics: lyricsMatchService.hasExistingLyrics(music),
+      candidates: await lyricsMatchService.searchCandidates(music)
+    }
+  })
+
+  /** 应用用户选中的候选歌词 */
+  ipcMain.handle('apply-lyrics-candidate', async (_, musicId: number, songId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return lyricsMatchService.applyCandidate(db, music, songId)
+  })
+
   /** 统计本地库中无歌词歌曲数量 */
   ipcMain.handle('get-music-without-lyrics-count', async () => {
     if (!db) return 0

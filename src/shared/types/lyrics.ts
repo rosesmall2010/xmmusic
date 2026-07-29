@@ -51,3 +51,12 @@ export interface LyricsMatchSummary {
   cancelled: boolean
   results: LyricsMatchResult[]
 }
+
+/** 在线匹配候选（用户选择用） */
+export interface LyricsMatchCandidate {
+  songId: number
+  name: string
+  artists: string
+  album?: string
+  similarity: number
+}

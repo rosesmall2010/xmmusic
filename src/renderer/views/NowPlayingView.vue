@@ -196,6 +196,15 @@
             <Sliders :size="20" />
           </button>
 
+          <button
+            class="btn-control btn-secondary"
+            @click="handleOnlineMatchLyrics"
+            :disabled="!currentMusic || matchingLyrics"
+            :title="matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline')"
+          >
+            <FileText :size="20" />
+          </button>
+
           <div class="volume-control">
             <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? $t('player.unmute') : $t('player.mute')">
               <component :is="VolumeIcon" :size="20" />
@@ -216,6 +225,15 @@
 
     <!-- 音效面板 - 全屏居中显示 -->
     <EqualizerPanel v-model="showEqualizer" />
+
+    <LyricsMatchSelectModal
+      :show="showLyricsPick"
+      :music-title="currentMusic?.title || ''"
+      :candidates="lyricsCandidates"
+      :applying="applyingLyricsCandidate"
+      @close="showLyricsPick = false"
+      @select="onSelectLyricsCandidate"
+    />
   </div>
 </template>
 
@@ -233,9 +251,11 @@ import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3 } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
+import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
+import type { LyricsMatchCandidate } from '@shared/types/lyrics'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -290,6 +310,10 @@ const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
 const rightPanelMode = ref<'lyrics' | 'queue'>('lyrics') // 右侧面板模式
 const showEqualizer = ref(false)
+const matchingLyrics = ref(false)
+const showLyricsPick = ref(false)
+const lyricsCandidates = ref<LyricsMatchCandidate[]>([])
+const applyingLyricsCandidate = ref(false)
 const volumeValue = computed<number>({
   get: () => playerStore.volume,
   set: (v) => {
@@ -649,12 +673,91 @@ const loadLyrics = async () => {
     if (lyricsData && lyricsData.lines) {
       lyrics.value = lyricsData.lines
     } else {
-      // TODO: 如果本地没有，可以尝试在线搜索（未来功能）
       lyrics.value = [{ time: 0, text: t('nowPlaying.noLyrics') }]
     }
   } catch (error) {
     console.error('Failed to load lyrics:', error)
     lyrics.value = [{ time: 0, text: t('nowPlaying.lyricsLoadError') }]
+  }
+}
+
+/** 应用匹配结果后刷新歌词面板与当前曲元数据 */
+const afterLyricsMatched = async (lyricsPath?: string) => {
+  if (currentMusic.value && lyricsPath) {
+    currentMusic.value.lyricsPath = lyricsPath
+  }
+  await loadLyrics()
+  rightPanelMode.value = 'lyrics'
+}
+
+const applyLyricsSongId = async (songId: number) => {
+  if (!currentMusic.value) return
+  applyingLyricsCandidate.value = true
+  try {
+    const result = await window.electronAPI.applyLyricsCandidate(currentMusic.value.id, songId)
+    if (result.status === 'matched') {
+      showLyricsPick.value = false
+      await afterLyricsMatched(result.lyricsPath)
+      // 轻提示即可，避免打扰播放
+    } else if (result.status === 'skipped_instrumental') {
+      alert(t('music.matchLyricsInstrumental', { title: currentMusic.value.title }))
+    } else {
+      alert(t('music.matchLyricsFailed', {
+        title: currentMusic.value.title,
+        reason: result.message || ''
+      }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', {
+      title: currentMusic.value.title,
+      reason: error?.message || error
+    }))
+  } finally {
+    applyingLyricsCandidate.value = false
+  }
+}
+
+const onSelectLyricsCandidate = async (songId: number) => {
+  await applyLyricsSongId(songId)
+}
+
+/**
+ * 全屏播放控制栏：在线匹配歌词
+ * - 已有歌词先确认是否替换
+ * - 多条候选弹出选择对话框；仅一条则直接应用
+ */
+const handleOnlineMatchLyrics = async () => {
+  if (!currentMusic.value || matchingLyrics.value) return
+  matchingLyrics.value = true
+  try {
+    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(
+      currentMusic.value.id
+    )
+
+    if (!candidates.length) {
+      alert(t('nowPlaying.noLyricsCandidates'))
+      return
+    }
+
+    if (hasExistingLyrics) {
+      const ok = confirm(t('nowPlaying.replaceLyricsConfirm', { title: currentMusic.value.title }))
+      if (!ok) return
+    }
+
+    if (candidates.length === 1) {
+      await applyLyricsSongId(candidates[0].songId)
+      return
+    }
+
+    lyricsCandidates.value = candidates
+    showLyricsPick.value = true
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', {
+      title: currentMusic.value.title,
+      reason: error?.message || error
+    }))
+  } finally {
+    matchingLyrics.value = false
   }
 }
 
@@ -1513,6 +1616,11 @@ watch(
 
 .btn-secondary:hover {
   background: var(--np-hover);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .btn-primary {

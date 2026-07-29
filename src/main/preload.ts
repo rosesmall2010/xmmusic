@@ -8,7 +8,7 @@ import type {
   PlaylistImportResult
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
-import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary } from '@shared/types/lyrics'
+import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types/statistics'
 
 // 暴露安全的 API 给渲染进程
@@ -261,6 +261,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-music-lyrics-path', musicId, lyricsPath),
   matchLyrics: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-lyrics', musicId, options),
+  searchLyricsCandidates: (musicId: number) =>
+    ipcRenderer.invoke('search-lyrics-candidates', musicId),
+  applyLyricsCandidate: (musicId: number, songId: number) =>
+    ipcRenderer.invoke('apply-lyrics-candidate', musicId, songId),
   getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
   batchMatchMissingLyrics: () => ipcRenderer.invoke('batch-match-missing-lyrics'),
   cancelLyricsMatch: () => ipcRenderer.invoke('cancel-lyrics-match'),
@@ -431,6 +435,11 @@ declare global {
       parseLyricsFile: (filePath: string) => Promise<LyricsData>
       updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
       matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<LyricsMatchResult>
+      searchLyricsCandidates: (musicId: number) => Promise<{
+        hasExistingLyrics: boolean
+        candidates: LyricsMatchCandidate[]
+      }>
+      applyLyricsCandidate: (musicId: number, songId: number) => Promise<LyricsMatchResult>
       getMusicWithoutLyricsCount: () => Promise<number>
       batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>
       cancelLyricsMatch: () => Promise<boolean>

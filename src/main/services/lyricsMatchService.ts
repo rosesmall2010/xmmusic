@@ -10,7 +10,8 @@ import type {
   LyricsMatchResult,
   LyricsMatchProgress,
   LyricsMatchSummary,
-  LyricsMatchStatus
+  LyricsMatchStatus,
+  LyricsMatchCandidate
 } from '../../shared/types/lyrics'
 import type MusicDatabase from '../database/db'
 import LyricsService from './lyricsService'
@@ -23,9 +24,13 @@ const SEARCH_APIS = [
 ]
 
 const SEARCH_PATH = '/search?limit=3&type=1&keywords='
+/** 交互选择时多返回几条，方便用户挑选 */
+const SEARCH_PATH_PICK = '/search?limit=8&type=1&keywords='
 const LRC_API = 'https://music.163.com/api/song/media?id='
-/** 与参考脚本一致：低于此相似度跳过 */
+/** 与参考脚本一致：低于此相似度跳过（自动匹配） */
 const SIMILARITY_THRESHOLD = 75
+/** 选择对话框展示的最低相似度（仍列出，供人工挑选） */
+const PICK_LIST_MIN_SIMILARITY = 35
 const REQUEST_TIMEOUT_MS = 12000
 const REQUEST_GAP_MS = 120
 
@@ -33,6 +38,7 @@ type SearchSong = {
   id: number
   name: string
   artists: string
+  album?: string
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -122,15 +128,17 @@ export default class LyricsMatchService {
     return basename(music.fileName || music.filePath || '', extname(music.fileName || music.filePath || ''))
   }
 
-  private async searchSongs(keyword: string): Promise<SearchSong[]> {
+  private async searchSongs(keyword: string, pickMode = false): Promise<SearchSong[]> {
     if (!keyword.trim()) return []
     const encoded = encodeURIComponent(keyword.trim())
+    const path = pickMode ? SEARCH_PATH_PICK : SEARCH_PATH
+    const limit = pickMode ? 8 : 3
     let lastErr: unknown
     for (let attempt = 0; attempt < SEARCH_APIS.length; attempt++) {
       const idx = (this.apiIndex + attempt) % SEARCH_APIS.length
       const base = SEARCH_APIS[idx]
       try {
-        const text = await fetchText(base + SEARCH_PATH + encoded)
+        const text = await fetchText(base + path + encoded)
         const json = JSON.parse(text)
         const songs = json?.result?.songs
         if (!Array.isArray(songs) || songs.length === 0) {
@@ -138,12 +146,13 @@ export default class LyricsMatchService {
           return []
         }
         this.apiIndex = idx
-        return songs.slice(0, 3).map((s: any) => ({
+        return songs.slice(0, limit).map((s: any) => ({
           id: Number(s.id),
           name: String(s.name || ''),
           artists: Array.isArray(s.artists)
             ? s.artists.map((a: any) => a?.name).filter(Boolean).join(' ')
-            : ''
+            : '',
+          album: s.album?.name ? String(s.album.name) : undefined
         }))
       } catch (e) {
         lastErr = e
@@ -181,6 +190,77 @@ export default class LyricsMatchService {
     const dir = dirname(music.filePath)
     const base = basename(music.fileName || music.filePath, extname(music.fileName || music.filePath))
     return join(dir, `${base}.lrc`)
+  }
+
+  /** 歌曲是否已有可用歌词（DB 路径或同目录 sidecar） */
+  hasExistingLyrics(music: MusicItem): boolean {
+    if (music.lyricsPath && existsSync(music.lyricsPath)) return true
+    if (music.filePath && this.lyricsService.findLyricsFile(music.filePath)) return true
+    return false
+  }
+
+  /**
+   * 搜索候选列表（按相似度降序），供全屏播放手动挑选
+   */
+  async searchCandidates(music: MusicItem): Promise<LyricsMatchCandidate[]> {
+    const keyword = this.buildKeyword(music)
+    if (!keyword) return []
+    const songs = await this.searchSongs(keyword, true)
+    const localName = this.buildLocalName(music)
+    const list: LyricsMatchCandidate[] = songs.map((song) => ({
+      songId: song.id,
+      name: song.name,
+      artists: song.artists,
+      album: song.album,
+      similarity: similarPercent(localName, `${song.artists} - ${song.name}`)
+    }))
+    return list
+      .filter((c) => c.similarity >= PICK_LIST_MIN_SIMILARITY)
+      .sort((a, b) => b.similarity - a.similarity)
+  }
+
+  /**
+   * 按用户选定的网易云 songId 下载并写入歌词
+   */
+  async applyCandidate(
+    db: MusicDatabase,
+    music: MusicItem,
+    songId: number
+  ): Promise<LyricsMatchResult> {
+    const title = music.title || music.fileName
+    if (!music.filePath || !existsSync(music.filePath)) {
+      return { musicId: music.id, title, status: 'failed', message: '音乐文件不存在' }
+    }
+
+    let lyricPayload: { lyric: string | null; instrumental: boolean }
+    try {
+      lyricPayload = await this.fetchLyric(songId)
+    } catch (e: any) {
+      return { musicId: music.id, title, status: 'failed', message: e?.message || '获取歌词失败' }
+    }
+
+    if (lyricPayload.instrumental) {
+      return { musicId: music.id, title, status: 'skipped_instrumental', message: '纯音乐无歌词' }
+    }
+    if (!lyricPayload.lyric) {
+      return { musicId: music.id, title, status: 'failed', message: '歌词为空' }
+    }
+
+    const lrcPath = this.resolveLrcPath(music)
+    try {
+      writeFileSync(lrcPath, lyricPayload.lyric, 'utf8')
+    } catch (e: any) {
+      return { musicId: music.id, title, status: 'failed', message: e?.message || '写入歌词文件失败' }
+    }
+
+    db.updateAllMusic(music.id, { lyrics_path: lrcPath })
+    return {
+      musicId: music.id,
+      title,
+      status: 'matched',
+      lyricsPath: lrcPath,
+      message: '匹配成功'
+    }
   }
 
   /**
