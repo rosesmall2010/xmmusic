@@ -11,8 +11,14 @@ import TrayService from './services/trayService'
 // 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
 app.name = 'xmmusic'
 
-// 修复 Electron 39 网络服务崩溃问题
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
+// 修复 Electron 网络服务崩溃；并禁用 Windows 上易导致「进度卡在开头」的音讯沙盒
+// AudioServiceSandbox：Win11 下 Chromium 独立音讯进程常与声卡驱动冲突，metadata 能加载但 currentTime 停在 ~0.1s
+// HardwareMediaKeyHandling：避免与本应用 ShortcutManager 抢硬件媒体键
+// 注意：多次 appendSwitch('disable-features') 会互相覆盖，必须合并为一次
+app.commandLine.appendSwitch(
+  'disable-features',
+  'OutOfBlinkCors,AudioServiceSandbox,HardwareMediaKeyHandling'
+)
 app.commandLine.appendSwitch('disable-site-isolation-trials')
 
 // 加大音频输出缓冲：音乐播放器不需要低延迟，更大的缓冲可避免
@@ -255,9 +261,11 @@ function createWindow(): void {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      // Windows 上 Chromium 对未手势触发的 play() 更严，播放器切歌/恢复时需放宽
+      autoplayPolicy: 'no-user-gesture-required',
       preload: join(__dirname, 'preload.js'),
       devTools: isDev, // 生产模式下完全禁用 DevTools
-      // Electron 39 网络服务稳定性配置
+      // Electron 网络服务稳定性配置
       backgroundThrottling: false,
       offscreen: false
     },
