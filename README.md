@@ -195,7 +195,12 @@ npm run dist:win    # Windows
     *   **Git**: 最新版本
     *   **包管理器**: npm (随 Node 安装)
 
-2.  **平台特定要求** (必须配置，因为项目使用了原生模块 `better-sqlite3`)：
+2.  **Electron 国内镜像**（已内置）:
+    *   项目通过 `.npmrc` + `scripts/electron-mirror-env.js` 默认使用 [npmmirror](https://npmmirror.com/mirrors/electron/) 下载 Electron / electron-builder 二进制，减轻国内访问 GitHub 过慢的问题
+    *   作用于 `npm install`、`postinstall` 重建原生模块、以及 `npm run dist` / `dist:mac` / `dist:win` 打包
+    *   若需临时改回官方源：启动前设置环境变量覆盖，例如 `ELECTRON_MIRROR=https://github.com/electron/electron/releases/download/`
+
+3.  **平台特定要求** (必须配置，因为项目使用了原生模块 `better-sqlite3`)：
 
     *   **macOS**:
         *   安装 Xcode Command Line Tools: `xcode-select --install`

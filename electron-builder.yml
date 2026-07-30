@@ -7,6 +7,10 @@ buildDependenciesFromSource: false
 nodeGypRebuild: false
 npmRebuild: false
 
+# 打包时下载 Electron 二进制使用 npmmirror（国内加速）
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+
 directories:
   buildResources: build
   output: dist

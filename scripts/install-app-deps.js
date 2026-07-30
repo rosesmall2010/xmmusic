@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./electron-mirror-env')
 const { spawnSync } = require('child_process')
 
 const isMac = process.platform === 'darwin'
