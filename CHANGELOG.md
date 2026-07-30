@@ -9,10 +9,10 @@
 
 ### 文档
 - 同步更新 README：最新版本 v1.1.7、安装包文件名；补充播放模式说明与切歌行为
-- 默认使用 npmmirror 加速 Electron / electron-builder 二进制下载（`.npmrc` + `electron-mirror-env.js` + `electron-builder.yml`）
-- `.npmrc` 的 `node-options` 改为 `${NODE_OPTIONS?} --require=...`，避免覆盖本机/CI 已有 NODE_OPTIONS
+- 默认使用 npmmirror 加速 Electron / electron-builder 二进制下载（`.npmrc` 的 `electron_mirror` + `electron-mirror-env.js` + `electron-builder.yml`）
 
 ### 修复
+- 修复 `.npmrc` 用相对路径 `--require=./scripts/electron-mirror-env.js` 导致依赖包安装脚本（如 electron-winstaller）报 `Cannot find module`；改为 `electron_mirror` / `electron_builder_binaries_mirror` 配置
 - 修复上一首/下一首未严格跟随播放模式：随机两端均随机且避开当前；顺序到头/尾不切换；顺序循环首尾互绕；单曲循环手动/自动均重播当前；切歌改回传队列下标避免同 id 找错
 - 修复单曲循环下当前曲不在队列时伪造 index:0 导致误切队首；播放失败改用跳过当前，避免单曲循环死循环重试损坏文件
 
