@@ -12,6 +12,7 @@
 - 默认使用 npmmirror 加速 Electron / electron-builder 二进制下载（`.npmrc` 的 `electron_mirror` + `electron-mirror-env.js` + `electron-builder.yml`）
 
 ### 修复
+- 对齐 EchoVault（Electron 38）Win11 可播方案：`toLocalFileUrl` 改为整段 `encodeURIComponent` 保留原生路径；`local-file` 开启 `stream: true`；主进程用字符串前缀解析路径（不再用 `URL.pathname`）；播放器始终 `crossOrigin=anonymous` 并 `load()`
 - 修复 Windows 下本地 MP3 卡在开头约 0.1s 无法推进：主进程禁用 `AudioServiceSandbox`（及 `HardwareMediaKeyHandling`），并设置 `autoplayPolicy: no-user-gesture-required`；本地文件仍走已有 `local-file://` 自定义协议（勿用 Blob）
 - 修复 `.npmrc` 用相对路径 `--require=./scripts/electron-mirror-env.js` 导致依赖包安装脚本（如 electron-winstaller）报 `Cannot find module`；改为 `electron_mirror` / `electron_builder_binaries_mirror` 配置
 - 修复上一首/下一首未严格跟随播放模式：随机两端均随机且避开当前；顺序到头/尾不切换；顺序循环首尾互绕；单曲循环手动/自动均重播当前；切歌改回传队列下标避免同 id 找错

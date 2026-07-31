@@ -26,10 +26,11 @@ app.commandLine.appendSwitch('disable-site-isolation-trials')
 app.commandLine.appendSwitch('audio-buffer-size', '2048')
 
 // 注册自定义协议特权（必须在 app ready 之前调用）
-// standard: true 是媒体元素能对该协议正常 seek 的必要条件（electron#51442），
-// 否则拖动进度条会触发 FFmpegDemuxer "data source error"，播放管线挂死、歌词不再跟随。
-// standard 协议要求 URL 必须带 host，因此渲染进程统一使用 local-file://media/<路径> 形式。
-// 注意不要加 stream: true —— Electron 37+（Chromium 137）下它会破坏媒体拖动（electron#47661）
+// 对齐 EchoVault（Electron 38，Win11 可播）的特权配置：
+// - standard + 固定 host：媒体 seek 必需（electron#51442）
+// - stream: true：流式喂给 <audio>，大文件边读边播（EchoVault 同款）
+// - corsEnabled：配合 crossOrigin=anonymous，Web Audio / 均衡器可读样本
+// URL 形态：local-file://media/<encodeURIComponent(原生路径)>
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'local-file',
@@ -38,9 +39,8 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       bypassCSP: true,
-      // 必须开启：否则即使响应带 Access-Control-Allow-Origin，
-      // Chromium 也不会把它当 CORS 成功，MediaElementSource 会输出静音
-      corsEnabled: true
+      corsEnabled: true,
+      stream: true
     }
   }
 ])
@@ -400,28 +400,24 @@ app.whenReady().then(async () => {
     }
   }
 
-  // 注册自定义协议来访问本地文件
-  // 使用 protocol.handle 并手动处理 Range 分段请求：
-  // 旧的 registerFileProtocol 不支持 Range，音频拖动进度条会触发
-  // FFmpegDemuxer "data source error"，导致播放管线挂死、进度不再更新
+  // 注册自定义协议来访问本地文件（对齐 EchoVault echovault-audio 方案）
+  // - 字符串前缀切片 + decodeURIComponent：保留 Windows 原生反斜杠，避免 URL.pathname 破坏路径
+  // - 手动处理 Range / 206：seek 依赖分段响应
   protocol.handle('local-file', (request) => {
     try {
-      // URL 形如 local-file://media/Users/xxx.mp3（media 为固定占位 host）
-      // 用 URL 解析取 pathname，再解码 URL 编码的字符
-      let filePath = decodeURIComponent(new URL(request.url).pathname)
-
-      // Windows 路径规范化：如果路径以 / 开头（如 /C:/Music），移除开头的斜杠
-      if (process.platform === 'win32' && filePath.match(/^\/[A-Za-z]:/)) {
-        filePath = filePath.substring(1)
-      }
-
-      // Windows 路径：将正斜杠转换为反斜杠（Windows 文件系统需要）
-      if (process.platform === 'win32') {
-        filePath = filePath.replace(/\//g, '\\')
-      }
+      // URL：local-file://media/<encodeURIComponent(绝对路径)>
+      // 不用 new URL().pathname：Win 下会把编码后的 \ 等弄乱；与 EchoVault 同款切片解析
+      const prefix = 'local-file://media/'
+      const encoded = request.url.startsWith(prefix)
+        ? request.url.slice(prefix.length)
+        : request.url.slice('local-file://'.length).replace(/^\/?media\//, '')
+      // Range 请求偶发带 query，只取路径段
+      const encodedPath = encoded.split(/[?#]/)[0]
+      const filePath = decodeURIComponent(encodedPath)
 
       if (!existsSync(filePath)) {
         console.error('❌ 文件不存在:', filePath)
+        console.error('   原始URL:', request.url)
         return new Response('Not Found', { status: 404 })
       }
 

@@ -113,20 +113,16 @@ export function usePlayer() {
       console.log('✅ 音频元素已添加到 DOM')
     }
 
-    // 未开音效时不设 crossOrigin，走原生直出；开启音效时由均衡器补 CORS 并接管
-    const needWebAudio = equalizer.enabled.value
+    // 对齐 EchoVault：始终 crossOrigin=anonymous + load()，配合协议 corsEnabled
+    // 否则 Win 下 MediaElementSource / 媒体管线偶发静音或卡在开头
     const localFileUrl = toLocalFileUrl(music.filePath)
     console.log('🔗 使用协议:', localFileUrl)
     console.log('📁 原始路径:', music.filePath)
 
-    if (needWebAudio) {
-      audioElement.crossOrigin = 'anonymous'
-    } else {
-      audioElement.removeAttribute('crossorigin')
-    }
-
+    audioElement.crossOrigin = 'anonymous'
     audioElement.preload = 'auto'
     audioElement.src = localFileUrl
+    audioElement.load()
     audioElement.volume = playerStore.volume / 100
 
     audioElement.onloadedmetadata = () => {
