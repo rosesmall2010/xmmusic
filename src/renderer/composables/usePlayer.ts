@@ -1,5 +1,6 @@
 import { Howl } from 'howler'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 import { useEqualizer } from '@/composables/useEqualizer'
 import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
@@ -14,6 +15,7 @@ let isRestoringNative = false
 
 export function usePlayer() {
   const playerStore = usePlayerStore()
+  const settingsStore = useSettingsStore()
   const equalizer = useEqualizer()
 
   /** 绑定：关音效后重建未被捕获的 Audio，恢复系统级直出音质 */
@@ -69,6 +71,11 @@ export function usePlayer() {
       if (!music) return
 
       await playWithNativeAudio(music, { resumeAt, autoplay: wasPlaying })
+      // EQ 关闭时会释放并重建元素；如果当前全屏特效仍需要真实频谱，重建后要重新接管，
+      // 否则可视化会一直退化成假的时间域频谱（NowPlayingView 的 watch 此时不会再触发）
+      if (wasPlaying && audioElement && settingsStore.shouldCaptureNowPlayingAudio()) {
+        equalizer.initAudioContext(audioElement)
+      }
       console.log('✅ 已恢复原生 Audio 直出路径')
     } catch (error) {
       console.error('❌ 恢复原生音频路径失败:', error)
@@ -113,17 +120,12 @@ export function usePlayer() {
       console.log('✅ 音频元素已添加到 DOM')
     }
 
-    // 未开音效时不设 crossOrigin，走原生直出；开启音效时由均衡器补 CORS 并接管
-    const needWebAudio = equalizer.enabled.value
+    // 频谱/火焰/闪电可视化默认就会接管 Web Audio（不再要求先打开音效），
+    // 提前设好 crossOrigin 避免 initAudioContext 里再补 CORS 时要重新赋值 src 导致播放中途卡一下
+    audioElement.crossOrigin = 'anonymous'
     const localFileUrl = toLocalFileUrl(music.filePath)
     console.log('🔗 使用协议:', localFileUrl)
     console.log('📁 原始路径:', music.filePath)
-
-    if (needWebAudio) {
-      audioElement.crossOrigin = 'anonymous'
-    } else {
-      audioElement.removeAttribute('crossorigin')
-    }
 
     audioElement.preload = 'auto'
     audioElement.src = localFileUrl

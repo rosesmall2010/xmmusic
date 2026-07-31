@@ -86,6 +86,8 @@
     "unknownArtist": "Unknown Artist",
     "lyricsLoadError": "Failed to load lyrics",
     "switchEffect": "Switch Effect",
+    "disableEffect": "Disable Effect",
+    "enableEffect": "Enable Effect",
     "matchLyricsOnline": "Match Lyrics Online",
     "matchingLyrics": "Searching lyrics...",
     "replaceLyricsConfirm": "\"{title}\" already has lyrics. Replace with the online match?",

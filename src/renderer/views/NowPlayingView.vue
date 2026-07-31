@@ -2,9 +2,9 @@
   <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle">
     <!-- 背景特效：随所选特效切换；唱片特效的主体在封面区，背景保持干净 -->
     <div class="background-effects" aria-hidden="true">
-      <AudioEqualizerBackground v-if="effect === 'spectrum'" :active="isPlaying" :light="isLight" />
-      <FlameBackground v-else-if="effect === 'flame'" :active="isPlaying" :light="isLight" />
-      <LightningBackground v-else-if="effect === 'lightning'" :active="isPlaying" :light="isLight" />
+      <AudioEqualizerBackground v-if="effect === 'spectrum' && effectEnabled" :active="isPlaying" :light="isLight" />
+      <FlameBackground v-else-if="effect === 'flame' && effectEnabled" :active="isPlaying" :light="isLight" />
+      <LightningBackground v-else-if="effect === 'lightning' && effectEnabled" :active="isPlaying" :light="isLight" />
     </div>
     <!-- 返回按钮 -->
     <div class="top-bar">
@@ -33,6 +33,13 @@
           <component :is="EffectIcon" :size="20" />
           <span class="btn-tooltip">
             {{ $t('nowPlaying.switchEffect') }}：{{ $t(`nowPlaying.effect.${effect}`) }}
+          </span>
+        </button>
+        <button v-if="effect !== 'vinyl'" class="btn-action" @click="settingsStore.toggleNowPlayingEffectEnabled()">
+          <Eye v-if="effectEnabled" :size="20" />
+          <EyeOff v-else :size="20" />
+          <span class="btn-tooltip">
+            {{ effectEnabled ? $t('nowPlaying.disableEffect') : $t('nowPlaying.enableEffect') }}
           </span>
         </button>
         <button class="btn-action" @click="toggleDesktopLyrics">
@@ -251,7 +258,7 @@ import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -289,6 +296,8 @@ const isLight = computed(() => {
 
 /** 当前特效：由 settingsStore 持久化，重启后保持上次选择 */
 const effect = computed(() => settingsStore.nowPlayingEffect)
+/** 特效开关：仅作用于随音频变化的背景特效，唱片特效不受影响 */
+const effectEnabled = computed(() => settingsStore.nowPlayingEffectEnabled)
 
 const EffectIcon = computed(() => {
   if (effect.value === 'flame') return Flame
@@ -885,11 +894,12 @@ watch(isLight, () => {
   applyCoverColor(displayCoverUrl.value)
 })
 
-// 仅在音效开启时绑定 Web Audio（频谱可视化不得为了动画牺牲音质）
+// 频谱/火焰/闪电可视化始终接入真实 Web Audio 频谱（不再要求用户先打开均衡器）；
+// 唱盘不读频谱、用户关闭特效开关时也不需要接管；接受的代价：一旦接管，音频永久走 Web Audio 图，回不去原生直出
 watch(
-  [isPlaying, () => equalizer.enabled.value],
-  ([playing, eqOn]) => {
-    if (!playing || !eqOn) return
+  [isPlaying, effect, effectEnabled],
+  ([playing]) => {
+    if (!playing || !settingsStore.shouldCaptureNowPlayingAudio()) return
     const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
     if (el) equalizer.initAudioContext(el)
   },

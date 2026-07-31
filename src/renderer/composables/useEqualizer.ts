@@ -93,6 +93,8 @@ let analyserNode: AnalyserNode | null = null
 let timeAnalyserNode: AnalyserNode | null = null
 let audioElement: HTMLAudioElement | null = null
 let isInitialized = false
+// 仅用于跳过 initAudioContext 快速路径里多余的 routeAudioGraph 重连；HMR 后重置一次无副作用
+let lastRoutedEnabled: boolean | null = null
 
 // 从全局缓存恢复（开发模式热更新友好）
 if (runtime) {
@@ -301,13 +303,17 @@ export function useEqualizer() {
    * - 音效开启：source → 10 段 peaking → gain（余量）→ limiter（防削波）→ destination
    *
    * 注意：一旦 createMediaElementSource，媒体元素就只能经 AudioContext 出声，
-   * 无法再回到「原生直出」；因此未开音效时也应避免无谓接管（见 PlayerBar）。
+   * 无法再回到「原生直出」。PlayerBar 里 EQ 本身的接管仍然只在用户打开音效时触发；
+   * 但频谱/火焰/闪电可视化组件会主动调用 initAudioContext 以拿到真实频谱，
+   * 不再等用户先打开音效开关——这意味着只要打开过一次这些可视化，
+   * 音频就会永久走 Web Audio 图（即使随后从未打开过 EQ）。
    */
   const routeAudioGraph = () => {
     if (!audioContext || !sourceNode || !gainNode || !limiterNode || !analyserNode || !timeAnalyserNode) {
       return
     }
 
+    lastRoutedEnabled = enabled.value
     safeDisconnect(sourceNode)
     filters.forEach(safeDisconnect)
     safeDisconnect(gainNode)
@@ -340,14 +346,17 @@ export function useEqualizer() {
     applyGains()
   }
 
-  // 初始化音频上下文（仅在用户开启音效时调用；可视化不得调用）
+  // 初始化音频上下文：EQ 打开时由 PlayerBar 调用；频谱/火焰/闪电可视化组件也会
+  // 主动调用它来拿真实频谱（不再要求 EQ 开关先打开，见上方 routeAudioGraph 的注意事项）
   const initAudioContext = (element: HTMLAudioElement) => {
-    // 如果已经为同一个元素初始化过，跳过（但仍按当前开关校正路由）
+    // 如果已经为同一个元素初始化过，跳过（仅在开关状态变化时才重新校正路由，避免每次播放都重连整张图）
     if (isInitialized && audioElement === element && audioContext && sourceNode) {
       if (audioContext.state === 'suspended') {
         void audioContext.resume()
       }
-      routeAudioGraph()
+      if (lastRoutedEnabled !== enabled.value) {
+        routeAudioGraph()
+      }
       return
     }
 

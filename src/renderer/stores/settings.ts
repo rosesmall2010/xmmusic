@@ -44,6 +44,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const nowPlayingEffect = ref<NowPlayingEffect>(
     savedEffect && NOW_PLAYING_EFFECTS.includes(savedEffect) ? savedEffect : 'spectrum'
   )
+  // 特效开关：只对频谱/火焰/闪电有意义（唱盘本身不依赖这个开关）
+  const nowPlayingEffectEnabled = ref(localStorage.getItem('nowPlayingEffectEnabled') !== 'false')
 
   // Actions
   function setTheme(newTheme: Theme) {
@@ -84,6 +86,16 @@ export const useSettingsStore = defineStore('settings', () => {
     setNowPlayingEffect(NOW_PLAYING_EFFECTS[(idx + 1) % NOW_PLAYING_EFFECTS.length])
   }
 
+  function toggleNowPlayingEffectEnabled() {
+    nowPlayingEffectEnabled.value = !nowPlayingEffectEnabled.value
+    localStorage.setItem('nowPlayingEffectEnabled', String(nowPlayingEffectEnabled.value))
+  }
+
+  /** 是否应该为可视化接管 Web Audio：唱盘不读频谱，用户关闭特效开关时也不需要 */
+  function shouldCaptureNowPlayingAudio() {
+    return nowPlayingEffect.value !== 'vinyl' && nowPlayingEffectEnabled.value
+  }
+
   // Helper to apply theme
   function applyTheme(t: Theme) {
     const appElement = document.getElementById('app')
@@ -122,10 +134,13 @@ export const useSettingsStore = defineStore('settings', () => {
     autoPlay,
     scanOnStartup,
     nowPlayingEffect,
+    nowPlayingEffectEnabled,
     setTheme,
     setLanguage,
     setNowPlayingEffect,
     cycleNowPlayingEffect,
+    toggleNowPlayingEffectEnabled,
+    shouldCaptureNowPlayingAudio,
     toggleCloseToTray,
     toggleAutoPlay,
     toggleScanOnStartup

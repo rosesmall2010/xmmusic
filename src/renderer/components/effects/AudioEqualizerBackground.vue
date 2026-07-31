@@ -36,8 +36,8 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 const hsla = (h: number, s: number, l: number, a: number) => `hsla(${h}, ${s}%, ${l}%, ${a})`
 
 const ensureAudioNodes = () => {
-  // 仅在音效开启时才接管 Web Audio；否则用时间域假频谱，保住原生直出音质
-  if (!equalizer.enabled.value) return
+  // 无论 EQ 开关是否打开，可视化都主动接入真实频谱（接受一次接管后音频永久走 Web Audio 图的风险，
+  // 详见 useEqualizer.ts 里 initAudioContext/routeAudioGraph 的说明）
   const el = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
   if (!el) return
   equalizer.initAudioContext(el)
@@ -47,7 +47,8 @@ const resize = () => {
   const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
-  dpr = Math.max(1, window.devicePixelRatio || 1)
+  // 模糊的发光/渐变图形，超采样倍数再高也看不出差别；封顶避免 Windows 高缩放下 canvas 栅格化像素暴涨
+  dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 1.5)
   width = Math.max(1, Math.floor(rect.width))
   height = Math.max(1, Math.floor(rect.height))
   canvas.width = Math.floor(width * dpr)
@@ -243,11 +244,7 @@ watch(() => props.light, () => {
 })
 
 watch(() => props.active, (v) => {
-  if (v && equalizer.enabled.value) ensureAudioNodes()
-})
-
-watch(() => equalizer.enabled.value, (on) => {
-  if (on) ensureAudioNodes()
+  if (v) ensureAudioNodes()
 })
 </script>
 
