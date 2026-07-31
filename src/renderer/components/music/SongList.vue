@@ -843,11 +843,6 @@ onMounted(() => {
 
   window.addEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.addEventListener('favorites-updated', handleFavoritesUpdated)
-
-  // 监听播放队列变化
-  watch(() => playerStore.queue, () => {
-    updateQueueStatus()
-  }, { deep: true })
 })
 
 onUnmounted(() => {
@@ -855,8 +850,9 @@ onUnmounted(() => {
   window.removeEventListener('favorites-updated', handleFavoritesUpdated)
 })
 
-// 监听播放队列变化
-watch(() => playerStore.queue, updateQueueStatus, { deep: true })
+// 监听播放队列变化：只关心成员集合（filePath 是否在队列里），成员变化必然伴随 length 变化，
+// 用 length 做浅层监听即可，避免对上万条歌曲的队列做 deep 遍历
+watch(() => playerStore.queue.length, updateQueueStatus)
 </script>
 
 <style scoped>

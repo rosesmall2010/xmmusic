@@ -16,30 +16,33 @@
         </div>
       </div>
 
-      <div class="queue-list" ref="listRef">
-        <div
-          v-for="(music, index) in queue"
-          :key="music.id"
-          class="queue-item"
-          :class="{ active: currentQueueIndex === index }"
-          @dblclick="playItem(index)"
-        >
-          <div class="item-status">
-            <Volume2 v-if="currentQueueIndex === index" :size="14" class="playing-icon" />
-            <span v-else class="index">{{ index + 1 }}</span>
-          </div>
-          <div class="item-info">
-            <div class="item-title" :title="music.title">{{ music.title }}</div>
-            <div class="item-meta">
-              <span class="item-artist" :title="music.artist">{{ music.artist }}</span>
-              <span class="item-separator">·</span>
-              <span class="item-filename" :title="music.fileName">{{ music.fileName }}</span>
+      <div class="queue-list" ref="listRef" @scroll="handleScroll">
+        <div class="queue-list-inner" :style="{ height: totalHeight + 'px' }">
+          <div
+            v-for="item in visibleQueue"
+            :key="item.music.id"
+            class="queue-item"
+            :class="{ active: currentQueueIndex === item.index }"
+            :style="{ height: itemHeight + 'px', transform: `translateY(${item.index * itemHeight}px)` }"
+            @dblclick="playItem(item.index)"
+          >
+            <div class="item-status">
+              <Volume2 v-if="currentQueueIndex === item.index" :size="14" class="playing-icon" />
+              <span v-else class="index">{{ item.index + 1 }}</span>
             </div>
+            <div class="item-info">
+              <div class="item-title" :title="item.music.title">{{ item.music.title }}</div>
+              <div class="item-meta">
+                <span class="item-artist" :title="item.music.artist">{{ item.music.artist }}</span>
+                <span class="item-separator">·</span>
+                <span class="item-filename" :title="item.music.fileName">{{ item.music.fileName }}</span>
+              </div>
+            </div>
+            <div class="item-duration">{{ formatDuration(item.music.duration) }}</div>
+            <button class="remove-btn" @click.stop="removeItem(item.index)" :title="$t('queue.remove')">
+              <span>×</span>
+            </button>
           </div>
-          <div class="item-duration">{{ formatDuration(music.duration) }}</div>
-          <button class="remove-btn" @click.stop="removeItem(index)" :title="$t('queue.remove')">
-            <span>×</span>
-          </button>
         </div>
 
         <div v-if="queue.length === 0" class="empty-state">
@@ -54,6 +57,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useElementSize } from '@vueuse/core'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { Volume2, Trash2, X } from 'lucide-vue-next'
@@ -74,6 +78,29 @@ const listRef = ref<HTMLElement | null>(null)
 
 const queue = computed(() => playerStore.queue)
 const currentQueueIndex = computed(() => playerStore.currentQueueIndex)
+
+// 队列可能有上万条歌曲，虚拟滚动只渲染可视区域，避免一次插入上万个 DOM 节点
+const itemHeight = 60
+const scrollTop = ref(0)
+const { height: containerHeight } = useElementSize(listRef)
+
+const handleScroll = (e: Event) => {
+  scrollTop.value = (e.target as HTMLElement).scrollTop
+}
+
+const totalHeight = computed(() => queue.value.length * itemHeight)
+
+const visibleQueue = computed(() => {
+  const buffer = 10
+  const start = Math.max(0, Math.floor(scrollTop.value / itemHeight) - buffer)
+  const visibleCount = Math.ceil(containerHeight.value / itemHeight)
+  const end = Math.min(queue.value.length, start + visibleCount + buffer * 2)
+  const result = []
+  for (let index = start; index < end; index++) {
+    result.push({ music: queue.value[index], index })
+  }
+  return result
+})
 
 const close = () => {
   emit('update:visible', false)
@@ -111,11 +138,10 @@ watch([() => props.visible, currentQueueIndex], async ([isVisible, index]) => {
 })
 
 const scrollToCurrent = () => {
-  if (!listRef.value) return
-  const activeItem = listRef.value.querySelector('.queue-item.active')
-  if (activeItem) {
-    activeItem.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }
+  if (!listRef.value || currentQueueIndex.value < 0) return
+  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示
+  const targetTop = currentQueueIndex.value * itemHeight - listRef.value.clientHeight / 2 + itemHeight / 2
+  listRef.value.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
 }
 
 onMounted(() => {
@@ -212,7 +238,14 @@ const handleMetadataUpdate = (event: CustomEvent) => {
   padding: var(--spacing-xs) 0;
 }
 
+.queue-list-inner {
+  position: relative;
+}
+
 .queue-item {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   padding: var(--spacing-sm) var(--spacing-lg);

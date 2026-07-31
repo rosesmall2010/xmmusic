@@ -3,6 +3,9 @@ import { ref, watch, toRaw } from 'vue'
 import type { MusicItem } from '@shared/types/music'
 
 const LOCAL_STORAGE_KEY = 'xmmusic_player_state'
+// 播放队列单独存一个 key：位置状态（下标/音量/播放进度等）每几秒就要保存一次，
+// 但队列可能有上万条歌曲，不能让高频的位置保存每次都把整条队列一起序列化/写盘。
+const LOCAL_STORAGE_QUEUE_KEY = 'xmmusic_player_queue'
 
 export const usePlayerStore = defineStore('player', () => {
   const currentMusic = ref<MusicItem | null>(null)
@@ -19,7 +22,8 @@ export const usePlayerStore = defineStore('player', () => {
   const resumePosition = ref(0)
   const shouldAutoResume = ref(false)
   const isInitialized = ref(false)
-  let persistTimer: number | null = null
+  let positionPersistTimer: number | null = null
+  let queuePersistTimer: number | null = null
 
   // 添加到队列
   function addToQueue(music: MusicItem, position?: number) {
@@ -242,6 +246,21 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function initialize(settings?: any) {
     if (typeof window !== 'undefined') {
+      // 先恢复队列，再恢复位置：applyState 里 currentQueueIndex 的校验依赖 queue 已经有内容
+      try {
+        const localQueue = window.localStorage.getItem(LOCAL_STORAGE_QUEUE_KEY)
+        if (localQueue) {
+          try {
+            applyState(JSON.parse(localQueue))
+          } catch (parseError) {
+            console.warn('解析本地播放队列失败，清除无效数据:', parseError)
+            window.localStorage.removeItem(LOCAL_STORAGE_QUEUE_KEY)
+          }
+        }
+      } catch (error) {
+        console.warn('读取本地播放队列失败:', error)
+      }
+
       try {
         const local = window.localStorage.getItem(LOCAL_STORAGE_KEY)
         if (local) {
@@ -279,17 +298,18 @@ export const usePlayerStore = defineStore('player', () => {
   const toPlainQueue = () =>
     queue.value.map(item => toRaw(item))
 
-  const persistState = async () => {
-    if (!isInitialized.value) return
+  // 位置状态：小对象，播放期间高频保存（不含队列，避免每次都序列化上万条歌曲）
+  const buildPositionSnapshot = () => ({
+    currentQueueIndex: currentQueueIndex.value,
+    playMode: playMode.value,
+    volume: volume.value,
+    playPosition: currentTime.value,
+    wasPlaying: isPlaying.value
+  })
 
-    const snapshot = {
-      playQueue: toPlainQueue(),
-      currentQueueIndex: currentQueueIndex.value,
-      playMode: playMode.value,
-      volume: volume.value,
-      playPosition: currentTime.value,
-      wasPlaying: isPlaying.value
-    }
+  const persistPosition = async () => {
+    if (!isInitialized.value) return
+    const snapshot = buildPositionSnapshot()
 
     if (typeof window !== 'undefined') {
       try {
@@ -300,29 +320,64 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     try {
-      // Throttle IPC calls: only save to disk if enough time has passed or important state changed
-      // For now, we keep it simple but rely on the debounce in schedulePersist
       await window.electronAPI.saveSettings(snapshot)
     } catch (error) {
       console.warn('保存播放状态到数据库失败:', error)
     }
   }
 
-  const schedulePersist = () => {
+  // 队列状态：可能是上万条歌曲，只在队列真正发生结构变化时才保存
+  const persistQueue = async () => {
     if (!isInitialized.value) return
-    if (persistTimer) {
-      clearTimeout(persistTimer)
+    const snapshot = { playQueue: toPlainQueue() }
+
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(LOCAL_STORAGE_QUEUE_KEY, JSON.stringify(snapshot))
+      } catch (error) {
+        console.warn('写入本地播放队列失败:', error)
+      }
+    }
+
+    try {
+      await window.electronAPI.saveSettings(snapshot)
+    } catch (error) {
+      console.warn('保存播放队列到数据库失败:', error)
+    }
+  }
+
+  const persistState = async () => {
+    await Promise.all([persistPosition(), persistQueue()])
+  }
+
+  const schedulePositionPersist = () => {
+    if (!isInitialized.value) return
+    if (positionPersistTimer) {
+      clearTimeout(positionPersistTimer)
     }
     // Increase debounce time to 1 second to reduce IPC frequency
-    persistTimer = window.setTimeout(() => {
-      void persistState()
+    positionPersistTimer = window.setTimeout(() => {
+      void persistPosition()
+    }, 1000)
+  }
+
+  const scheduleQueuePersist = () => {
+    if (!isInitialized.value) return
+    if (queuePersistTimer) {
+      clearTimeout(queuePersistTimer)
+    }
+    queuePersistTimer = window.setTimeout(() => {
+      void persistQueue()
     }, 1000)
   }
 
   if (typeof window !== 'undefined') {
     window.addEventListener('beforeunload', () => {
-      if (persistTimer) {
-        clearTimeout(persistTimer)
+      if (positionPersistTimer) {
+        clearTimeout(positionPersistTimer)
+      }
+      if (queuePersistTimer) {
+        clearTimeout(queuePersistTimer)
       }
       void persistState()
     })
@@ -349,28 +404,22 @@ export const usePlayerStore = defineStore('player', () => {
     })
   }
 
-  watch(queue, schedulePersist, { deep: true })
+  // 队列结构变化（播放全部/增删/清空/拖拽排序/元数据更新）才需要保存整条队列
+  watch(queue, scheduleQueuePersist, { deep: true })
 
   // Watch important state changes immediately
   watch(
     [currentQueueIndex, playMode, volume, isPlaying],
-    schedulePersist
+    schedulePositionPersist
   )
 
   // Throttle currentTime updates significantly (e.g. only save every 5 seconds if only time changes)
-  // Actually, we can just exclude currentTime from the main watcher and have a separate throttled watcher
-  // But for simplicity, let's just rely on the increased debounce of 1000ms for now,
-  // and maybe exclude currentTime from triggering the watcher if possible?
-  // If we include currentTime in the watcher with 1000ms debounce, it means we save every 1s during playback.
-  // That might still be too much for IPC.
-  // Let's remove currentTime from the watcher and only save it on pause/stop or via a separate very slow interval.
-
-  // Separate watcher for current time to save less frequently (e.g. every 10s)
+  // 这个 tick 只保存位置状态，不带队列，所以哪怕歌单有上万条歌也不会造成高频大数据序列化/写盘
   let timeSaveTimer: number | null = null
   watch(currentTime, () => {
     if (!timeSaveTimer) {
       timeSaveTimer = window.setTimeout(() => {
-        schedulePersist()
+        schedulePositionPersist()
         timeSaveTimer = null
       }, 5000)
     }
