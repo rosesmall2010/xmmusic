@@ -253,7 +253,6 @@ function createWindow(): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
       webSecurity: true,
       preload: join(__dirname, 'preload.js'),
       devTools: isDev, // 生产模式下完全禁用 DevTools
