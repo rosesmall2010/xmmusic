@@ -302,11 +302,12 @@ export function useEqualizer() {
    * - 音效关闭：source → destination（直通，尽量保真；分析器仅并联旁听）
    * - 音效开启：source → 10 段 peaking → gain（余量）→ limiter（防削波）→ destination
    *
-   * 注意：一旦 createMediaElementSource，媒体元素就只能经 AudioContext 出声，
-   * 无法再回到「原生直出」。PlayerBar 里 EQ 本身的接管仍然只在用户打开音效时触发；
-   * 但频谱/火焰/闪电可视化组件会主动调用 initAudioContext 以拿到真实频谱，
-   * 不再等用户先打开音效开关——这意味着只要打开过一次这些可视化，
-   * 音频就会永久走 Web Audio 图（即使随后从未打开过 EQ）。
+   * 注意：一旦 createMediaElementSource，当前这个媒体元素实例就只能经 AudioContext 出声，
+   * 无法原地切回「原生直出」——但可以调用 releaseCapture() 关闭 AudioContext，
+   * 再由调用方丢弃旧元素、新建一个 <audio> 重新播放，从应用层面等效于"退出" Web Audio 图
+   * （NowPlayingView 关闭特效开关、且 EQ 未单独开启时就是这么做的，避免均衡器/分析器空转吃 CPU）。
+   * PlayerBar 里 EQ 本身的接管仍然只在用户打开音效时触发；
+   * 但频谱/火焰/闪电可视化组件会主动调用 initAudioContext 以拿到真实频谱，不再等用户先打开音效开关。
    */
   const routeAudioGraph = () => {
     if (!audioContext || !sourceNode || !gainNode || !limiterNode || !analyserNode || !timeAnalyserNode) {
