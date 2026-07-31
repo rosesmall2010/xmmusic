@@ -127,7 +127,6 @@ export function usePlayer() {
 
     audioElement.preload = 'auto'
     audioElement.src = localFileUrl
-    audioElement.load()
     audioElement.volume = playerStore.volume / 100
 
     audioElement.onloadedmetadata = () => {
