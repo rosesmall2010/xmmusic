@@ -4,157 +4,61 @@ import { useEqualizer } from '@/composables/useEqualizer'
 import { toLocalFileUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
 
+/**
+ * 播放引擎对齐 EchoVault（Electron 38，Win11 可播）：
+ * - 单个永久 <audio>，切歌只换 src，绝不销毁重建
+ * - 启动即 createMediaElementSource，始终经 AudioContext → destination 出声
+ * - 播放前 audioCtx.resume()，再 audio.play()
+ */
 let howl: Howl | null = null
 let progressTimer: NodeJS.Timeout | null = null
 let audioElement: HTMLAudioElement | null = null
 let useNativeAudio = false
-let isPlaybackInProgress = false // 播放锁，防止并发播放
-let restoreHookBound = false
-let isRestoringNative = false
+let isPlaybackInProgress = false
+let handlersBound = false
 
 export function usePlayer() {
   const playerStore = usePlayerStore()
   const equalizer = useEqualizer()
 
-  /** 绑定：关音效后重建未被捕获的 Audio，恢复系统级直出音质 */
-  const bindRestoreNativeHook = () => {
-    if (restoreHookBound || typeof window === 'undefined') return
-    restoreHookBound = true
-    window.addEventListener('xmmusic:restore-native-audio', () => {
-      void restoreNativeAudioPath()
-    })
-  }
-  bindRestoreNativeHook()
-
-  const discardAudioElement = (el: HTMLAudioElement | null) => {
-    if (!el) return
-    try {
-      el.pause()
-      el.onplay = null
-      el.onpause = null
-      el.onended = null
-      el.onerror = null
-      el.onloadedmetadata = null
-      el.removeAttribute('src')
-      el.load()
-      el.remove()
-    } catch {
-      // ignore
-    }
-  }
-
-  /**
-   * Web Audio 释放后，旧 media 元素无法再直出扬声器。
-   * 重建元素并尽量从断点续播。
-   */
-  const restoreNativeAudioPath = async () => {
-    if (isRestoringNative) return
-    isRestoringNative = true
-    try {
-      if (equalizer.isCaptured()) {
-        await equalizer.releaseCapture()
-      }
-
-      const old =
-        audioElement ||
-        (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-      const music = playerStore.currentMusic
-      const resumeAt = old?.currentTime ?? playerStore.currentTime ?? 0
-      const wasPlaying = old ? !old.paused : playerStore.isPlaying
-
-      discardAudioElement(old)
-      audioElement = null
-      useNativeAudio = true
-
-      if (!music) return
-
-      await playWithNativeAudio(music, { resumeAt, autoplay: wasPlaying })
-      console.log('✅ 已恢复原生 Audio 直出路径')
-    } catch (error) {
-      console.error('❌ 恢复原生音频路径失败:', error)
-    } finally {
-      isRestoringNative = false
-    }
-  }
-
-  const playWithNativeAudio = async (
-    music: MusicItem,
-    options?: { resumeAt?: number; autoplay?: boolean }
-  ) => {
-    console.log('🔄 尝试使用原生 Audio 播放')
-
-    // 停止并清理旧的音频
-    if (audioElement) {
-      audioElement.pause()
-      audioElement.src = ''
-    }
-
-    let hasStartedPlaying = false
-    let loadTimeout: NodeJS.Timeout | null = null
-    const resumeAt = options?.resumeAt
-    const autoplay = options?.autoplay !== false
-
-    // 若当前 DOM 元素曾被 MediaElementSource 捕获，必须丢弃重建
+  /** 确保永久 Audio 已创建，并立刻挂上 Web Audio 图（EchoVault 同款） */
+  const ensurePersistentAudio = () => {
     if (!audioElement) {
       const existing = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
-      if (existing && equalizer.isCaptured()) {
-        discardAudioElement(existing)
-      } else if (existing) {
+      if (existing) {
         audioElement = existing
+      } else {
+        audioElement = new Audio()
+        audioElement.id = 'xmmusic-audio-player'
+        audioElement.style.display = 'none'
+        audioElement.preload = 'auto'
+        audioElement.crossOrigin = 'anonymous'
+        document.body.appendChild(audioElement)
+        console.log('✅ 永久音频元素已创建（EchoVault 模式）')
       }
     }
-
-    if (!audioElement) {
-      audioElement = new Audio()
-      audioElement.id = 'xmmusic-audio-player'
-      audioElement.style.display = 'none'
-      audioElement.preload = 'auto'
-      document.body.appendChild(audioElement)
-      console.log('✅ 音频元素已添加到 DOM')
-    }
-
-    // 对齐 EchoVault：始终 crossOrigin=anonymous + load()，配合协议 corsEnabled
-    // 否则 Win 下 MediaElementSource / 媒体管线偶发静音或卡在开头
-    const localFileUrl = toLocalFileUrl(music.filePath)
-    console.log('🔗 使用协议:', localFileUrl)
-    console.log('📁 原始路径:', music.filePath)
 
     audioElement.crossOrigin = 'anonymous'
-    audioElement.preload = 'auto'
-    audioElement.src = localFileUrl
-    audioElement.load()
-    audioElement.volume = playerStore.volume / 100
+    // 始终接管：关 EQ 时图为 source→destination 直通，开 EQ 时经滤波器
+    equalizer.initAudioContext(audioElement)
+    bindAudioHandlers()
+    return audioElement
+  }
+
+  const bindAudioHandlers = () => {
+    if (!audioElement || handlersBound) return
+    handlersBound = true
 
     audioElement.onloadedmetadata = () => {
-      console.log('✅ 原生 Audio 加载成功')
-      playerStore.duration = audioElement!.duration
-      if (typeof resumeAt === 'number' && resumeAt > 0 && Number.isFinite(resumeAt)) {
-        try {
-          audioElement!.currentTime = Math.min(resumeAt, audioElement!.duration || resumeAt)
-          playerStore.currentTime = audioElement!.currentTime
-        } catch {
-          // ignore seek errors
-        }
-      }
-      if (loadTimeout) {
-        clearTimeout(loadTimeout)
-        loadTimeout = null
-      }
+      if (!audioElement) return
+      console.log('✅ 原生 Audio 加载成功, duration=', audioElement.duration)
+      playerStore.duration = audioElement.duration
     }
 
     audioElement.onplay = () => {
       console.log('▶️ 原生 Audio 开始播放')
-      hasStartedPlaying = true
       playerStore.isPlaying = true
       startProgressUpdate()
-      if (loadTimeout) {
-        clearTimeout(loadTimeout)
-        loadTimeout = null
-      }
-      // 仅在音效开启时接管 Web Audio（避免频谱可视化拖垮音质）
-      if (equalizer.enabled.value) {
-        equalizer.initAudioContext(audioElement!)
-      }
     }
 
     audioElement.onpause = () => {
@@ -175,42 +79,64 @@ export function usePlayer() {
     }
 
     audioElement.onerror = () => {
-      if (!hasStartedPlaying) {
-        const error = audioElement?.error
-        console.error('❌ 原生 Audio 加载失败')
-        console.error('   错误代码:', error?.code)
-        console.error('   错误消息:', error?.message)
-        console.error('   文件路径:', music.filePath)
-        console.error('   URL:', localFileUrl)
-        if (error) {
-          let errorMsg = '未知错误'
-          switch (error.code) {
-            case 1: errorMsg = 'MEDIA_ERR_ABORTED - 用户中止'; break
-            case 2: errorMsg = 'MEDIA_ERR_NETWORK - 网络错误'; break
-            case 3: errorMsg = 'MEDIA_ERR_DECODE - 解码错误'; break
-            case 4: errorMsg = 'MEDIA_ERR_SRC_NOT_SUPPORTED - 格式不支持或文件损坏'; break
+      const error = audioElement?.error
+      console.error('❌ 原生 Audio 错误', {
+        code: error?.code,
+        message: error?.message,
+        src: audioElement?.src
+      })
+    }
+  }
+
+  const playWithNativeAudio = async (
+    music: MusicItem,
+    options?: { resumeAt?: number; autoplay?: boolean }
+  ) => {
+    console.log('🔄 EchoVault 模式播放')
+    const el = ensurePersistentAudio()
+    const resumeAt = options?.resumeAt
+    const autoplay = options?.autoplay !== false
+    const localFileUrl = toLocalFileUrl(music.filePath)
+
+    console.log('🔗 使用协议:', localFileUrl)
+    console.log('📁 原始路径:', music.filePath)
+
+    // 对齐 EchoVault playTrack：pause → 换 src → load → resume ctx → play
+    el.pause()
+    el.crossOrigin = 'anonymous'
+    el.src = localFileUrl
+    el.load()
+    el.volume = playerStore.volume / 100
+
+    // 元数据就绪后再 seek（断点续播）
+    if (typeof resumeAt === 'number' && resumeAt > 0 && Number.isFinite(resumeAt)) {
+      await new Promise<void>((resolve) => {
+        const onMeta = () => {
+          el.removeEventListener('loadedmetadata', onMeta)
+          try {
+            el.currentTime = Math.min(resumeAt, el.duration || resumeAt)
+            playerStore.currentTime = el.currentTime
+          } catch {
+            // ignore
           }
-          console.error('   错误详情:', errorMsg)
+          resolve()
         }
-        if (loadTimeout) clearTimeout(loadTimeout)
-      }
+        if (el.readyState >= 1) onMeta()
+        else el.addEventListener('loadedmetadata', onMeta)
+        // 避免永久挂起
+        setTimeout(resolve, 3000)
+      })
     }
 
-    try {
-      playerStore.currentMusic = music
-      useNativeAudio = true
-      if (autoplay) {
-        await audioElement.play()
-      } else {
-        playerStore.isPlaying = false
-      }
-    } catch (error) {
-      console.error('❌ audioElement.play() 调用失败:', error)
-      if (audioElement) {
-        audioElement.pause()
-        audioElement.src = ''
-      }
-      throw error
+    playerStore.currentMusic = music
+    useNativeAudio = true
+
+    await equalizer.resumeContext()
+
+    if (autoplay) {
+      await el.play()
+    } else {
+      playerStore.isPlaying = false
     }
   }
 
@@ -226,10 +152,6 @@ export function usePlayer() {
       if (howl) {
         howl.unload()
         howl = null
-      }
-      if (audioElement) {
-        audioElement.pause()
-        audioElement.src = ''
       }
       stopProgressUpdate()
       playerStore.isPlaying = false
@@ -252,7 +174,6 @@ export function usePlayer() {
 
       const localFileUrl = toLocalFileUrl(music.filePath)
       console.log('🔗 Howler 使用协议:', localFileUrl)
-      console.log('📁 原始路径:', music.filePath)
       howl = new Howl({
         src: [localFileUrl],
         html5: true,
@@ -284,12 +205,7 @@ export function usePlayer() {
           }
         },
         onloaderror: async (_id, error) => {
-          console.error('❌ Howler 加载失败')
-          console.error('   错误代码:', error)
-          console.error('   文件路径:', music.filePath)
-          console.error('   URL:', localFileUrl)
-          console.error('   文件扩展名:', music.fileExtension)
-
+          console.error('❌ Howler 加载失败', error)
           let errorMsg = '未知错误'
           switch (error) {
             case 1: errorMsg = '中止加载'; break
@@ -298,11 +214,8 @@ export function usePlayer() {
             case 4: errorMsg = '不支持的格式或文件损坏'; break
           }
 
-          console.error(`跳过损坏文件: ${music.title} - ${errorMsg}`)
-
           try {
             await window.electronAPI.updateMusicPlayStatus(music.id, false, errorMsg)
-            console.log(`✅ 已标记文件为不可播放: ${music.title} - ${errorMsg}`)
           } catch (err) {
             console.error('❌ 更新播放状态失败:', err)
           }
@@ -326,8 +239,6 @@ export function usePlayer() {
       useNativeAudio = false
     } catch (error) {
       console.error('❌ 播放完全失败:', error)
-      console.error('🔄 自动跳到下一首')
-
       playerStore.isPlaying = false
       stopProgressUpdate()
       isPlaybackInProgress = false
@@ -350,9 +261,10 @@ export function usePlayer() {
     }
   }
 
-  const resume = () => {
+  const resume = async () => {
     if (useNativeAudio && audioElement) {
-      audioElement.play()
+      await equalizer.resumeContext()
+      await audioElement.play()
     } else {
       howl?.play()
     }
@@ -374,6 +286,8 @@ export function usePlayer() {
       playerStore.volume = volume
     } else if (howl) {
       howl.volume(volume / 100)
+      playerStore.volume = volume
+    } else {
       playerStore.volume = volume
     }
   }
@@ -402,7 +316,18 @@ export function usePlayer() {
     resume,
     seek,
     setVolume,
-    restoreNativeAudioPath,
+    /** 兼容旧调用：EchoVault 模式下无需重建元素，仅确保图已挂接并 resume */
+    restoreNativeAudioPath: async () => {
+      const el = ensurePersistentAudio()
+      await equalizer.resumeContext()
+      if (playerStore.isPlaying && el.paused) {
+        try {
+          await el.play()
+        } catch {
+          // ignore
+        }
+      }
+    },
     getAudioElement: () => audioElement
   }
 }

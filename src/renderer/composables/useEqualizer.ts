@@ -296,12 +296,9 @@ const safeDisconnect = (node: AudioNode | null | undefined) => {
 
 export function useEqualizer() {
   /**
-   * 路由音频图：
-   * - 音效关闭：source → destination（直通，尽量保真；分析器仅并联旁听）
-   * - 音效开启：source → 10 段 peaking → gain（余量）→ limiter（防削波）→ destination
-   *
-   * 注意：一旦 createMediaElementSource，媒体元素就只能经 AudioContext 出声，
-   * 无法再回到「原生直出」；因此未开音效时也应避免无谓接管（见 PlayerBar）。
+   * 路由音频图（对齐 EchoVault：始终经 AudioContext 出声，不销毁 MediaElementSource）：
+   * - 音效关闭：source → destination（直通；分析器并联旁听）
+   * - 音效开启：source → 10 段 EQ → gain → limiter → destination
    */
   const routeAudioGraph = () => {
     if (!audioContext || !sourceNode || !gainNode || !limiterNode || !analyserNode || !timeAnalyserNode) {
@@ -340,7 +337,20 @@ export function useEqualizer() {
     applyGains()
   }
 
-  // 初始化音频上下文（仅在用户开启音效时调用；可视化不得调用）
+  /** 播放前唤醒 AudioContext（浏览器/Electron 默认 suspended） */
+  const resumeContext = async () => {
+    if (!audioContext) return
+    if (audioContext.state === 'suspended') {
+      try {
+        await audioContext.resume()
+        console.log('✅ AudioContext 已 resume')
+      } catch (error) {
+        console.warn('⚠️ AudioContext resume 失败:', error)
+      }
+    }
+  }
+
+  // 初始化音频上下文：播放器启动即调用（EchoVault：永久挂接 MediaElementSource）
   const initAudioContext = (element: HTMLAudioElement) => {
     // 如果已经为同一个元素初始化过，跳过（但仍按当前开关校正路由）
     if (isInitialized && audioElement === element && audioContext && sourceNode) {
@@ -556,33 +566,21 @@ export function useEqualizer() {
     console.log('✅ 已释放 Web Audio 音频捕获')
   }
 
-  // 启用/禁用均衡器：开启时接管；关闭时释放并通知播放器重建原生元素
+  // 启用/禁用均衡器：只切换音频图路由，不释放 MediaElementSource（对齐 EchoVault）
   const toggle = (value: boolean) => {
     enabled.value = value
-    if (value) {
-      const el =
-        audioElement ||
-        (typeof document !== 'undefined'
-          ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-          : null)
-      if (el) initAudioContext(el)
-      if (isInitialized) {
-        routeAudioGraph()
-      } else {
-        applyGains()
-      }
+    const el =
+      audioElement ||
+      (typeof document !== 'undefined'
+        ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+        : null)
+    if (el) initAudioContext(el)
+    if (isInitialized) {
+      routeAudioGraph()
     } else {
-      // 关音效：彻底离开 Web Audio，恢复原生直出（需重建 media 元素）
-      if (isCaptured()) {
-        void releaseCapture().then(() => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
-          }
-        })
-      } else {
-        applyGains()
-      }
+      applyGains()
     }
+    void resumeContext()
     saveSettings(true)
   }
 
@@ -620,9 +618,8 @@ export function useEqualizer() {
     if (enabled.value) applyGains()
   }, { deep: true })
 
-  // 监听启用状态：仅在「开启且已接管」时重路由；关闭由 toggle → releaseCapture 处理
-  watch(enabled, (on) => {
-    if (!on) return
+  // 监听启用状态：开/关都只重路由（始终保持 MediaElementSource）
+  watch(enabled, () => {
     if (isInitialized) {
       routeAudioGraph()
     }
@@ -661,6 +658,7 @@ export function useEqualizer() {
     EQUALIZER_FREQUENCIES,
     EQUALIZER_PRESETS,
     initAudioContext,
+    resumeContext,
     isCaptured,
     releaseCapture,
     getFrequencyData,
