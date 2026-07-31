@@ -130,30 +130,35 @@
             </div>
           </div>
 
-          <!-- 队列面板 -->
+          <!-- 队列面板：虚拟滚动，避免万级队列一次性渲染全部 DOM 节点。这里挂在 v-show 里，
+               队列面板即使没打开也常驻 DOM，播放进度每 tick 触发的重渲染都要重新 diff 这份列表，
+               不做虚拟滚动的话歌单上万条时全屏页 CPU 会明显偏高（做法与 PlayQueueDrawer.vue 一致） -->
           <div v-show="rightPanelMode === 'queue'" class="queue-panel">
-            <div class="queue-list" ref="queueListRef">
-              <div
-                v-for="(music, index) in queue"
-                :key="music.id"
-                class="queue-item"
-                :class="{ active: currentQueueIndex === index }"
-                @dblclick="playQueueItem(index)"
-              >
-                <div class="item-index">
-                  <Volume2 v-if="currentQueueIndex === index" :size="14" class="playing-icon" />
-                  <span v-else>{{ index + 1 }}</span>
-                </div>
-                <div class="item-info">
-                  <div class="item-title">{{ music.title }}</div>
-                  <div class="item-meta">
-                    <span class="item-artist">{{ music.artist }}</span>
-                    <span class="item-sep">·</span>
-                    <span class="item-filename">{{ music.fileName }}</span>
+            <div class="queue-list" ref="queueListRef" @scroll="handleQueueScroll">
+              <div class="queue-list-inner" :style="{ height: queueTotalHeight + 'px' }">
+                <div
+                  v-for="item in visibleQueue"
+                  :key="item.music.id"
+                  class="queue-item"
+                  :class="{ active: currentQueueIndex === item.index }"
+                  :style="{ height: queueItemHeight + 'px', transform: `translateY(${item.index * queueItemHeight}px)` }"
+                  @dblclick="playQueueItem(item.index)"
+                >
+                  <div class="item-index">
+                    <Volume2 v-if="currentQueueIndex === item.index" :size="14" class="playing-icon" />
+                    <span v-else>{{ item.index + 1 }}</span>
                   </div>
+                  <div class="item-info">
+                    <div class="item-title">{{ item.music.title }}</div>
+                    <div class="item-meta">
+                      <span class="item-artist">{{ item.music.artist }}</span>
+                      <span class="item-sep">·</span>
+                      <span class="item-filename">{{ item.music.fileName }}</span>
+                    </div>
+                  </div>
+                  <div class="item-duration">{{ formatTime(item.music.duration) }}</div>
+                  <button class="item-remove" @click.stop="removeQueueItem(item.index)">×</button>
                 </div>
-                <div class="item-duration">{{ formatTime(music.duration) }}</div>
-                <button class="item-remove" @click.stop="removeQueueItem(index)">×</button>
               </div>
               <div v-if="queue.length === 0" class="queue-empty">{{ $t('queue.empty') }}</div>
             </div>
@@ -248,6 +253,7 @@
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useElementSize } from '@vueuse/core'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
@@ -258,6 +264,7 @@ import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
+import type { MusicItem } from '@shared/types/music'
 import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
@@ -318,6 +325,35 @@ const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
 const rightPanelMode = ref<'lyrics' | 'queue'>('lyrics') // 右侧面板模式
+
+// 队列虚拟滚动：只渲染可视区域，逻辑与 PlayQueueDrawer.vue 保持一致
+const queueItemHeight = 60
+const queueScrollTop = ref(0)
+const { height: queueContainerHeight } = useElementSize(queueListRef)
+
+const handleQueueScroll = (e: Event) => {
+  const target = e.target as HTMLElement
+  requestAnimationFrame(() => {
+    queueScrollTop.value = target.scrollTop
+  })
+}
+
+const queueTotalHeight = computed(() => queue.value.length * queueItemHeight)
+const queueMaxScrollTop = computed(() => Math.max(0, queueTotalHeight.value - queueContainerHeight.value))
+
+const visibleQueue = computed(() => {
+  const buffer = 10
+  const effectiveScrollTop = Math.min(queueScrollTop.value, queueMaxScrollTop.value)
+  const start = Math.max(0, Math.floor(effectiveScrollTop / queueItemHeight) - buffer)
+  const visibleCount = Math.ceil(queueContainerHeight.value / queueItemHeight)
+  const end = Math.min(queue.value.length, start + visibleCount + buffer * 2)
+  const result: { music: MusicItem; index: number }[] = []
+  for (let index = start; index < end; index++) {
+    result.push({ music: queue.value[index], index })
+  }
+  return result
+})
+
 const showEqualizer = ref(false)
 const matchingLyrics = ref(false)
 const showLyricsPick = ref(false)
@@ -541,10 +577,9 @@ const handleVolumeSave = async () => {
 const scrollToCurrentQueueItem = () => {
   if (!queueListRef.value || currentQueueIndex.value < 0) return
 
-  const activeItem = queueListRef.value.children[currentQueueIndex.value] as HTMLElement
-  if (activeItem) {
-    activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示（与 PlayQueueDrawer.vue 一致）
+  const targetTop = currentQueueIndex.value * queueItemHeight - queueListRef.value.clientHeight / 2 + queueItemHeight / 2
+  queueListRef.value.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
 }
 
 
@@ -1395,7 +1430,16 @@ watch(
   background: var(--np-scroll-thumb-hover);
 }
 
+.queue-list-inner {
+  position: relative;
+}
+
 .queue-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
