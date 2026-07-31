@@ -11,10 +11,6 @@ import TrayService from './services/trayService'
 // 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
 app.name = 'xmmusic'
 
-// 修复 Electron 39 网络服务崩溃问题
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
-app.commandLine.appendSwitch('disable-site-isolation-trials')
-
 // 加大音频输出缓冲：音乐播放器不需要低延迟，更大的缓冲可避免
 // UI 重绘（全屏频谱等）挤占 CPU 时出现的爆音 / 卡顿
 app.commandLine.appendSwitch('audio-buffer-size', '2048')
