@@ -850,9 +850,10 @@ onUnmounted(() => {
   window.removeEventListener('favorites-updated', handleFavoritesUpdated)
 })
 
-// 监听播放队列变化：只关心成员集合（filePath 是否在队列里），成员变化必然伴随 length 变化，
-// 用 length 做浅层监听即可，避免对上万条歌曲的队列做 deep 遍历
-watch(() => playerStore.queue.length, updateQueueStatus)
+// 监听播放队列变化：只关心成员集合（filePath 是否在队列里）。
+// 同时监听队列引用本身（覆盖"播放全部"等整体替换，哪怕新旧长度相同也能捕获到）
+// 和 length（覆盖 push/splice 式的增删），避免对上万条歌曲的队列做 deep 遍历
+watch(() => [playerStore.queue, playerStore.queue.length], updateQueueStatus)
 </script>
 
 <style scoped>

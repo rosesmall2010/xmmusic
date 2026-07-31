@@ -246,6 +246,23 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function initialize(settings?: any) {
     if (typeof window !== 'undefined') {
+      // 一次性迁移：旧版本把队列和位置状态混在同一个 LOCAL_STORAGE_KEY 里，
+      // 现在位置状态会直接覆盖这个 key，升级后第一次这样的覆盖会把旧队列数据冲掉，
+      // 所以先把旧 blob 里残留的 playQueue 挪到新 key，再往下走正常的读取流程
+      try {
+        if (!window.localStorage.getItem(LOCAL_STORAGE_QUEUE_KEY)) {
+          const legacy = window.localStorage.getItem(LOCAL_STORAGE_KEY)
+          if (legacy) {
+            const parsedLegacy = JSON.parse(legacy)
+            if (Array.isArray(parsedLegacy.playQueue) && parsedLegacy.playQueue.length > 0) {
+              window.localStorage.setItem(LOCAL_STORAGE_QUEUE_KEY, JSON.stringify({ playQueue: parsedLegacy.playQueue }))
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('迁移旧版本本地播放队列失败:', error)
+      }
+
       // 先恢复队列，再恢复位置：applyState 里 currentQueueIndex 的校验依赖 queue 已经有内容
       try {
         const localQueue = window.localStorage.getItem(LOCAL_STORAGE_QUEUE_KEY)

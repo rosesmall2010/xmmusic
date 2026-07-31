@@ -85,14 +85,21 @@ const scrollTop = ref(0)
 const { height: containerHeight } = useElementSize(listRef)
 
 const handleScroll = (e: Event) => {
-  scrollTop.value = (e.target as HTMLElement).scrollTop
+  const target = e.target as HTMLElement
+  requestAnimationFrame(() => {
+    scrollTop.value = target.scrollTop
+  })
 }
 
 const totalHeight = computed(() => queue.value.length * itemHeight)
+// 队列缩短（clearQueue/removeItem）时，真实 DOM 的 scrollTop 可能还没被浏览器 clamp 到新的最大值，
+// 这里直接用 clamp 后的值算可视区间，避免出现"算出的区间越界导致渲染 0 行"的瞬间空白
+const maxScrollTop = computed(() => Math.max(0, totalHeight.value - containerHeight.value))
 
 const visibleQueue = computed(() => {
   const buffer = 10
-  const start = Math.max(0, Math.floor(scrollTop.value / itemHeight) - buffer)
+  const effectiveScrollTop = Math.min(scrollTop.value, maxScrollTop.value)
+  const start = Math.max(0, Math.floor(effectiveScrollTop / itemHeight) - buffer)
   const visibleCount = Math.ceil(containerHeight.value / itemHeight)
   const end = Math.min(queue.value.length, start + visibleCount + buffer * 2)
   const result = []
@@ -131,9 +138,14 @@ const formatDuration = (seconds: number) => {
 
 // Scroll to current item when drawer opens or song changes
 watch([() => props.visible, currentQueueIndex], async ([isVisible, index]) => {
-  if (isVisible && index >= 0) {
-    await nextTick()
-    scrollToCurrent()
+  if (isVisible) {
+    // 抽屉根节点是 v-if，重新打开时真实 DOM 的 scrollTop 总是从 0 开始，
+    // 这里同步复位，避免虚拟滚动用上次关闭前的旧 scrollTop 算出错位的可视区间
+    scrollTop.value = 0
+    if (index >= 0) {
+      await nextTick()
+      scrollToCurrent()
+    }
   }
 })
 
@@ -244,6 +256,7 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 
 .queue-item {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   display: flex;
