@@ -473,6 +473,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getMusicById(id)
   })
 
+  ipcMain.handle('get-existing-music-ids', async (_, ids: number[]) => {
+    if (!db) return []
+    return db.getExistingMusicIds(ids)
+  })
+
   // 获取音乐的详细音频信息（包括 VBR）
   ipcMain.handle('get-music-audio-info', async (_, musicId: number) => {
     if (!db) return null

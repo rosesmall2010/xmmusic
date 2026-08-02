@@ -549,6 +549,17 @@ export default class MusicDatabase {
   }
 
   /**
+   * 从给定的 id 列表里筛出仍存在于 all_music 的那些
+   * 用于渲染端播放队列（持久化在 localStorage，跟库的生命周期无关）恢复时校验
+   */
+  getExistingMusicIds(ids: number[]): number[] {
+    if (ids.length === 0) return []
+    const placeholders = ids.map(() => '?').join(',')
+    const rows = this.db!.prepare(`SELECT id FROM all_music WHERE id IN (${placeholders})`).all(...ids) as Array<{ id: number }>
+    return rows.map(r => r.id)
+  }
+
+  /**
    * 将 all_music 行映射为 MusicItem（带完整路径）
    */
   private mapAllMusicRowToMusicItem(row: any, fullPath: string): MusicItem & { fullPath: string } {

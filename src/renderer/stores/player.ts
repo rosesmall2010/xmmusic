@@ -305,7 +305,35 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     applyState(loadedSettings)
+    await pruneMissingFromQueue()
     isInitialized.value = true
+  }
+
+  // 播放队列持久化在 localStorage，跟 SQLite 里的曲库生命周期完全独立：
+  // 如果两次启动之间某首歌被从库里删除（比如移除扫描目录时勾了"删除已扫描记录"），
+  // 队列里会留一条死引用，播放时 record-play 会因外键约束直接报错、无限跳歌。
+  // 启动时校验一遍，把已经不在库里的曲目摘掉。
+  async function pruneMissingFromQueue() {
+    if (typeof window === 'undefined' || !window.electronAPI?.getExistingMusicIds) return
+    if (queue.value.length === 0) return
+    try {
+      const ids = queue.value.map(m => m.id)
+      const existing = new Set(await window.electronAPI.getExistingMusicIds(ids))
+      if (existing.size === ids.length) return
+
+      const currentId = currentMusic.value?.id
+      queue.value = queue.value.filter(m => existing.has(m.id))
+
+      if (currentId !== undefined && existing.has(currentId)) {
+        currentQueueIndex.value = queue.value.findIndex(m => m.id === currentId)
+      } else {
+        currentQueueIndex.value = queue.value.length > 0 ? 0 : -1
+        currentMusic.value = queue.value[0] ?? null
+        shouldAutoResume.value = false
+      }
+    } catch (error) {
+      console.warn('校验播放队列曲目是否仍存在于曲库失败，跳过清理:', error)
+    }
   }
 
   // Optimize: Don't deep clone if not necessary. Pinia state is already reactive objects.

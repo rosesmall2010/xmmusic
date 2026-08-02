@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearSearchHistory: () => ipcRenderer.invoke('clear-search-history'),
   getSearchSuggestions: (query: string) => ipcRenderer.invoke('get-search-suggestions', query),
   getMusicById: (id: number) => ipcRenderer.invoke('get-music-by-id', id),
+  getExistingMusicIds: (ids: number[]) => ipcRenderer.invoke('get-existing-music-ids', ids),
   toggleFavorite: (musicId: number) => ipcRenderer.invoke('toggle-favorite', musicId),
   isFileFavorite: (musicId: number) => ipcRenderer.invoke('is-file-favorite', musicId),
   recordPlay: (musicId: number) => ipcRenderer.invoke('record-play', musicId),
@@ -341,6 +342,7 @@ declare global {
       clearSearchHistory: () => Promise<void>
       getSearchSuggestions: (query: string) => Promise<string[]>
       getMusicById: (id: number) => Promise<MusicItem | null>
+      getExistingMusicIds: (ids: number[]) => Promise<number[]>
       toggleFavorite: (filePath: string) => Promise<void>
       isFileFavorite: (filePath: string) => Promise<boolean>
       recordPlay: (filePath: string) => Promise<void>

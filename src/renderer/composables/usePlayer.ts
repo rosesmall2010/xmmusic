@@ -240,8 +240,14 @@ export function usePlayer() {
       stopProgressUpdate()
       playerStore.isPlaying = false
 
-      await window.electronAPI.recordPlay(music.id)
-      window.dispatchEvent(new Event('recent-plays-updated'))
+      // 记录"最近播放"是个旁路副作用，不应该因为它失败（比如队列里残留的曲目已经不在库里了）
+      // 就连真正的播放都不试了——那样只会走进下面的外层 catch，误判成"播放完全失败"再无限跳歌
+      try {
+        await window.electronAPI.recordPlay(music.id)
+        window.dispatchEvent(new Event('recent-plays-updated'))
+      } catch (error) {
+        console.warn('⚠️ 记录最近播放失败，继续尝试播放:', error)
+      }
 
       console.log('🎵 播放音乐:', music.title)
       console.log('📁 原始路径:', music.filePath)
