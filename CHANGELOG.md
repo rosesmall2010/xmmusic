@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.9] - 2026-08-02
+
+### 文档
+- 同步更新 README：最新版本 v1.1.9、安装包文件名；补充 v1.1.8 特效开关与万级队列性能说明
+
 ## [1.1.8] - 2026-07-31
 
 ### 新增
