@@ -471,14 +471,6 @@ const togglePlay = async () => {
     }
 
     await play(currentMusic.value)
-
-    // 如果有保存的恢复位置，跳转到该位置
-    if (playerStore.resumePosition > 0) {
-      setTimeout(() => {
-        seek(playerStore.resumePosition)
-        playerStore.resumePosition = 0 // 清除恢复位置，避免重复跳转
-      }, 300)
-    }
     return
   }
 

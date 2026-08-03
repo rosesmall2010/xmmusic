@@ -214,17 +214,9 @@ const togglePlay = async () => {
         console.log('▶️ 恢复播放')
         resume()
       } else {
-        // 没有音频实例（启动后首次播放），重新加载音乐
+        // 没有音频实例（启动后首次播放），重新加载音乐；进度不续播，始终从曲首开始
         console.log('🔄 首次播放，重新加载音乐')
         await play(currentMusic.value)
-
-        // 如果有保存的恢复位置，跳转到该位置
-        if (playerStore.resumePosition > 0) {
-          setTimeout(() => {
-            seek(playerStore.resumePosition)
-            playerStore.resumePosition = 0 // 清除恢复位置，避免重复跳转
-          }, 300)
-        }
       }
     } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
       await play(playerStore.queue[playerStore.currentQueueIndex])

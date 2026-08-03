@@ -3,8 +3,8 @@ import { ref, watch, toRaw } from 'vue'
 import type { MusicItem } from '@shared/types/music'
 
 const LOCAL_STORAGE_KEY = 'xmmusic_player_state'
-// 播放队列单独存一个 key：位置状态（下标/音量/播放进度等）每几秒就要保存一次，
-// 但队列可能有上万条歌曲，不能让高频的位置保存每次都把整条队列一起序列化/写盘。
+// 播放队列单独存一个 key：队列可能有上万条，不能和音量/模式等偏好混在一起频繁写盘。
+// 播放进度不再持久化：重启后从曲首开始，避免播放中高频写 SQLite。
 const LOCAL_STORAGE_QUEUE_KEY = 'xmmusic_player_queue'
 
 export const usePlayerStore = defineStore('player', () => {
@@ -19,7 +19,9 @@ export const usePlayerStore = defineStore('player', () => {
   // 播放队列
   const queue = ref<MusicItem[]>([])
   const currentQueueIndex = ref(-1)
+  /** @deprecated 进度不再持久化，始终为 0；保留字段避免外部引用报错 */
   const resumePosition = ref(0)
+  /** @deprecated 不再根据上次是否在播自动续播 */
   const shouldAutoResume = ref(false)
   const isInitialized = ref(false)
   let positionPersistTimer: number | null = null
@@ -236,12 +238,9 @@ export const usePlayerStore = defineStore('player', () => {
     if (typeof state.volume === 'number') {
       volume.value = state.volume
     }
-    if (typeof state.playPosition === 'number') {
-      resumePosition.value = state.playPosition
-    }
-    if (typeof state.wasPlaying === 'boolean') {
-      shouldAutoResume.value = state.wasPlaying && !!currentMusic.value
-    }
+    // 不再恢复 playPosition / wasPlaying：重启后从曲首开始，不自动续播到上次进度
+    resumePosition.value = 0
+    shouldAutoResume.value = false
   }
 
   async function initialize(settings?: any) {
@@ -343,18 +342,16 @@ export const usePlayerStore = defineStore('player', () => {
   const toPlainQueue = () =>
     queue.value.map(item => toRaw(item))
 
-  // 位置状态：小对象，播放期间高频保存（不含队列，避免每次都序列化上万条歌曲）
-  const buildPositionSnapshot = () => ({
+  // 播放偏好：队列下标 / 模式 / 音量（不含播放进度，避免播放中高频写库）
+  const buildPlaybackPrefsSnapshot = () => ({
     currentQueueIndex: currentQueueIndex.value,
     playMode: playMode.value,
-    volume: volume.value,
-    playPosition: currentTime.value,
-    wasPlaying: isPlaying.value
+    volume: volume.value
   })
 
-  const persistPosition = async () => {
+  const persistPlaybackPrefs = async () => {
     if (!isInitialized.value) return
-    const snapshot = buildPositionSnapshot()
+    const snapshot = buildPlaybackPrefsSnapshot()
 
     if (typeof window !== 'undefined') {
       try {
@@ -392,17 +389,16 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   const persistState = async () => {
-    await Promise.all([persistPosition(), persistQueue()])
+    await Promise.all([persistPlaybackPrefs(), persistQueue()])
   }
 
-  const schedulePositionPersist = () => {
+  const schedulePlaybackPrefsPersist = () => {
     if (!isInitialized.value) return
     if (positionPersistTimer) {
       clearTimeout(positionPersistTimer)
     }
-    // Increase debounce time to 1 second to reduce IPC frequency
     positionPersistTimer = window.setTimeout(() => {
-      void persistPosition()
+      void persistPlaybackPrefs()
     }, 1000)
   }
 
@@ -452,23 +448,11 @@ export const usePlayerStore = defineStore('player', () => {
   // 队列结构变化（播放全部/增删/清空/拖拽排序/元数据更新）才需要保存整条队列
   watch(queue, scheduleQueuePersist, { deep: true })
 
-  // Watch important state changes immediately
+  // 仅在队列下标 / 模式 / 音量变化时保存偏好（不跟播放进度、isPlaying）
   watch(
-    [currentQueueIndex, playMode, volume, isPlaying],
-    schedulePositionPersist
+    [currentQueueIndex, playMode, volume],
+    schedulePlaybackPrefsPersist
   )
-
-  // Throttle currentTime updates significantly (e.g. only save every 5 seconds if only time changes)
-  // 这个 tick 只保存位置状态，不带队列，所以哪怕歌单有上万条歌也不会造成高频大数据序列化/写盘
-  let timeSaveTimer: number | null = null
-  watch(currentTime, () => {
-    if (!timeSaveTimer) {
-      timeSaveTimer = window.setTimeout(() => {
-        schedulePositionPersist()
-        timeSaveTimer = null
-      }, 5000)
-    }
-  })
 
   return {
     currentMusic,
