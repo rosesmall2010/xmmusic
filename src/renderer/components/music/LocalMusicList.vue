@@ -207,6 +207,7 @@ import { Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useMusicStore } from '@/stores/music'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
+import { useEqualizer } from '@/composables/useEqualizer'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import SongList from '@/components/music/SongList.vue'
@@ -217,6 +218,7 @@ const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
+const equalizer = useEqualizer()
 const { play, pause, getAudioElement } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
@@ -463,14 +465,24 @@ const handleClearAll = async () => {
     return
   }
 
-  // 清理库之前先停掉播放并清空播放状态，避免清库过程中仍在播已删曲目
+  // 清库前仅停播并拆掉 Web Audio（不写空队列到磁盘，避免清库失败后队列永久丢失）
+  const queueSnapshot = [...playerStore.queue]
+  const queueIndexSnapshot = playerStore.currentQueueIndex
+  const currentMusicSnapshot = playerStore.currentMusic
+
   pause()
-  playerStore.clearQueue()
-  playerStore.currentMusic = null
   playerStore.isPlaying = false
   playerStore.currentTime = 0
   playerStore.duration = 0
-  playerStore.currentQueueIndex = -1
+  playerStore.currentMusic = null
+
+  try {
+    if (equalizer.isCaptured()) {
+      await equalizer.releaseCapture()
+    }
+  } catch (error) {
+    console.warn('清除前释放 Web Audio 失败:', error)
+  }
 
   const audioEl =
     getAudioElement() ||
@@ -486,32 +498,40 @@ const handleClearAll = async () => {
   }
 
   try {
-    window.localStorage.removeItem('xmmusic_player_queue')
-    window.localStorage.removeItem('xmmusic_player_state')
-  } catch {
-    // ignore
-  }
-
-  try {
-    await window.electronAPI.saveSettings({
-      playQueue: [],
-      currentQueueIndex: -1,
-      playPosition: 0,
-      wasPlaying: false
-    })
-  } catch (error) {
-    console.warn('清除前同步播放设置失败:', error)
-  }
-
-  try {
     await window.electronAPI.clearLocalMusic()
   } catch (error: any) {
+    // 清库失败：恢复内存中的队列/当前曲（localStorage/settings 未动）
+    playerStore.queue = queueSnapshot
+    playerStore.currentQueueIndex = queueIndexSnapshot
+    playerStore.currentMusic = currentMusicSnapshot
     alert(t('settings.clearAllError') + ': ' + error.message)
     return
   }
 
-  // 库已清空：后续仅尽力同步列表/搜索等 UI；失败不能再报「清除失败」
+  // 库已清空：再清空播放持久化与列表 UI；后续失败不能再报「清除失败」
   try {
+    playerStore.clearQueue()
+    playerStore.currentMusic = null
+    playerStore.currentQueueIndex = -1
+
+    try {
+      window.localStorage.removeItem('xmmusic_player_queue')
+      window.localStorage.removeItem('xmmusic_player_state')
+    } catch {
+      // ignore
+    }
+
+    try {
+      await window.electronAPI.saveSettings({
+        playQueue: [],
+        currentQueueIndex: -1,
+        playPosition: 0,
+        wasPlaying: false
+      })
+    } catch (error) {
+      console.warn('清除后同步播放设置失败:', error)
+    }
+
     musicStore.clearSearchCaches()
     musicStore.musicList = []
     musicStore.totalCount = 0
