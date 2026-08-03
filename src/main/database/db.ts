@@ -2789,23 +2789,49 @@ export default class MusicDatabase {
     const preserve = new Set(['settings', 'local_music_dir', 'music_directory'])
 
     const tables = this.db.prepare(`
-      SELECT name FROM sqlite_master
+      SELECT name, sql FROM sqlite_master
       WHERE type = 'table'
         AND name NOT LIKE 'sqlite_%'
-    `).all() as Array<{ name: string }>
+    `).all() as Array<{ name: string; sql: string | null }>
 
-    const toClear = tables.filter((t) => !preserve.has(t.name))
+    /** FTS5 影子表不可直接 DELETE（会报 may not be modified） */
+    const isFtsShadowTable = (name: string) =>
+      /_fts_(data|idx|content|docsize|config)$/i.test(name)
+
+    /** 虚拟表（如 music_fts）：由内容表删除触发器同步，或事后 rebuild */
+    const isVirtualTable = (sql: string | null) =>
+      !!sql && /create\s+virtual\s+table/i.test(sql)
+
+    const toClear = tables.filter(
+      (t) => !preserve.has(t.name) && !isFtsShadowTable(t.name) && !isVirtualTable(t.sql)
+    )
+    const ftsVirtual = tables.filter(
+      (t) => !preserve.has(t.name) && isVirtualTable(t.sql)
+    )
+
     console.log(
-      `🗑️  清除所有（保留 settings + 配置目录），共 ${toClear.length} 张表`
+      `🗑️  清除所有（保留 settings + 配置目录），共 ${toClear.length} 张普通表` +
+        (ftsVirtual.length ? `、${ftsVirtual.length} 个 FTS 虚拟表` : '')
     )
 
     this.db.exec('PRAGMA foreign_keys = OFF')
     try {
       const tx = this.db.transaction(() => {
         for (const table of toClear) {
-          // 表名来自 sqlite_master，仍用引号包裹以防特殊字符
           this.db!.prepare(`DELETE FROM "${table.name}"`).run()
           console.log(`   已清空: ${table.name}`)
+        }
+
+        // 外部内容 FTS：内容表已删后 rebuild，避免残留索引；勿直接 DELETE 影子表
+        for (const fts of ftsVirtual) {
+          try {
+            this.db!.prepare(
+              `INSERT INTO "${fts.name}"("${fts.name}") VALUES('rebuild')`
+            ).run()
+            console.log(`   已重建 FTS: ${fts.name}`)
+          } catch (error) {
+            console.warn(`   重建 FTS ${fts.name} 失败（可忽略）:`, error)
+          }
         }
       })
       tx()
