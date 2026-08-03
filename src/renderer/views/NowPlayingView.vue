@@ -932,7 +932,7 @@ watch(isLight, () => {
 // 频谱/火焰/闪电可视化需要 Web Audio；音效开启时也必须接管滤波链（与特效开关独立）
 watch(
   [isPlaying, effect, effectEnabled, () => equalizer.enabled.value],
-  ([playing]) => {
+  ([playing], prev) => {
     const wantFx = settingsStore.shouldCaptureNowPlayingAudio()
     const wantEq = equalizer.enabled.value
     if (playing && (wantFx || wantEq)) {
@@ -940,7 +940,12 @@ watch(
       if (el) equalizer.initAudioContext(el)
       return
     }
-    // 特效与音效都不需要时，释放此前为可视化接管的 Web Audio，恢复原生直出
+    // EQ 从开→关由 toggle → releaseCapture → restore 负责；此处再派发会造成双重重建（断音/进度跳）
+    const prevEqEnabled = Array.isArray(prev) ? prev[3] : undefined
+    if (prevEqEnabled === true && wantEq === false) {
+      return
+    }
+    // 特效不再需要频谱且 EQ 也未开：释放此前为可视化接管的 Web Audio
     if (!wantFx && !wantEq && equalizer.isCaptured()) {
       window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
     }
