@@ -126,6 +126,7 @@
     "autoPlayDesc": "Automatically play when app starts or when switching songs",
     "musicDirectories": "Music Directories",
     "scanDirectories": "Scan Directories",
+    "setupScanDirectories": "Set Scan Directories",
     "scanDirectoriesDesc": "Add or manage music scan directories (max 20)",
     "addDirectory": "Add Directory",
     "loading": "Loading...",
@@ -190,7 +191,7 @@
     "deleteConfirm": "Confirm Delete",
     "deleteDirectoryConfirmText": "Are you sure you want to remove \"{path}\" from the scan directory list?",
     "deleteDirectoryHint": "Note: This will only remove the directory from the scan list, not delete scanned music files.",
-    "noDirectoriesHint": "Please add scan directories first\n\nClick \"Scan Directories\" button to add music directories",
+    "noDirectoriesHint": "Please add scan directories first\n\nClick \"Set Scan Directories\" to add music folders",
     "updateDirectoryStatusError": "Failed to update directory status"
   },
   "playlist": {

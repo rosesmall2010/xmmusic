@@ -126,6 +126,7 @@
     "autoPlayDesc": "程序启动或切换歌曲时自动播放",
     "musicDirectories": "音乐目录",
     "scanDirectories": "扫描目录",
+    "setupScanDirectories": "设置扫描目录",
     "scanDirectoriesDesc": "添加或管理音乐扫描目录（最多20个）",
     "addDirectory": "添加目录",
     "loading": "加载中...",
@@ -190,7 +191,7 @@
     "deleteConfirm": "确认删除",
     "deleteDirectoryConfirmText": "确定要从扫描目录列表中删除 \"{path}\" 吗？",
     "deleteDirectoryHint": "注意：此操作只会从扫描目录列表中移除该目录，不会删除已扫描的音乐文件。",
-    "noDirectoriesHint": "请先添加扫描目录\n\n点击\"扫描目录管理\"按钮添加音乐目录",
+    "noDirectoriesHint": "请先添加扫描目录\n\n点击「设置扫描目录」按钮添加音乐目录",
     "updateDirectoryStatusError": "更新目录状态失败"
   },
   "playlist": {

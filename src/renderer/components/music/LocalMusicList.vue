@@ -16,14 +16,21 @@
         >
           {{ isMatchingLyrics ? $t('localMusic.matchingLyrics') : $t('localMusic.batchMatchLyrics') }}
         </button>
-        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0">
+        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0 || isMatchingLyrics">
           {{ $t('player.playAll') }}
         </button>
-        <button class="btn-primary" @click="handleScan" :disabled="isScanning || isMatchingLyrics">
+        <button
+          class="btn-primary"
+          @click="handleScan"
+          :disabled="!canScan || isScanning || isMatchingLyrics"
+        >
           {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
         </button>
-        <button class="btn-secondary" @click="openDirManageDialog">
-          {{ $t('settings.scanDirectories') }}
+        <button
+          :class="hasDirectories ? 'btn-secondary' : 'btn-primary'"
+          @click="openDirManageDialog"
+        >
+          {{ $t('settings.setupScanDirectories') }}
         </button>
       </div>
     </div>
@@ -69,7 +76,21 @@
       >
         <template #empty>
           <p>{{ $t('localMusic.empty') }}</p>
-          <button class="btn-link" @click="handleScan">{{ $t('localMusic.scanFolders') }}</button>
+          <button
+            v-if="hasDirectories"
+            class="btn-link"
+            @click="handleScan"
+            :disabled="!canScan || isScanning"
+          >
+            {{ $t('localMusic.scanFolders') }}
+          </button>
+          <button
+            v-else
+            class="btn-primary empty-setup-dirs"
+            @click="openDirManageDialog"
+          >
+            {{ $t('settings.setupScanDirectories') }}
+          </button>
         </template>
       </SongList>
     </div>
@@ -78,7 +99,7 @@
     <div v-if="showDirManageDialog" class="dialog-overlay" @click.self="closeDirManageDialog">
       <div class="dir-manage-dialog">
         <div class="dialog-header">
-          <h3 class="dialog-title">{{ $t('settings.scanDirectories') }}</h3>
+          <h3 class="dialog-title">{{ $t('settings.setupScanDirectories') }}</h3>
           <button class="dialog-close" @click="closeDirManageDialog" :title="$t('common.close')">×</button>
         </div>
         <div class="dialog-body">
@@ -223,6 +244,10 @@ const { play, pause, getAudioElement } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
+/** 是否已配置扫描目录 */
+const hasDirectories = computed(() => dirStore.directories.length > 0)
+/** 是否有可扫描的启用目录 */
+const canScan = computed(() => dirStore.enabledDirs.length > 0)
 
 // 扫描状态
 const isScanning = ref(false)

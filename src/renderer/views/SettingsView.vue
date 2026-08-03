@@ -96,7 +96,7 @@
         <h2 class="section-title">{{ $t('settings.musicDirectories') }}</h2>
         <div class="setting-item">
           <div class="setting-info">
-            <div class="setting-label">{{ $t('settings.scanDirectories') }}</div>
+            <div class="setting-label">{{ $t('settings.setupScanDirectories') }}</div>
             <div class="setting-desc">{{ $t('settings.scanDirectoriesDesc') }}</div>
           </div>
           <div class="setting-control">
