@@ -297,6 +297,42 @@ const safeDisconnect = (node: AudioNode | null | undefined) => {
   }
 }
 
+/** 同步拆掉整张音频图并关闭 Context（元素切换 / 挂接纠错共用） */
+const teardownAudioGraph = () => {
+  safeDisconnect(sourceNode)
+  filters.forEach(safeDisconnect)
+  safeDisconnect(gainNode)
+  safeDisconnect(limiterNode)
+  safeDisconnect(analyserNode)
+  safeDisconnect(timeAnalyserNode)
+
+  try {
+    if (audioContext && audioContext.state !== 'closed') {
+      void audioContext.close()
+    }
+  } catch {
+    // ignore
+  }
+
+  audioContext = null
+  sourceNode = null
+  gainNode = null
+  limiterNode = null
+  filters = []
+  analyserNode = null
+  timeAnalyserNode = null
+  audioElement = null
+  isInitialized = false
+  lastRoutedEnabled = null
+  syncRuntime()
+}
+
+/** 请求重建原生 Audio；若正在 restore 中则排队，避免事件被 isRestoringNative 静默丢弃 */
+const requestRestoreNativeAudio = () => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
+}
+
 export function useEqualizer() {
   /**
    * 路由音频图：
@@ -364,30 +400,7 @@ export function useEqualizer() {
 
     // 如果元素变化：旧 MediaElementSource 无法迁移，必须关掉 Context 再挂新元素
     if (audioElement && audioElement !== element) {
-      safeDisconnect(sourceNode)
-      filters.forEach(safeDisconnect)
-      safeDisconnect(gainNode)
-      safeDisconnect(limiterNode)
-      safeDisconnect(analyserNode)
-      safeDisconnect(timeAnalyserNode)
-      try {
-        if (audioContext && audioContext.state !== 'closed') {
-          void audioContext.close()
-        }
-      } catch {
-        // ignore
-      }
-      audioContext = null
-      sourceNode = null
-      gainNode = null
-      limiterNode = null
-      filters = []
-      analyserNode = null
-      timeAnalyserNode = null
-      audioElement = null
-      isInitialized = false
-      lastRoutedEnabled = null
-      syncRuntime()
+      teardownAudioGraph()
     }
 
     if (isInitialized) {
@@ -480,19 +493,10 @@ export function useEqualizer() {
       isInitialized = false
       sourceNode = null
       syncRuntime()
-      // 元素曾被占用时只能换新 <audio>；通知播放器重建后再挂（避免 restore 重入死循环）
+      // 元素曾被占用时只能换新 <audio>；由播放器排队 restore，避免 isRestoringNative 期间事件被丢弃
       const msg = error instanceof Error ? error.message : String(error)
-      const w = window as any
-      if (
-        typeof window !== 'undefined' &&
-        /already connected|InvalidStateError/i.test(msg) &&
-        !w.__XMMUSIC_EQ_RESTORING__
-      ) {
-        w.__XMMUSIC_EQ_RESTORING__ = true
-        window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
-        window.setTimeout(() => {
-          w.__XMMUSIC_EQ_RESTORING__ = false
-        }, 2000)
+      if (/already connected|InvalidStateError/i.test(msg)) {
+        requestRestoreNativeAudio()
       }
     }
   }
@@ -570,33 +574,7 @@ export function useEqualizer() {
    */
   const releaseCapture = async () => {
     if (!isInitialized && !audioContext) return
-
-    safeDisconnect(sourceNode)
-    filters.forEach(safeDisconnect)
-    safeDisconnect(gainNode)
-    safeDisconnect(limiterNode)
-    safeDisconnect(analyserNode)
-    safeDisconnect(timeAnalyserNode)
-
-    try {
-      if (audioContext && audioContext.state !== 'closed') {
-        await audioContext.close()
-      }
-    } catch {
-      // 忽略关闭异常
-    }
-
-    audioContext = null
-    sourceNode = null
-    gainNode = null
-    limiterNode = null
-    filters = []
-    analyserNode = null
-    timeAnalyserNode = null
-    audioElement = null
-    isInitialized = false
-    lastRoutedEnabled = null
-    syncRuntime()
+    teardownAudioGraph()
     console.log('✅ 已释放 Web Audio 音频捕获')
   }
 
@@ -621,9 +599,7 @@ export function useEqualizer() {
         routeAudioGraph()
       } else {
         void releaseCapture().then(() => {
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
-          }
+          requestRestoreNativeAudio()
         })
       }
     } else {
@@ -649,12 +625,12 @@ export function useEqualizer() {
       applyGains()
       return
     }
-    // 缓存指向其它节点时，先拆掉旧图再挂到 DOM 播放器
+    // 缓存指向其它节点时，完整拆掉旧 Context 再挂到 DOM 播放器（勿只 disconnect）
     if (liveCached && domEl && liveCached !== domEl) {
-      safeDisconnect(sourceNode)
-      isInitialized = false
-      audioElement = null
-      syncRuntime()
+      teardownAudioGraph()
+    } else if (audioElement && !document.contains(audioElement)) {
+      // 缓存已脱离 DOM：同样需要关 Context，避免半残图
+      teardownAudioGraph()
     }
     initAudioContext(el)
     if (audioContext?.state === 'suspended') {

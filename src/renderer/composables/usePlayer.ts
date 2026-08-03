@@ -12,6 +12,9 @@ let useNativeAudio = false
 let isPlaybackInProgress = false // 播放锁，防止并发播放
 let restoreHookBound = false
 let isRestoringNative = false
+/** restore 进行中又收到重建请求时排队，结束后补跑一次（防止挂接失败事件被丢弃） */
+let pendingRestoreRetry = false
+let restoreRetryBudget = 0
 
 export function usePlayer() {
   const playerStore = usePlayerStore()
@@ -48,9 +51,13 @@ export function usePlayer() {
   /**
    * Web Audio 释放后，旧 media 元素无法再直出扬声器。
    * 重建元素并尽量从断点续播。
+   * 进行中再次请求会排队，结束后自动补跑（挂接失败时不会被 isRestoringNative 静默丢弃）。
    */
   const restoreNativeAudioPath = async () => {
-    if (isRestoringNative) return
+    if (isRestoringNative) {
+      pendingRestoreRetry = true
+      return
+    }
     isRestoringNative = true
     try {
       if (equalizer.isCaptured()) {
@@ -84,6 +91,18 @@ export function usePlayer() {
       console.error('❌ 恢复原生音频路径失败:', error)
     } finally {
       isRestoringNative = false
+      if (pendingRestoreRetry) {
+        pendingRestoreRetry = false
+        if (restoreRetryBudget < 2) {
+          restoreRetryBudget += 1
+          void restoreNativeAudioPath()
+        } else {
+          restoreRetryBudget = 0
+          console.warn('⚠️ 音频路径重建重试已达上限，停止排队')
+        }
+      } else {
+        restoreRetryBudget = 0
+      }
     }
   }
 
