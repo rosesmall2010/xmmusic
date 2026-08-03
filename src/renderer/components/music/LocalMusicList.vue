@@ -217,7 +217,7 @@ const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
-const { play, pause } = usePlayer()
+const { play, pause, getAudioElement } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
@@ -463,8 +463,45 @@ const handleClearAll = async () => {
     return
   }
 
-  // 可先停播（不丢数据）；库清理失败时前端状态保持原状
+  // 清理库之前先停掉播放并清空播放状态，避免清库过程中仍在播已删曲目
   pause()
+  playerStore.clearQueue()
+  playerStore.currentMusic = null
+  playerStore.isPlaying = false
+  playerStore.currentTime = 0
+  playerStore.duration = 0
+  playerStore.currentQueueIndex = -1
+
+  const audioEl =
+    getAudioElement() ||
+    (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+  if (audioEl) {
+    try {
+      audioEl.pause()
+      audioEl.removeAttribute('src')
+      audioEl.load()
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    window.localStorage.removeItem('xmmusic_player_queue')
+    window.localStorage.removeItem('xmmusic_player_state')
+  } catch {
+    // ignore
+  }
+
+  try {
+    await window.electronAPI.saveSettings({
+      playQueue: [],
+      currentQueueIndex: -1,
+      playPosition: 0,
+      wasPlaying: false
+    })
+  } catch (error) {
+    console.warn('清除前同步播放设置失败:', error)
+  }
 
   try {
     await window.electronAPI.clearLocalMusic()
@@ -473,34 +510,9 @@ const handleClearAll = async () => {
     return
   }
 
-  // 库已清空：后续仅尽力同步 UI；失败不能再报「清除失败」
+  // 库已清空：后续仅尽力同步列表/搜索等 UI；失败不能再报「清除失败」
   try {
-    playerStore.clearQueue()
-    playerStore.currentMusic = null
-    playerStore.isPlaying = false
-    playerStore.currentTime = 0
-    playerStore.duration = 0
-
-    try {
-      window.localStorage.removeItem('xmmusic_player_queue')
-      window.localStorage.removeItem('xmmusic_player_state')
-    } catch {
-      // ignore
-    }
-
-    try {
-      await window.electronAPI.saveSettings({
-        playQueue: [],
-        currentQueueIndex: -1,
-        playPosition: 0,
-        wasPlaying: false
-      })
-    } catch (error) {
-      console.warn('清除后同步播放设置失败:', error)
-    }
-
     musicStore.clearSearchCaches()
-    // 先本地置空，避免 loadMusic 失败时仍显示旧列表
     musicStore.musicList = []
     musicStore.totalCount = 0
     musicStore.currentOffset = 0
