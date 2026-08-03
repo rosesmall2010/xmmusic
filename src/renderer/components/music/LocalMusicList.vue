@@ -463,13 +463,18 @@ const handleClearAll = async () => {
     return
   }
 
+  // 可先停播（不丢数据）；库清理失败时前端状态保持原状
+  pause()
+
   try {
-    // 可先停播（不丢数据）；内存/本地缓存必须等库清理成功后再清，失败时可保持原状
-    pause()
-
-    // 除 settings / 配置目录外清空数据库（曲目/歌单/收藏/队列等）
     await window.electronAPI.clearLocalMusic()
+  } catch (error: any) {
+    alert(t('settings.clearAllError') + ': ' + error.message)
+    return
+  }
 
+  // 库已清空：后续仅尽力同步 UI；失败不能再报「清除失败」
+  try {
     playerStore.clearQueue()
     playerStore.currentMusic = null
     playerStore.isPlaying = false
@@ -483,7 +488,6 @@ const handleClearAll = async () => {
       // ignore
     }
 
-    // 同步把播放相关运行时状态写回为空（settings 里其它偏好保留）
     try {
       await window.electronAPI.saveSettings({
         playQueue: [],
@@ -491,17 +495,39 @@ const handleClearAll = async () => {
         playPosition: 0,
         wasPlaying: false
       })
-    } catch {
-      // ignore
+    } catch (error) {
+      console.warn('清除后同步播放设置失败:', error)
     }
 
-    await musicStore.loadMusic(0, 20, true)
-    await dirStore.loadDirectories()
+    musicStore.clearSearchCaches()
+    // 先本地置空，避免 loadMusic 失败时仍显示旧列表
+    musicStore.musicList = []
+    musicStore.totalCount = 0
+    musicStore.currentOffset = 0
+
+    try {
+      await musicStore.loadMusic(0, 20, true)
+    } catch (error) {
+      console.warn('清除后刷新本地列表失败:', error)
+    }
+
+    try {
+      await dirStore.loadDirectories()
+    } catch (error) {
+      console.warn('清除后刷新目录列表失败:', error)
+    }
+
+    try {
+      await musicStore.loadPlaylists()
+    } catch (error) {
+      console.warn('清除后刷新歌单失败:', error)
+    }
+
     window.dispatchEvent(new Event('playlist-updated'))
     window.dispatchEvent(new Event('favorites-updated'))
     window.dispatchEvent(new Event('recent-plays-updated'))
-  } catch (error: any) {
-    alert(t('settings.clearAllError') + ': ' + error.message)
+  } catch (error) {
+    console.warn('清除后同步界面状态失败（库已清空）:', error)
   }
 }
 

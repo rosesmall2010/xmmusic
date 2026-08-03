@@ -83,6 +83,13 @@ export const useMusicStore = defineStore('music', () => {
     advancedCriteria.value = null
   }
 
+  /** 清空搜索相关内存缓存（清除库后调用，避免搜索页仍显示已删曲目） */
+  function clearSearchCaches() {
+    searchQuery.value = ''
+    searchResults.value = []
+    clearAdvancedSearch()
+  }
+
   async function toggleFavorite(musicId: number) {
     const latest = await window.electronAPI.toggleFavorite(musicId)
     // 更新本地状态（musicList 为 shallowRef，需要 triggerRef）
@@ -124,6 +131,7 @@ export const useMusicStore = defineStore('music', () => {
     searchMusic,
     runAdvancedSearch,
     clearAdvancedSearch,
+    clearSearchCaches,
     toggleFavorite,
     setCurrentView,
     loadPlaylists,
