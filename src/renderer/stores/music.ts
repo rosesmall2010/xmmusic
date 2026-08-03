@@ -17,12 +17,23 @@ export const useMusicStore = defineStore('music', () => {
   const advancedResults = ref<MusicItem[]>([])
   const advancedCriteria = ref<AdvancedSearchCriteria | null>(null)
   const advancedLoading = ref(false)
+  /** 列表加载世代：清空/强制重置时递增，丢弃进行中的过期分页结果 */
+  let loadEpoch = 0
 
   // Getters
   const hasMore = computed(() => {
     return currentOffset.value < totalCount.value
   })
   const isAdvancedMode = computed(() => !!advancedCriteria.value)
+
+  /** 立即清空本地列表状态（供「清除所有」等），并作废进行中的 loadMusic */
+  function resetLocalList() {
+    loadEpoch += 1
+    musicList.value = []
+    totalCount.value = 0
+    currentOffset.value = 0
+    loading.value = false
+  }
 
   // Actions
   async function loadMusic(offset: number = 0, limit: number = pageSize.value, force: boolean = false) {
@@ -31,9 +42,13 @@ export const useMusicStore = defineStore('music', () => {
       return
     }
 
+    const epoch = force && offset === 0 ? (loadEpoch += 1) : loadEpoch
+
     loading.value = true
     try {
       const items = await window.electronAPI.getMusicList(offset, limit)
+      if (epoch !== loadEpoch) return
+
       if (offset === 0) {
         musicList.value = items
       } else {
@@ -44,9 +59,13 @@ export const useMusicStore = defineStore('music', () => {
         triggerRef(musicList)
       }
       currentOffset.value = offset + items.length
-      totalCount.value = await window.electronAPI.getMusicTotalCount()
+      const count = await window.electronAPI.getMusicTotalCount()
+      if (epoch !== loadEpoch) return
+      totalCount.value = count
     } finally {
-      loading.value = false
+      if (epoch === loadEpoch) {
+        loading.value = false
+      }
     }
   }
 
@@ -132,6 +151,7 @@ export const useMusicStore = defineStore('music', () => {
     runAdvancedSearch,
     clearAdvancedSearch,
     clearSearchCaches,
+    resetLocalList,
     toggleFavorite,
     setCurrentView,
     loadPlaylists,

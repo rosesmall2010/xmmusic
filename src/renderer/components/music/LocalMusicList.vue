@@ -248,6 +248,8 @@ const totalCount = computed(() => musicStore.totalCount)
 const hasDirectories = computed(() => dirStore.directories.length > 0)
 /** 是否有可扫描的启用目录 */
 const canScan = computed(() => dirStore.enabledDirs.length > 0)
+/** 后台分页加载令牌：清除/卸载时递增以取消进行中的续载 */
+let backgroundLoadToken = 0
 
 // 扫描状态
 const isScanning = ref(false)
@@ -314,6 +316,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  stopBackgroundLoading()
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
   window.electronAPI.removeScanProgress()
   window.electronAPI.removeScanStateChanged()
@@ -321,17 +324,24 @@ onUnmounted(() => {
 })
 
 const startBackgroundLoading = async () => {
+  const token = backgroundLoadToken
   // Check if there are more items to load
   if (musicStore.hasMore) {
     // Use requestIdleCallback or setTimeout to avoid blocking main thread
     setTimeout(async () => {
+      if (token !== backgroundLoadToken) return
       if (musicStore.hasMore && !musicStore.loading) {
         await musicStore.loadMusic(musicStore.currentOffset, 20)
+        if (token !== backgroundLoadToken) return
         // Continue loading next batch
         startBackgroundLoading()
       }
     }, 100) // Small delay between batches
   }
+}
+
+const stopBackgroundLoading = () => {
+  backgroundLoadToken += 1
 }
 
 // 监听后端事件
@@ -558,20 +568,25 @@ const handleClearAll = async () => {
     }
 
     musicStore.clearSearchCaches()
-    musicStore.musicList = []
-    musicStore.totalCount = 0
-    musicStore.currentOffset = 0
-
-    try {
-      await musicStore.loadMusic(0, 20, true)
-    } catch (error) {
-      console.warn('清除后刷新本地列表失败:', error)
-    }
+    // 停止后台分页，并立刻置空列表，保证「播放全部/清除/匹配」立即禁用
+    stopBackgroundLoading()
+    musicStore.resetLocalList()
 
     try {
       await dirStore.loadDirectories()
     } catch (error) {
       console.warn('清除后刷新目录列表失败:', error)
+    }
+
+    try {
+      await musicStore.loadMusic(0, 20, true)
+      // 清空后若仍有目录可扫，不自动续载空页；有数据时再后台加载
+      if (musicStore.hasMore) {
+        startBackgroundLoading()
+      }
+    } catch (error) {
+      console.warn('清除后刷新本地列表失败:', error)
+      musicStore.resetLocalList()
     }
 
     try {
@@ -898,6 +913,10 @@ const selectDirPath = async () => {
 .music-list-container {
   flex: 1;
   overflow: hidden;
+}
+
+.empty-setup-dirs {
+  margin-top: var(--spacing-md);
 }
 
 /* 扫描进度条样式 */
