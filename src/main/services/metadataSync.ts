@@ -64,8 +64,9 @@ function shouldAttemptEncodingFix(raw: {
   title?: string
   artist?: string
   album?: string
+  genre?: string
 }): boolean {
-  const fields = [raw.title, raw.artist, raw.album]
+  const fields = [raw.title, raw.artist, raw.album, raw.genre]
     .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
 
   if (fields.length === 0) return false
@@ -120,10 +121,21 @@ async function resolveId3Fields(
           },
           best.encoding
         )
-        const rawGarbledCount = [raw.title, raw.artist, raw.album].filter(looksGarbled).length
-        const convertedGarbledCount = [converted.title, converted.artist, converted.album].filter(looksGarbled).length
-        const rawCjk = countCjk(raw.title) + countCjk(raw.artist) + countCjk(raw.album)
-        const convertedCjk = countCjk(converted.title) + countCjk(converted.artist) + countCjk(converted.album)
+        const rawGarbledCount = [raw.title, raw.artist, raw.album, raw.genre]
+          .filter(looksGarbled).length
+        const convertedGarbledCount = [
+          converted.title,
+          converted.artist,
+          converted.album,
+          converted.genre
+        ].filter(looksGarbled).length
+        const rawCjk =
+          countCjk(raw.title) + countCjk(raw.artist) + countCjk(raw.album) + countCjk(raw.genre)
+        const convertedCjk =
+          countCjk(converted.title) +
+          countCjk(converted.artist) +
+          countCjk(converted.album) +
+          countCjk(converted.genre)
         // 仅当转换后更干净（乱码更少，或汉字明显增加且自身不乱码）才采纳
         const improved =
           convertedGarbledCount < rawGarbledCount ||
@@ -141,8 +153,9 @@ async function resolveId3Fields(
     title: looksGarbled(tags.title) ? undefined : tags.title || undefined,
     artist: looksGarbled(tags.artist) ? undefined : tags.artist || undefined,
     album: looksGarbled(tags.album) ? undefined : tags.album || undefined,
-    year: tags.year,
-    genre: tags.genre
+    // 年份/流派乱码也不入库
+    year: tags.year && !looksGarbled(tags.year) ? tags.year : undefined,
+    genre: tags.genre && !looksGarbled(tags.genre) ? tags.genre : undefined
   }
 }
 

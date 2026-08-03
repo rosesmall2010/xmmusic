@@ -30,6 +30,8 @@ interface EncodingDetection {
     title: string
     artist: string
     album: string
+    year?: string
+    genre?: string
   }
 }
 
@@ -42,7 +44,25 @@ interface FixResult {
     title?: string
     artist?: string
     album?: string
+    year?: string
+    genre?: string
   }
+}
+
+export type Id3TagFields = {
+  title: string
+  artist: string
+  album: string
+  year?: string
+  genre?: string
+}
+
+export type Id3FixFieldFlags = {
+  title?: boolean
+  artist?: boolean
+  album?: boolean
+  year?: boolean
+  genre?: boolean
 }
 
 export default class ID3Fixer {
@@ -64,7 +84,7 @@ export default class ID3Fixer {
   /**
    * 读取原始ID3标签（可能包含乱码）
    */
-  async readRawID3Tags(filePath: string): Promise<{ title: string; artist: string; album: string; year?: string; genre?: string } | null> {
+  async readRawID3Tags(filePath: string): Promise<Id3TagFields | null> {
     try {
       const nodeID3 = getNodeID3()
       const tags = nodeID3.read(filePath)
@@ -101,27 +121,29 @@ export default class ID3Fixer {
         return results
       }
 
-      // 获取原始标签值（可能是乱码的）
+      // 获取原始标签值（可能是乱码的）；流派也参与检测
       const rawTitle = tags.title || ''
       const rawArtist = tags.artist || ''
       const rawAlbum = tags.album || ''
+      const rawYear = tags.year || ''
+      const rawGenre = tags.genre || ''
 
       // 尝试每种编码
       for (const encoding of SUPPORTED_ENCODINGS) {
         try {
-          // 将原始字节转换为指定编码的字符串
           const title = this.tryDecode(rawTitle, encoding)
           const artist = this.tryDecode(rawArtist, encoding)
           const album = this.tryDecode(rawAlbum, encoding)
+          const year = rawYear ? this.tryDecode(rawYear, encoding) : undefined
+          const genre = rawGenre ? this.tryDecode(rawGenre, encoding) : undefined
 
-          // 计算置信度（基于是否包含常见中文字符、是否可打印等）
-          const confidence = this.calculateConfidence(title, artist, album)
+          const confidence = this.calculateConfidence(title, artist, album, genre)
 
           if (confidence > 0.3) {
             results.push({
               encoding,
               confidence,
-              preview: { title, artist, album }
+              preview: { title, artist, album, year, genre }
             })
           }
         } catch (error) {
@@ -160,12 +182,19 @@ export default class ID3Fixer {
   }
 
   /**
+   * 转换单个字段编码（不写文件）
+   */
+  public convertFieldEncoding(value: string, sourceEncoding: Encoding): string {
+    return this.tryDecode(value || '', sourceEncoding)
+  }
+
+  /**
    * 转换ID3标签编码（不写入文件，只返回转换后的值）
    */
   public convertID3TagsEncoding(
-    rawTags: { title: string; artist: string; album: string; year?: string; genre?: string },
+    rawTags: Id3TagFields,
     sourceEncoding: Encoding
-  ): { title: string; artist: string; album: string; year?: string; genre?: string } {
+  ): Id3TagFields {
     return {
       title: this.tryDecode(rawTags.title, sourceEncoding),
       artist: this.tryDecode(rawTags.artist, sourceEncoding),
@@ -176,9 +205,14 @@ export default class ID3Fixer {
   }
 
   /**
-   * 计算置信度（0-1）
+   * 计算置信度（0-1）；流派纳入检测，避免仅流派乱码时漏判
    */
-  private calculateConfidence(title: string, artist: string, album: string): number {
+  private calculateConfidence(
+    title: string,
+    artist: string,
+    album: string,
+    genre?: string
+  ): number {
     let score = 0
     let total = 0
 
@@ -208,6 +242,7 @@ export default class ID3Fixer {
     checkString(title)
     checkString(artist)
     checkString(album)
+    if (genre) checkString(genre)
 
     return total > 0 ? score / total : 0
   }
@@ -234,7 +269,7 @@ export default class ID3Fixer {
   async fixID3Tags(
     filePath: string,
     sourceEncoding: Encoding,
-    fields?: { title?: boolean; artist?: boolean; album?: boolean }
+    fields?: Id3FixFieldFlags
   ): Promise<FixResult> {
     try {
       // 1. 备份原文件
@@ -254,8 +289,14 @@ export default class ID3Fixer {
       // 3. 准备修复后的标签
       const fixedTags: any = {}
 
-      // 4. 修复指定字段
-      const fieldsToFix = fields || { title: true, artist: true, album: true }
+      // 4. 修复指定字段（默认含 title/artist/album/year/genre）
+      const fieldsToFix: Id3FixFieldFlags = fields || {
+        title: true,
+        artist: true,
+        album: true,
+        year: true,
+        genre: true
+      }
 
       if (fieldsToFix.title && tags.title) {
         fixedTags.title = this.tryDecode(tags.title, sourceEncoding)
@@ -269,6 +310,14 @@ export default class ID3Fixer {
         fixedTags.album = this.tryDecode(tags.album, sourceEncoding)
       }
 
+      if (fieldsToFix.year && tags.year) {
+        fixedTags.year = this.tryDecode(tags.year, sourceEncoding)
+      }
+
+      if (fieldsToFix.genre && tags.genre) {
+        fixedTags.genre = this.tryDecode(tags.genre, sourceEncoding)
+      }
+
       // 5. 更新标签
       nodeID3.write(fixedTags, filePath)
 
@@ -280,7 +329,9 @@ export default class ID3Fixer {
         fixedTags: {
           title: fixedTags.title,
           artist: fixedTags.artist,
-          album: fixedTags.album
+          album: fixedTags.album,
+          year: fixedTags.year,
+          genre: fixedTags.genre
         }
       }
     } catch (error: any) {
@@ -298,7 +349,7 @@ export default class ID3Fixer {
   async fixID3TagsBatch(
     filePaths: string[],
     sourceEncoding: Encoding,
-    fields?: { title?: boolean; artist?: boolean; album?: boolean },
+    fields?: Id3FixFieldFlags,
     onProgress?: (current: number, total: number) => void
   ): Promise<{ success: number; failed: number; results: FixResult[] }> {
     let success = 0

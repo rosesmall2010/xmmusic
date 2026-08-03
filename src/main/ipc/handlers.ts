@@ -1101,10 +1101,13 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
     if (result.success && result.fixedTags && db) {
       // 更新数据库
+      const yearNum = result.fixedTags.year != null ? parseInt(result.fixedTags.year, 10) : undefined
       db.updateMusicByPath(filePath, {
         title: result.fixedTags.title,
         artist: result.fixedTags.artist,
-        album: result.fixedTags.album
+        album: result.fixedTags.album,
+        year: yearNum != null && !Number.isNaN(yearNum) ? yearNum : undefined,
+        genre: result.fixedTags.genre
       })
 
       // 通知前端刷新
@@ -1123,10 +1126,13 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       // 批量更新数据库
       for (const item of result.results) {
         if (item.success && item.fixedTags) {
+          const yearNum = item.fixedTags.year != null ? parseInt(item.fixedTags.year, 10) : undefined
           db.updateMusicByPath(item.filePath, {
             title: item.fixedTags.title,
             artist: item.fixedTags.artist,
-            album: item.fixedTags.album
+            album: item.fixedTags.album,
+            year: yearNum != null && !Number.isNaN(yearNum) ? yearNum : undefined,
+            genre: item.fixedTags.genre
           })
         }
       }

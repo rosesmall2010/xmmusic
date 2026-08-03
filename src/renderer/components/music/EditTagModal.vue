@@ -8,7 +8,7 @@
       </div>
 
       <div class="main-content">
-        <!-- 左侧：表单编辑区域 -->
+        <!-- 左侧：表单编辑区域（各字段均可手动编辑） -->
         <div class="form-section">
           <h4 class="section-title">{{ $t('tagEditor.editInfo') }}</h4>
           <div class="form-content">
@@ -23,7 +23,6 @@
               />
             </div>
 
-            <!-- Swap Button -->
             <div class="swap-button-container">
               <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
                 <ArrowLeftRight :size="16" />
@@ -52,78 +51,113 @@
                 @keyup.enter="save"
               />
             </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>{{ $t('tagEditor.yearLabel') }} <span class="hint">(Year)</span></label>
+                <input
+                  v-model="formData.year"
+                  type="text"
+                  inputmode="numeric"
+                  :placeholder="$t('tagEditor.yearPlaceholder')"
+                  :disabled="loading"
+                  @keyup.enter="save"
+                />
+              </div>
+              <div class="form-group">
+                <label>{{ $t('tagEditor.genreLabel') }} <span class="hint">(Genre)</span></label>
+                <input
+                  v-model="formData.genre"
+                  type="text"
+                  :placeholder="$t('tagEditor.genrePlaceholder')"
+                  :disabled="loading"
+                  @keyup.enter="save"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- 分隔线 -->
         <div v-if="rawID3Tags || loadingMetadata" class="divider"></div>
 
-        <!-- 右侧：ID3元数据信息区域 -->
+        <!-- 右侧：ID3 元数据 + 整包/单字段编码转换 -->
         <div v-if="rawID3Tags || loadingMetadata" class="id3-section">
           <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
-          
+
           <div v-if="loadingMetadata" class="loading-metadata">
             {{ $t('tagEditor.loadingMetadata') }}
           </div>
 
           <div v-else-if="rawID3Tags" class="metadata-display">
-            <!-- 原始元数据 -->
             <div class="metadata-group">
               <label>{{ $t('tagEditor.rawMetadata') }}</label>
+              <p class="field-hint">{{ $t('tagEditor.perFieldConvertHint') }}</p>
               <div class="metadata-info">
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
-                  <span class="metadata-value">{{ rawID3Tags.artist || '-' }}</span>
-                </div>
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
-                  <span class="metadata-value">{{ rawID3Tags.title || '-' }}</span>
-                </div>
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
-                  <span class="metadata-value">{{ rawID3Tags.album || '-' }}</span>
-                </div>
-                <div v-if="rawID3Tags.year" class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.yearLabel') }}:</span>
-                  <span class="metadata-value">{{ rawID3Tags.year }}</span>
-                </div>
-                <div v-if="rawID3Tags.genre" class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.genreLabel') }}:</span>
-                  <span class="metadata-value">{{ rawID3Tags.genre }}</span>
+                <div
+                  v-for="field in tagFields"
+                  :key="'raw-' + field"
+                  class="metadata-item with-actions"
+                >
+                  <span class="metadata-label">{{ fieldLabel(field) }}:</span>
+                  <span class="metadata-value">{{ displayRaw(field) }}</span>
+                  <div class="field-actions" v-if="hasRawValue(field)">
+                    <button
+                      type="button"
+                      class="btn-field"
+                      :disabled="loading"
+                      :title="$t('tagEditor.convertFieldGB2312')"
+                      @click="convertSingleField(field, 'gb2312')"
+                    >
+                      GB2312
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-field"
+                      :disabled="loading"
+                      :title="$t('tagEditor.convertFieldGBK')"
+                      @click="convertSingleField(field, 'gbk')"
+                    >
+                      GBK
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 转换后的元数据显示 -->
             <div v-if="convertedTags" class="metadata-group converted-group">
               <label>{{ $t('tagEditor.convertedMetadata') }}</label>
               <div class="metadata-info converted-info">
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.artistLabel') }}:</span>
-                  <span class="metadata-value converted">{{ convertedTags.artist || '-' }}</span>
-                </div>
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.titleLabel') }}:</span>
-                  <span class="metadata-value converted">{{ convertedTags.title || '-' }}</span>
-                </div>
-                <div class="metadata-item">
-                  <span class="metadata-label">{{ $t('tagEditor.albumLabel') }}:</span>
-                  <span class="metadata-value converted">{{ convertedTags.album || '-' }}</span>
+                <div
+                  v-for="field in tagFields"
+                  :key="'converted-' + field"
+                  class="metadata-item with-actions"
+                >
+                  <span class="metadata-label">{{ fieldLabel(field) }}:</span>
+                  <span class="metadata-value converted">{{ displayConverted(field) }}</span>
+                  <div class="field-actions" v-if="hasConvertedValue(field)">
+                    <button
+                      type="button"
+                      class="btn-field btn-field-apply"
+                      :disabled="loading"
+                      @click="applyConvertedField(field)"
+                    >
+                      {{ $t('tagEditor.applyThisField') }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- 编码转换按钮 -->
             <div class="encoding-actions">
-              <button @click="convertFromGB2312" class="btn-convert" :disabled="loading || !rawID3Tags">
+              <button @click="convertAll('gb2312')" class="btn-convert" :disabled="loading || !rawID3Tags">
                 {{ $t('tagEditor.convertFromGB2312') }}
               </button>
-              <button @click="convertFromGBK" class="btn-convert" :disabled="loading || !rawID3Tags">
+              <button @click="convertAll('gbk')" class="btn-convert" :disabled="loading || !rawID3Tags">
                 {{ $t('tagEditor.convertFromGBK') }}
               </button>
               <button
                 v-if="convertedTags"
-                @click="applyConvertedTags"
+                @click="applyAllConvertedTags"
                 class="btn-save-converted"
                 :disabled="loading"
               >
@@ -168,6 +202,17 @@ import { parseFilenameForTags } from '@/utils/parseFilename'
 
 const { t } = useI18n()
 
+type TagField = 'artist' | 'title' | 'album' | 'year' | 'genre'
+type EncodingName = 'gb2312' | 'gbk'
+
+interface TagSnapshot {
+  title: string
+  artist: string
+  album: string
+  year?: string
+  genre?: string
+}
+
 interface Props {
   show: boolean
   music: MusicItem | null
@@ -180,29 +225,37 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
+const tagFields: TagField[] = ['artist', 'title', 'album', 'year', 'genre']
+
 const formData = ref({
   artist: '',
   album: '',
-  title: ''
+  title: '',
+  year: '',
+  genre: ''
 })
 
 const loading = ref(false)
 const loadingMessage = ref('')
 const loadingMetadata = ref(false)
-const rawID3Tags = ref<{ title: string; artist: string; album: string; year?: string; genre?: string } | null>(null)
-const convertedTags = ref<{ title: string; artist: string; album: string } | null>(null)
+const rawID3Tags = ref<TagSnapshot | null>(null)
+const convertedTags = ref<TagSnapshot | null>(null)
+
+const musicYearText = computed(() =>
+  props.music?.year != null && props.music.year !== undefined ? String(props.music.year) : ''
+)
 
 const hasChanges = computed(() => {
   if (!props.music) return false
-
   return (
     formData.value.artist !== props.music.artist ||
     formData.value.album !== (props.music.album || '') ||
-    formData.value.title !== props.music.title
+    formData.value.title !== props.music.title ||
+    formData.value.year !== musicYearText.value ||
+    formData.value.genre !== (props.music.genre || '')
   )
 })
 
-// 同步到数据库：标题与歌手均需非空（允许与库内值相同，用于覆盖乱码）
 const canSync = computed(() => {
   return (
     !!props.music &&
@@ -216,14 +269,43 @@ watch(() => props.show, (newVal) => {
     loadMusicData(props.music)
     loadRawID3Tags()
   } else {
-    // 关闭时重置
     rawID3Tags.value = null
     convertedTags.value = null
   }
 })
 
+const fieldLabel = (field: TagField) => {
+  const map: Record<TagField, string> = {
+    artist: t('tagEditor.artistLabel'),
+    title: t('tagEditor.titleLabel'),
+    album: t('tagEditor.albumLabel'),
+    year: t('tagEditor.yearLabel'),
+    genre: t('tagEditor.genreLabel')
+  }
+  return map[field]
+}
+
+const displayRaw = (field: TagField) => {
+  const v = rawID3Tags.value?.[field]
+  return v && String(v).trim() ? v : '-'
+}
+
+const displayConverted = (field: TagField) => {
+  const v = convertedTags.value?.[field]
+  return v && String(v).trim() ? v : '-'
+}
+
+const hasRawValue = (field: TagField) => {
+  const v = rawID3Tags.value?.[field]
+  return !!(v && String(v).trim())
+}
+
+const hasConvertedValue = (field: TagField) => {
+  const v = convertedTags.value?.[field]
+  return !!(v && String(v).trim())
+}
+
 const loadMusicData = (music: MusicItem) => {
-  // 与主进程批量同步一致：fileName 为空时从路径取 basename
   const fileName = music.fileName || music.filePath.split(/[/\\]/).pop() || ''
   const parsed = parseFilenameForTags(fileName, {
     artist: music.artist,
@@ -233,10 +315,21 @@ const loadMusicData = (music: MusicItem) => {
 
   formData.value = {
     artist: parsed.artist || music.artist,
-    album: parsed.artist || music.artist, // 用解析的歌手名填充专辑
-    title: parsed.title || music.title
+    // 专辑优先用解析/库内专辑，不用歌手名污染
+    album: parsed.album || music.album || '',
+    title: parsed.title || music.title,
+    year: music.year != null ? String(music.year) : '',
+    genre: music.genre || ''
   }
 }
+
+const buildFallbackRaw = (music: MusicItem): TagSnapshot => ({
+  title: music.title || '',
+  artist: music.artist || '',
+  album: music.album || '',
+  year: music.year != null ? String(music.year) : undefined,
+  genre: music.genre || undefined
+})
 
 const loadRawID3Tags = async () => {
   if (!props.music?.filePath) return
@@ -244,33 +337,20 @@ const loadRawID3Tags = async () => {
   try {
     loadingMetadata.value = true
     const tags = await window.electronAPI.readRawID3Tags(props.music.filePath)
-    
-    // 如果ID3标签为空或不存在，使用数据库中的当前值作为原始元数据
-    // 这样即使ID3标签为空，用户也能看到数据库中存储的（可能是乱码的）数据
-    if (!tags || (!tags.title && !tags.artist && !tags.album)) {
-      // ID3标签为空，使用数据库中的值
-      rawID3Tags.value = {
-        title: props.music.title || '',
-        artist: props.music.artist || '',
-        album: props.music.album || '',
-        year: props.music.year ? String(props.music.year) : undefined,
-        genre: props.music.genre || undefined
-      }
+
+    if (!tags || (!tags.title && !tags.artist && !tags.album && !tags.genre && !tags.year)) {
+      rawID3Tags.value = buildFallbackRaw(props.music)
     } else {
       rawID3Tags.value = tags
+      // 原始 ID3 有年份/流派且表单仍空时，预填便于手动改
+      if (!formData.value.year && tags.year) formData.value.year = tags.year
+      if (!formData.value.genre && tags.genre) formData.value.genre = tags.genre
     }
-    convertedTags.value = null // 重置转换后的标签
+    convertedTags.value = null
   } catch (error: any) {
     console.error('加载ID3标签失败:', error)
-    // 出错时也使用数据库中的值
     if (props.music) {
-      rawID3Tags.value = {
-        title: props.music.title || '',
-        artist: props.music.artist || '',
-        album: props.music.album || '',
-        year: props.music.year ? String(props.music.year) : undefined,
-        genre: props.music.genre || undefined
-      }
+      rawID3Tags.value = buildFallbackRaw(props.music)
     } else {
       rawID3Tags.value = null
     }
@@ -279,87 +359,97 @@ const loadRawID3Tags = async () => {
   }
 }
 
-const convertFromGB2312 = async () => {
+const snapshotFromRaw = (): TagSnapshot => ({
+  title: rawID3Tags.value?.title || '',
+  artist: rawID3Tags.value?.artist || '',
+  album: rawID3Tags.value?.album || '',
+  year: rawID3Tags.value?.year,
+  genre: rawID3Tags.value?.genre
+})
+
+const convertAll = async (encoding: EncodingName) => {
   if (!rawID3Tags.value) return
 
   try {
     loading.value = true
-    // 转换为纯对象，避免 IPC 序列化问题
-    const tagsToConvert = {
-      title: rawID3Tags.value.title || '',
-      artist: rawID3Tags.value.artist || '',
-      album: rawID3Tags.value.album || '',
-      year: rawID3Tags.value.year,
-      genre: rawID3Tags.value.genre
-    }
-    const converted = await window.electronAPI.convertID3TagsEncoding(tagsToConvert, 'gb2312')
+    const converted = await window.electronAPI.convertID3TagsEncoding(snapshotFromRaw(), encoding)
     convertedTags.value = {
       title: converted.title,
       artist: converted.artist,
-      album: converted.album
+      album: converted.album,
+      year: converted.year,
+      genre: converted.genre
     }
   } catch (error: any) {
-    console.error('GB2312转换失败:', error)
+    console.error(`${encoding} 整包转换失败:`, error)
     alert(t('tagEditor.saveError') + ': ' + error.message)
   } finally {
     loading.value = false
   }
 }
 
-const convertFromGBK = async () => {
-  if (!rawID3Tags.value) return
+/** 单字段编码转换：直接写入左侧对应表单项，便于单独修复流派/年份等 */
+const convertSingleField = async (field: TagField, encoding: EncodingName) => {
+  if (!rawID3Tags.value || !hasRawValue(field)) return
 
   try {
     loading.value = true
-    // 转换为纯对象，避免 IPC 序列化问题
-    const tagsToConvert = {
-      title: rawID3Tags.value.title || '',
-      artist: rawID3Tags.value.artist || '',
-      album: rawID3Tags.value.album || '',
-      year: rawID3Tags.value.year,
-      genre: rawID3Tags.value.genre
-    }
-    const converted = await window.electronAPI.convertID3TagsEncoding(tagsToConvert, 'gbk')
-    convertedTags.value = {
-      title: converted.title,
-      artist: converted.artist,
-      album: converted.album
+    const converted = await window.electronAPI.convertID3TagsEncoding(snapshotFromRaw(), encoding)
+    const value = converted[field]
+    if (value != null && String(value).trim()) {
+      formData.value[field] = String(value)
+      // 同步刷新该字段的转换预览
+      convertedTags.value = {
+        ...(convertedTags.value || snapshotFromRaw()),
+        [field]: String(value)
+      }
     }
   } catch (error: any) {
-    console.error('GBK转换失败:', error)
+    console.error(`单字段 ${field} ${encoding} 转换失败:`, error)
     alert(t('tagEditor.saveError') + ': ' + error.message)
   } finally {
     loading.value = false
   }
 }
 
-const applyConvertedTags = () => {
+const applyConvertedField = (field: TagField) => {
+  if (!convertedTags.value || !hasConvertedValue(field)) return
+  formData.value[field] = String(convertedTags.value[field] || '')
+}
+
+const applyAllConvertedTags = () => {
   if (!convertedTags.value) return
-
-  // 将转换后的标签应用到表单
   formData.value = {
     artist: convertedTags.value.artist || formData.value.artist,
     title: convertedTags.value.title || formData.value.title,
-    album: convertedTags.value.album || formData.value.album
+    album: convertedTags.value.album || formData.value.album,
+    year: convertedTags.value.year || formData.value.year,
+    genre: convertedTags.value.genre || formData.value.genre
   }
 }
 
-/**
- * 仅把当前表单信息写入数据库（不改文件 ID3）
- * 用于列表显示乱码、但文件名/ID3/表单内容正确的场景
- */
+const parseYearForSave = (): number | null => {
+  const raw = formData.value.year.trim()
+  if (!raw) return null
+  const year = parseInt(raw, 10)
+  return Number.isNaN(year) ? null : year
+}
+
+const buildUpdates = () => ({
+  artist: formData.value.artist.trim(),
+  album: formData.value.album.trim() || null,
+  title: formData.value.title.trim(),
+  year: parseYearForSave(),
+  genre: formData.value.genre.trim() || null
+})
+
 const syncToDatabase = async () => {
   if (!canSync.value || !props.music) return
 
   try {
     loading.value = true
     loadingMessage.value = t('tagEditor.syncing')
-    const updates = {
-      artist: formData.value.artist.trim(),
-      album: formData.value.album.trim() || null,
-      title: formData.value.title.trim()
-    }
-    const updatedMusic = await window.electronAPI.syncMusicMetadataToDb(props.music.id, updates)
+    const updatedMusic = await window.electronAPI.syncMusicMetadataToDb(props.music.id, buildUpdates())
     window.dispatchEvent(new CustomEvent('music-metadata-updated', {
       detail: updatedMusic
     }))
@@ -384,28 +474,23 @@ const save = async () => {
     loading.value = true
     loadingMessage.value = t('tagEditor.saving')
 
-    const updates = {
-      artist: formData.value.artist.trim(),
-      album: formData.value.album.trim() || null,
-      title: formData.value.title.trim()
-    }
-
+    const updates = buildUpdates()
     const success = await window.electronAPI.updateMusicMetadata(props.music.id, updates)
 
     if (success) {
-      // 创建更新后的音乐对象
       const updatedMusic = {
         ...props.music,
-        ...updates
+        ...updates,
+        album: updates.album || undefined,
+        genre: updates.genre || undefined,
+        year: updates.year ?? undefined
       }
 
-      // 触发全局事件，传递更新后的音乐信息
       window.dispatchEvent(new CustomEvent('music-metadata-updated', {
         detail: updatedMusic
       }))
 
       emit('saved')
-      // 短暂延迟后关闭对话框
       setTimeout(() => {
         loading.value = false
         close()
@@ -422,12 +507,9 @@ const save = async () => {
 }
 
 const swapArtistAndTitle = () => {
-  // 交换歌手和歌曲名
   const temp = formData.value.artist
   formData.value.artist = formData.value.title
   formData.value.title = temp
-  // 专辑名和歌手名保持一致
-  formData.value.album = formData.value.artist
 }
 
 const close = () => {
@@ -483,9 +565,8 @@ const close = () => {
   transition: width 0.3s ease;
 }
 
-/* 当有ID3信息时，对话框变宽 */
 .edit-tag-dialog.has-id3 {
-  width: 850px;
+  width: 920px;
 }
 
 .file-info {
@@ -502,20 +583,17 @@ const close = () => {
   word-break: break-all;
 }
 
-/* 主内容区域：左右两栏布局 */
 .main-content {
   display: flex;
   gap: 0;
   align-items: stretch;
 }
 
-/* 左侧表单区域 */
 .form-section {
   flex: 1;
   min-width: 0;
 }
 
-/* 分隔线 */
 .divider {
   width: 1px;
   background: var(--border-color);
@@ -523,9 +601,8 @@ const close = () => {
   align-self: stretch;
 }
 
-/* 右侧ID3信息区域 */
 .id3-section {
-  flex: 1;
+  flex: 1.15;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -544,6 +621,12 @@ const close = () => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
 }
 
 .form-group {
@@ -728,7 +811,6 @@ const close = () => {
   cursor: not-allowed;
 }
 
-/* ID3元数据显示区域 */
 .metadata-display {
   display: flex;
   flex-direction: column;
@@ -746,6 +828,13 @@ const close = () => {
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.field-hint {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: 1.4;
 }
 
 .metadata-info {
@@ -771,6 +860,11 @@ const close = () => {
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) 0;
   font-size: var(--font-size-sm);
+  align-items: flex-start;
+}
+
+.metadata-item.with-actions {
+  align-items: center;
 }
 
 .metadata-item:not(:last-child) {
@@ -780,7 +874,7 @@ const close = () => {
 .metadata-label {
   font-weight: 500;
   color: var(--text-secondary);
-  min-width: 50px;
+  min-width: 42px;
   flex-shrink: 0;
 }
 
@@ -788,6 +882,7 @@ const close = () => {
   color: var(--text-color);
   word-break: break-all;
   flex: 1;
+  min-width: 0;
 }
 
 .metadata-value.converted {
@@ -795,7 +890,39 @@ const close = () => {
   font-weight: 500;
 }
 
-/* 编码转换按钮 */
+.field-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-field {
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.btn-field:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-field-apply {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .encoding-actions {
   display: flex;
   gap: var(--spacing-sm);
@@ -854,21 +981,24 @@ const close = () => {
   font-size: var(--font-size-sm);
 }
 
-/* 响应式设计：小屏幕时恢复上下布局 */
 @media (max-width: 768px) {
   .edit-tag-dialog.has-id3 {
     width: 90%;
   }
-  
+
   .main-content {
     flex-direction: column;
     gap: var(--spacing-lg);
   }
-  
+
   .divider {
     width: 100%;
     height: 1px;
     margin: var(--spacing-md) 0;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>
