@@ -2777,33 +2777,39 @@ export default class MusicDatabase {
   }
 
   /**
-   * 清空数据库中除 settings 以外的全部表数据（保留主题/语言/均衡器等设置）
+   * 清空数据库中除 settings、本地目录配置以外的全部表数据
+   * （保留主题/语言/均衡器等设置，以及用户配置的扫描根目录）
    */
   clearAllExceptSettings(): void {
     if (!this.db) {
       throw new Error('数据库未初始化')
     }
 
+    // 配置目录：local_music_dir（用户添加的扫描根目录）；旧表 music_directory 一并保留
+    const preserve = new Set(['settings', 'local_music_dir', 'music_directory'])
+
     const tables = this.db.prepare(`
       SELECT name FROM sqlite_master
       WHERE type = 'table'
         AND name NOT LIKE 'sqlite_%'
-        AND name != 'settings'
     `).all() as Array<{ name: string }>
 
-    console.log(`🗑️  清除所有（保留 settings），共 ${tables.length} 张表`)
+    const toClear = tables.filter((t) => !preserve.has(t.name))
+    console.log(
+      `🗑️  清除所有（保留 settings + 配置目录），共 ${toClear.length} 张表`
+    )
 
     this.db.exec('PRAGMA foreign_keys = OFF')
     try {
       const tx = this.db.transaction(() => {
-        for (const table of tables) {
+        for (const table of toClear) {
           // 表名来自 sqlite_master，仍用引号包裹以防特殊字符
           this.db!.prepare(`DELETE FROM "${table.name}"`).run()
           console.log(`   已清空: ${table.name}`)
         }
       })
       tx()
-      console.log('✅ 除 settings 外的表数据已清空')
+      console.log('✅ 除 settings / 配置目录外的表数据已清空')
     } finally {
       this.db.exec('PRAGMA foreign_keys = ON')
     }
