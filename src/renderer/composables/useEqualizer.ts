@@ -1,4 +1,5 @@
 import { ref, watch, toRaw } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
 
 // 10段均衡器的频率点（Hz）
 const EQUALIZER_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -361,7 +362,7 @@ export function useEqualizer() {
       return
     }
 
-    // 如果元素变化，需要重新初始化
+    // 如果元素变化：旧 MediaElementSource 无法迁移，必须关掉 Context 再挂新元素
     if (audioElement && audioElement !== element) {
       safeDisconnect(sourceNode)
       filters.forEach(safeDisconnect)
@@ -369,7 +370,23 @@ export function useEqualizer() {
       safeDisconnect(limiterNode)
       safeDisconnect(analyserNode)
       safeDisconnect(timeAnalyserNode)
+      try {
+        if (audioContext && audioContext.state !== 'closed') {
+          void audioContext.close()
+        }
+      } catch {
+        // ignore
+      }
+      audioContext = null
+      sourceNode = null
+      gainNode = null
+      limiterNode = null
+      filters = []
+      analyserNode = null
+      timeAnalyserNode = null
+      audioElement = null
       isInitialized = false
+      lastRoutedEnabled = null
       syncRuntime()
     }
 
@@ -409,7 +426,7 @@ export function useEqualizer() {
         void audioContext.resume()
       }
 
-      // ⚠️ 同一个 element 只能 createMediaElementSource 一次
+      // ⚠️ 同一个 element 只能 createMediaElementSource 一次（Context 关闭后也一样，必须换新元素）
       sourceNode = audioContext.createMediaElementSource(element)
       gainNode = audioContext.createGain()
       gainNode.gain.value = 1
@@ -461,7 +478,22 @@ export function useEqualizer() {
     } catch (error) {
       console.error('❌ 均衡器初始化失败:', error)
       isInitialized = false
+      sourceNode = null
       syncRuntime()
+      // 元素曾被占用时只能换新 <audio>；通知播放器重建后再挂（避免 restore 重入死循环）
+      const msg = error instanceof Error ? error.message : String(error)
+      const w = window as any
+      if (
+        typeof window !== 'undefined' &&
+        /already connected|InvalidStateError/i.test(msg) &&
+        !w.__XMMUSIC_EQ_RESTORING__
+      ) {
+        w.__XMMUSIC_EQ_RESTORING__ = true
+        window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
+        window.setTimeout(() => {
+          w.__XMMUSIC_EQ_RESTORING__ = false
+        }, 2000)
+      }
     }
   }
 
@@ -517,7 +549,8 @@ export function useEqualizer() {
   // 应用预设
   const applyPreset = (preset: EqualizerPreset) => {
     gains.value = [...preset.gains]
-    applyGains()
+    if (enabled.value) ensureCapturedForEq()
+    else applyGains()
     saveSettings(true)
   }
 
@@ -567,37 +600,76 @@ export function useEqualizer() {
     console.log('✅ 已释放 Web Audio 音频捕获')
   }
 
-  // 启用/禁用均衡器：开启时接管；关闭时释放并通知播放器重建原生元素
+  // 启用/禁用均衡器：
+  // - 开启：挂到当前播放元素并走滤波路由
+  // - 关闭：若全屏特效仍需频谱，只切旁路（避免销毁重建导致元素「永久污染」/听感失效）；
+  //         特效也不需要时才真正 release + 重建原生直出
   const toggle = (value: boolean) => {
     enabled.value = value
     if (value) {
       ensureCapturedForEq()
-    } else {
-      // 关音效：彻底离开 Web Audio，恢复原生直出（需重建 media 元素）
-      if (isCaptured()) {
+    } else if (isCaptured()) {
+      // 全屏特效仍需频谱时只切旁路，避免销毁重建把元素「永久污染」
+      let needSpectrum = false
+      try {
+        needSpectrum = useSettingsStore().shouldCaptureNowPlayingAudio()
+      } catch {
+        needSpectrum = false
+      }
+
+      if (needSpectrum) {
+        routeAudioGraph()
+      } else {
         void releaseCapture().then(() => {
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
           }
         })
-      } else {
-        applyGains()
       }
+    } else {
+      applyGains()
     }
     saveSettings(true)
   }
 
-  /** 音效开启时确保已挂到当前播放元素并走滤波路由 */
+  /** 音效开启时确保已挂到「当前 DOM 中的」播放元素并强制走滤波路由 */
   const ensureCapturedForEq = () => {
-    const el =
-      audioElement ||
-      (typeof document !== 'undefined'
-        ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-        : null)
-    if (el) initAudioContext(el)
+    if (typeof document === 'undefined') {
+      applyGains()
+      return
+    }
+    const domEl = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
+    // 模块里缓存的元素若已脱离 DOM，不能再用（否则滤波挂在死节点上，扬声器仍是干声）
+    const liveCached =
+      audioElement && document.contains(audioElement) ? audioElement : null
+    // 优先 DOM 中带 id 的播放器（与 usePlayer 实际出声节点对齐）
+    const el = domEl || liveCached
+    if (!el) {
+      console.warn('⚠️ 音效开启但找不到播放元素，稍后播放时会自动挂接')
+      applyGains()
+      return
+    }
+    // 缓存指向其它节点时，先拆掉旧图再挂到 DOM 播放器
+    if (liveCached && domEl && liveCached !== domEl) {
+      safeDisconnect(sourceNode)
+      isInitialized = false
+      audioElement = null
+      syncRuntime()
+    }
+    initAudioContext(el)
+    if (audioContext?.state === 'suspended') {
+      void audioContext.resume().catch(() => {})
+    }
     if (isInitialized) {
+      // 强制重路由，避免 lastRoutedEnabled 误判导致仍停在旁路
+      lastRoutedEnabled = null
       routeAudioGraph()
+      console.log('✅ 音效滤波链路已激活', {
+        gains: [...gains.value],
+        contextState: audioContext?.state
+      })
     } else {
+      console.warn('⚠️ 音效挂接失败，滤波未激活')
       applyGains()
     }
   }
@@ -675,6 +747,7 @@ export function useEqualizer() {
     EQUALIZER_FREQUENCIES,
     EQUALIZER_PRESETS,
     initAudioContext,
+    ensureCapturedForEq,
     isCaptured,
     releaseCapture,
     getFrequencyData,

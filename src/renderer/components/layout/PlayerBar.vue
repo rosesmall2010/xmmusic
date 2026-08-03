@@ -331,10 +331,7 @@ watch(
   [isPlaying, () => equalizer.enabled.value],
   ([playing, eqOn]) => {
     if (!playing || !eqOn) return
-    const audioElement = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
-    if (audioElement) {
-      equalizer.initAudioContext(audioElement)
-    }
+    equalizer.ensureCapturedForEq()
   },
   { immediate: true }
 )

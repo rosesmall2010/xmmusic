@@ -71,13 +71,13 @@ export function usePlayer() {
       if (!music) return
 
       await playWithNativeAudio(music, { resumeAt, autoplay: wasPlaying })
-      // 重建元素后：音效开着或全屏特效仍需频谱时，都要重新接管 Web Audio
-      if (
-        wasPlaying &&
-        audioElement &&
-        (equalizer.enabled.value || settingsStore.shouldCaptureNowPlayingAudio())
-      ) {
-        equalizer.initAudioContext(audioElement)
+      // 重建元素后：音效开着强制挂滤波；特效仍需频谱时旁路挂图
+      if (wasPlaying && audioElement) {
+        if (equalizer.enabled.value) {
+          equalizer.ensureCapturedForEq()
+        } else if (settingsStore.shouldCaptureNowPlayingAudio()) {
+          equalizer.initAudioContext(audioElement)
+        }
       }
       console.log('✅ 已恢复原生 Audio 直出路径')
     } catch (error) {
@@ -93,21 +93,40 @@ export function usePlayer() {
   ) => {
     console.log('🔄 尝试使用原生 Audio 播放')
 
-    // 停止并清理旧的音频
-    if (audioElement) {
-      audioElement.pause()
-      audioElement.src = ''
-    }
-
     let hasStartedPlaying = false
     let loadTimeout: NodeJS.Timeout | null = null
     const resumeAt = options?.resumeAt
     const autoplay = options?.autoplay !== false
 
-    // 若当前 DOM 元素曾被 MediaElementSource 捕获，必须丢弃重建
+    // 校正：模块引用与 DOM 必须是同一个节点，否则会出现「游离节点在播、EQ 挂在空 id」听感无变化
+    const domEl = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
+    if (audioElement && !document.contains(audioElement)) {
+      if (equalizer.isCaptured()) {
+        await equalizer.releaseCapture()
+      }
+      discardAudioElement(audioElement)
+      audioElement = null
+    }
+    if (audioElement && domEl && audioElement !== domEl) {
+      if (equalizer.isCaptured()) {
+        await equalizer.releaseCapture()
+      }
+      discardAudioElement(audioElement)
+      audioElement = null
+    }
+
+    // 停止旧播放（保留同一元素以便 MediaElementSource 可继续挂在同一节点上）
+    if (audioElement) {
+      audioElement.pause()
+      audioElement.removeAttribute('src')
+      audioElement.load()
+    }
+
+    // 若 DOM 里已有元素：已捕获则先释放再重建；未捕获则复用
     if (!audioElement) {
       const existing = document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null
       if (existing && equalizer.isCaptured()) {
+        await equalizer.releaseCapture()
         discardAudioElement(existing)
       } else if (existing) {
         audioElement = existing
@@ -160,8 +179,10 @@ export function usePlayer() {
         clearTimeout(loadTimeout)
         loadTimeout = null
       }
-      // 仅在音效开启时接管 Web Audio（避免频谱可视化拖垮音质）
+      // 音效开启：强制挂滤波链；仅特效需要频谱时旁路挂图即可
       if (equalizer.enabled.value) {
+        equalizer.ensureCapturedForEq()
+      } else if (settingsStore.shouldCaptureNowPlayingAudio()) {
         equalizer.initAudioContext(audioElement!)
       }
     }

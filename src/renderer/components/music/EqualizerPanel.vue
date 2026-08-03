@@ -14,7 +14,7 @@
           <input
             type="checkbox"
             :checked="enabled"
-            @change="toggle(!enabled)"
+            @change="onEnabledChange"
           >
           <span class="slider round"></span>
         </label>
@@ -92,6 +92,11 @@ const emit = defineEmits<{
 }>()
 
 const selectedPreset = ref('flat')
+
+const onEnabledChange = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  toggle(checked)
+}
 
 watch(
   () => props.modelValue,

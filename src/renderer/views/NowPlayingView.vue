@@ -936,8 +936,12 @@ watch(
     const wantFx = settingsStore.shouldCaptureNowPlayingAudio()
     const wantEq = equalizer.enabled.value
     if (playing && (wantFx || wantEq)) {
-      const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-      if (el) equalizer.initAudioContext(el)
+      if (wantEq) {
+        equalizer.ensureCapturedForEq()
+      } else {
+        const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+        if (el) equalizer.initAudioContext(el)
+      }
       return
     }
     // EQ 从开→关由 toggle → releaseCapture → restore 负责；此处再派发会造成双重重建（断音/进度跳）
