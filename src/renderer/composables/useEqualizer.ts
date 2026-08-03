@@ -562,6 +562,7 @@ export function useEqualizer() {
     timeAnalyserNode = null
     audioElement = null
     isInitialized = false
+    lastRoutedEnabled = null
     syncRuntime()
     console.log('✅ 已释放 Web Audio 音频捕获')
   }
@@ -570,17 +571,7 @@ export function useEqualizer() {
   const toggle = (value: boolean) => {
     enabled.value = value
     if (value) {
-      const el =
-        audioElement ||
-        (typeof document !== 'undefined'
-          ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
-          : null)
-      if (el) initAudioContext(el)
-      if (isInitialized) {
-        routeAudioGraph()
-      } else {
-        applyGains()
-      }
+      ensureCapturedForEq()
     } else {
       // 关音效：彻底离开 Web Audio，恢复原生直出（需重建 media 元素）
       if (isCaptured()) {
@@ -594,6 +585,21 @@ export function useEqualizer() {
       }
     }
     saveSettings(true)
+  }
+
+  /** 音效开启时确保已挂到当前播放元素并走滤波路由 */
+  const ensureCapturedForEq = () => {
+    const el =
+      audioElement ||
+      (typeof document !== 'undefined'
+        ? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
+        : null)
+    if (el) initAudioContext(el)
+    if (isInitialized) {
+      routeAudioGraph()
+    } else {
+      applyGains()
+    }
   }
 
   // 保存自定义预设
@@ -630,12 +636,10 @@ export function useEqualizer() {
     if (enabled.value) applyGains()
   }, { deep: true })
 
-  // 监听启用状态：仅在「开启且已接管」时重路由；关闭由 toggle → releaseCapture 处理
+  // 监听启用状态：开启时若尚未接管则主动挂图；已接管则重路由
   watch(enabled, (on) => {
     if (!on) return
-    if (isInitialized) {
-      routeAudioGraph()
-    }
+    ensureCapturedForEq()
   })
 
   /**

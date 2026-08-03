@@ -71,9 +71,12 @@ export function usePlayer() {
       if (!music) return
 
       await playWithNativeAudio(music, { resumeAt, autoplay: wasPlaying })
-      // EQ 关闭时会释放并重建元素；如果当前全屏特效仍需要真实频谱，重建后要重新接管，
-      // 否则可视化会一直退化成假的时间域频谱（NowPlayingView 的 watch 此时不会再触发）
-      if (wasPlaying && audioElement && settingsStore.shouldCaptureNowPlayingAudio()) {
+      // 重建元素后：音效开着或全屏特效仍需频谱时，都要重新接管 Web Audio
+      if (
+        wasPlaying &&
+        audioElement &&
+        (equalizer.enabled.value || settingsStore.shouldCaptureNowPlayingAudio())
+      ) {
         equalizer.initAudioContext(audioElement)
       }
       console.log('✅ 已恢复原生 Audio 直出路径')

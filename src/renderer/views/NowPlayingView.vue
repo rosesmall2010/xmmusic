@@ -929,21 +929,19 @@ watch(isLight, () => {
   applyCoverColor(displayCoverUrl.value)
 })
 
-// 频谱/火焰/闪电可视化始终接入真实 Web Audio 频谱（不再要求用户先打开均衡器）；
-// 唱盘不读频谱、用户关闭特效开关时也不需要接管
+// 频谱/火焰/闪电可视化需要 Web Audio；音效开启时也必须接管滤波链（与特效开关独立）
 watch(
-  [isPlaying, effect, effectEnabled],
+  [isPlaying, effect, effectEnabled, () => equalizer.enabled.value],
   ([playing]) => {
-    // 是否需要频谱：只取决于特效设置，与暂停/播放无关——暂停不该触发下面的释放分支
-    const wantCapture = settingsStore.shouldCaptureNowPlayingAudio()
-    if (playing && wantCapture) {
+    const wantFx = settingsStore.shouldCaptureNowPlayingAudio()
+    const wantEq = equalizer.enabled.value
+    if (playing && (wantFx || wantEq)) {
       const el = getAudioElement() ?? (document.getElementById('xmmusic-audio-player') as HTMLAudioElement | null)
       if (el) equalizer.initAudioContext(el)
       return
     }
-    // 关闭特效开关（或切到唱片）后不再需要频谱：若 EQ 本身没开，把此前为可视化接管的
-    // Web Audio 图释放掉，恢复原生直出，否则均衡器/压缩器/分析器会在后台空转持续吃 CPU
-    if (!wantCapture && !equalizer.enabled.value && equalizer.isCaptured()) {
+    // 特效与音效都不需要时，释放此前为可视化接管的 Web Audio，恢复原生直出
+    if (!wantFx && !wantEq && equalizer.isCaptured()) {
       window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
     }
   },
