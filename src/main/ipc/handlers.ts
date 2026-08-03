@@ -920,7 +920,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   // 清空列表
   ipcMain.handle('clear-local-music', async () => {
     if (!db) return
-    db.clearLocalMusic()
+    // 「清除所有」：除 settings 外清空全部库表（含曲目/歌单/收藏/目录/队列等）
+    db.clearAllExceptSettings()
   })
 
   ipcMain.handle('clear-favorites', async () => {

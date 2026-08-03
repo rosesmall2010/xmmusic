@@ -217,7 +217,7 @@ const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
-const { play } = usePlayer()
+const { play, pause } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
@@ -464,9 +464,41 @@ const handleClearAll = async () => {
   }
 
   try {
+    // 先停播并清空内存队列，避免 UI / 本地缓存仍指向已删除曲目
+    pause()
+    playerStore.clearQueue()
+    playerStore.currentMusic = null
+    playerStore.isPlaying = false
+    playerStore.currentTime = 0
+    playerStore.duration = 0
+
+    try {
+      window.localStorage.removeItem('xmmusic_player_queue')
+      window.localStorage.removeItem('xmmusic_player_state')
+    } catch {
+      // ignore
+    }
+
+    // 除 settings 外清空数据库全部表（曲目/歌单/收藏/目录/队列等）
     await window.electronAPI.clearLocalMusic()
-    // 刷新列表
+
+    // 同步把播放相关运行时状态写回为空（settings 里其它偏好保留）
+    try {
+      await window.electronAPI.saveSettings({
+        playQueue: [],
+        currentQueueIndex: -1,
+        playPosition: 0,
+        wasPlaying: false
+      })
+    } catch {
+      // ignore
+    }
+
     await musicStore.loadMusic(0, 20, true)
+    await dirStore.loadDirectories()
+    window.dispatchEvent(new Event('playlist-updated'))
+    window.dispatchEvent(new Event('favorites-updated'))
+    window.dispatchEvent(new Event('recent-plays-updated'))
   } catch (error: any) {
     alert(t('settings.clearAllError') + ': ' + error.message)
   }

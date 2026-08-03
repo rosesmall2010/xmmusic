@@ -2777,6 +2777,55 @@ export default class MusicDatabase {
   }
 
   /**
+   * 清空数据库中除 settings 以外的全部表数据（保留主题/语言/均衡器等设置）
+   */
+  clearAllExceptSettings(): void {
+    if (!this.db) {
+      throw new Error('数据库未初始化')
+    }
+
+    const tables = this.db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%'
+        AND name != 'settings'
+    `).all() as Array<{ name: string }>
+
+    console.log(`🗑️  清除所有（保留 settings），共 ${tables.length} 张表`)
+
+    this.db.exec('PRAGMA foreign_keys = OFF')
+    try {
+      const tx = this.db.transaction(() => {
+        for (const table of tables) {
+          // 表名来自 sqlite_master，仍用引号包裹以防特殊字符
+          this.db!.prepare(`DELETE FROM "${table.name}"`).run()
+          console.log(`   已清空: ${table.name}`)
+        }
+      })
+      tx()
+      console.log('✅ 除 settings 外的表数据已清空')
+    } finally {
+      this.db.exec('PRAGMA foreign_keys = ON')
+    }
+
+    // 设置里可能存了播放队列/进度等运行时状态，一并清掉，避免重启后又灌回空库
+    const playbackKeys = [
+      'playQueue',
+      'currentQueueIndex',
+      'playPosition',
+      'wasPlaying',
+      'currentMusic'
+    ]
+    for (const key of playbackKeys) {
+      try {
+        this.db.prepare('DELETE FROM settings WHERE key = ?').run(key)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
    * 清空我喜欢列表
    */
   clearFavorites(): void {
