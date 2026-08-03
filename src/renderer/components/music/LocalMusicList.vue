@@ -464,8 +464,12 @@ const handleClearAll = async () => {
   }
 
   try {
-    // 先停播并清空内存队列，避免 UI / 本地缓存仍指向已删除曲目
+    // 可先停播（不丢数据）；内存/本地缓存必须等库清理成功后再清，失败时可保持原状
     pause()
+
+    // 除 settings / 配置目录外清空数据库（曲目/歌单/收藏/队列等）
+    await window.electronAPI.clearLocalMusic()
+
     playerStore.clearQueue()
     playerStore.currentMusic = null
     playerStore.isPlaying = false
@@ -478,9 +482,6 @@ const handleClearAll = async () => {
     } catch {
       // ignore
     }
-
-    // 除 settings 外清空数据库全部表（曲目/歌单/收藏/目录/队列等）
-    await window.electronAPI.clearLocalMusic()
 
     // 同步把播放相关运行时状态写回为空（settings 里其它偏好保留）
     try {
