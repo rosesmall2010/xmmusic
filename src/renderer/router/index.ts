@@ -14,8 +14,8 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: 'blank' }
   },
   {
-    path: '/:pathMatch(.*)*',
-    redirect: '/discover'
+    path: '/',
+    redirect: '/local'
   },
   {
     path: '/discover',
@@ -96,6 +96,11 @@ const routes: RouteRecordRaw[] = [
       title: '搜索结果',
       icon: 'Search',
     },
+  },
+  // 未知路径回落到本地音乐（须放最后）
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/local'
   },
 ]
 
