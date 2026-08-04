@@ -17,7 +17,7 @@
 - 修复 Windows 托盘无图标：改用 `build/icon-*.png` 并按平台缩放；Windows 不再误用 macOS 模板图（`setTemplateImage`）
 
 ### 变更
-- Release（已打包）启用单实例锁：同系统仅允许一个 Release 进程，二次启动会聚焦已有窗口；Dev 不限制多开，且与 Release 的 userData/锁互不干扰
+- Release（已打包）启用单实例锁：同系统仅允许一个 Release 进程，二次启动会聚焦已有窗口；Dev 不限制多开，且与 Release 的 userData/锁互不干扰；首个实例尚未建窗时二次启动会排队，建窗后补聚焦
 
 ## [1.1.9] - 2026-08-02
 

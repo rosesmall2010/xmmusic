@@ -69,13 +69,29 @@ let fileMonitor: FileMonitor | null = null
 let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 let isMainWindowReady = false // 跟踪主窗口是否就绪
+/** 首个实例尚未建窗时收到 second-instance，创建后补聚焦 */
+let pendingFocusMainWindow = false
+
+/** 聚焦主窗口；窗口尚未创建则记下待办，创建后由 flushPendingFocusMainWindow 补跑 */
+function focusOrDeferMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    pendingFocusMainWindow = true
+    return
+  }
+  pendingFocusMainWindow = false
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function flushPendingFocusMainWindow(): void {
+  if (!pendingFocusMainWindow) return
+  focusOrDeferMainWindow()
+}
 
 if (app.isPackaged) {
   app.on('second-instance', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
+    focusOrDeferMainWindow()
   })
 }
 
@@ -293,6 +309,9 @@ function createWindow(): void {
       : { frame: false }
     )
   })
+
+  // 启动期若已有二次启动请求，建窗后立即补聚焦
+  flushPendingFocusMainWindow()
 
   // 添加错误处理和调试信息
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
@@ -528,6 +547,7 @@ app.whenReady().then(async () => {
 
   // 创建窗口
   createWindow()
+  flushPendingFocusMainWindow()
 
   // 立即读取并应用主题设置到窗口外观
   if (mainWindow && db) {
