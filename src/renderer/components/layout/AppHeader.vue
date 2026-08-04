@@ -533,8 +533,8 @@ const closeWindow = () => {
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 8px;
-  background: var(--bg-elevated, rgba(0, 0, 0, 0.9));
-  color: var(--text-color, #fff);
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   font-size: var(--font-size-xs);
   border-radius: var(--radius-sm);
   white-space: nowrap;
@@ -542,7 +542,7 @@ const closeWindow = () => {
   pointer-events: none;
   transition: opacity 0.15s ease; /* 移开：约 0.15s 消失 */
   box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--tooltip-border);
   z-index: 1100;
 }
 

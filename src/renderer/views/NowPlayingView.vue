@@ -199,8 +199,11 @@
 
         <!-- 播放控制 -->
         <div class="controls">
-          <button class="btn-control btn-secondary" @click="toggleFavorite">
+          <button class="btn-control btn-secondary has-tip" @click="toggleFavorite">
             <Heart :size="20" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
+            <span class="btn-tooltip">
+              {{ isFavorite ? $t('music.removeFromFavorites') : $t('music.addToFavorites') }}
+            </span>
           </button>
 
           <button class="btn-control btn-secondary" @click="previous">
@@ -1186,14 +1189,16 @@ watch(
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   font-size: var(--font-size-xs);
   border-radius: var(--radius-sm);
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--tooltip-border);
   z-index: 1000;
 }
 
@@ -1223,13 +1228,13 @@ watch(
   background: var(--np-hover);
 }
 
-/* 自定义 tip：悬停约 1s 显示，移开约 0.15s 消失 */
+/* 自定义 tip：悬停约 1s 显示，移开约 0.15s 消失；颜色随主题 */
 .btn-tooltip {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
@@ -1237,6 +1242,8 @@ watch(
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--tooltip-border);
   z-index: 1000;
 }
 
@@ -1254,7 +1261,7 @@ watch(
   left: 50%;
   transform: translateX(-50%);
   border: 4px solid transparent;
-  border-bottom-color: rgba(0, 0, 0, 0.9);
+  border-bottom-color: var(--tooltip-bg);
 }
 
 /* 底栏控制：tip 显示在上方 */
@@ -1271,7 +1278,7 @@ watch(
   left: 50%;
   transform: translateX(-50%);
   border: 4px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.9);
+  border-top-color: var(--tooltip-bg);
 }
 
 .btn-action:hover .btn-tooltip,

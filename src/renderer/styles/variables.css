@@ -151,6 +151,11 @@
   --color-primary-alpha: rgba(49, 194, 124, 0.1);
   --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
   --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
+
+  /* 悬停 tip：随浅色/深色主题切换 */
+  --tooltip-bg: #ffffff;
+  --tooltip-fg: #1f1f1f;
+  --tooltip-border: #e0e0e0;
 }
 
 /* ==================== 深色主题 ==================== */
@@ -210,6 +215,11 @@
   --color-primary-alpha: rgba(49, 194, 124, 0.15);
   --color-primary-alpha-5: rgba(49, 194, 124, 0.05);
   --color-primary-alpha-10: rgba(49, 194, 124, 0.1);
+
+  /* 悬停 tip：随浅色/深色主题切换 */
+  --tooltip-bg: #2d2d2d;
+  --tooltip-fg: #f5f5f5;
+  --tooltip-border: #404040;
 }
 
 /* ==================== 全局样式 ==================== */
