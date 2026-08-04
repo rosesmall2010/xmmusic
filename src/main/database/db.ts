@@ -2269,20 +2269,28 @@ export default class MusicDatabase {
   addSearchHistory(query: string, searchType: 'basic' | 'advanced' = 'basic', criteria?: AdvancedSearchCriteria): void {
     if (!this.db) return
     try {
+      const trimmed = query.trim()
+      if (!trimmed) return
+
+      // 同关键词先删后插，保证置顶且不堆积重复
+      this.db.prepare(`
+        DELETE FROM search_history WHERE query = ?
+      `).run(trimmed)
+
       // v1.0.6 新架构：search_history 表只有 query、search_type、created_at 列
       // criteria 信息不再单独存储（如果需要可以序列化到 query 中）
       const stmt = this.db.prepare(`
         INSERT INTO search_history (query, search_type)
         VALUES (?, ?)
       `)
-      stmt.run(query, searchType)
+      stmt.run(trimmed, searchType)
 
       // 只保留最近 10 条历史记录
       const deleteStmt = this.db.prepare(`
         DELETE FROM search_history
         WHERE id NOT IN (
           SELECT id FROM search_history
-          ORDER BY created_at DESC
+          ORDER BY created_at DESC, id DESC
           LIMIT 10
         )
       `)
@@ -2295,10 +2303,18 @@ export default class MusicDatabase {
   getSearchHistory(limit: number = 10): Array<{ query: string; searchType: string; createdAt: string }> {
     if (!this.db) return []
     try {
+      // 清理历史污染：程序化 advancedSearch（如发现页最近添加）曾写入无意义的「高级搜索」
+      this.db.prepare(`
+        DELETE FROM search_history
+        WHERE query = '高级搜索' AND search_type = 'advanced'
+      `).run()
+
+      // 按关键词去重，取最近一次时间
       const stmt = this.db.prepare(`
-        SELECT DISTINCT query, search_type, created_at
+        SELECT query, search_type, MAX(created_at) AS created_at, MAX(id) AS max_id
         FROM search_history
-        ORDER BY created_at DESC
+        GROUP BY query
+        ORDER BY created_at DESC, max_id DESC
         LIMIT ?
       `)
       const rows = stmt.all(limit) as any[]

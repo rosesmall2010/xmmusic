@@ -31,14 +31,14 @@
               <button class="clear-history-btn" @click="clearHistory">{{ $t('common.clear') }}</button>
             </div>
             <div
-              v-for="(item, index) in searchHistory.slice(0, 5)"
-              :key="'history-' + index"
+              v-for="(item, index) in displayedHistory"
+              :key="'history-' + (typeof item === 'string' ? item : item.query)"
               class="dropdown-item"
               :class="{ selected: selectedIndex === index }"
               @mousedown.prevent="selectHistoryItem(item)"
             >
               <Clock :size="16" class="item-icon" />
-              <span class="item-text">{{ typeof item === 'string' ? item : (item.keyword || item.query || 'Unknown') }}</span>
+              <span class="item-text">{{ historyLabel(item) }}</span>
             </div>
           </div>
 
@@ -114,6 +114,12 @@ const showDropdown = ref(false)
 const searchSuggestions = ref<string[]>([])
 const searchHistory = ref<any[]>([])
 const selectedIndex = ref(-1)
+const displayedHistory = computed(() => searchHistory.value.slice(0, 5))
+
+const historyLabel = (item: any) => {
+  if (typeof item === 'string') return item
+  return item.query || item.keyword || ''
+}
 // 当前生效的主题（把 system 解析为实际的 light/dark），来源统一为 settingsStore
 const theme = computed<'light' | 'dark'>(() => {
   if (settingsStore.theme === 'system') {
@@ -175,15 +181,7 @@ const handleSearch = async () => {
 
   showDropdown.value = false
 
-  try {
-    // 保存搜索历史（如果API存在）
-    if (window.electronAPI.addSearchHistory) {
-      await window.electronAPI.addSearchHistory(query.trim())
-    }
-  } catch (error) {
-    console.error('Failed to save search history:', error)
-  }
-
+  // 搜索历史由 search-music IPC 在真正查询时写入
   router.push({
     name: 'Search',
     query: { q: query }
@@ -201,7 +199,7 @@ const selectSuggestion = (suggestion: string) => {
 }
 
 const selectHistoryItem = (item: any) => {
-  const keyword = typeof item === 'string' ? item : (item.keyword || item.query || '')
+  const keyword = historyLabel(item)
   searchQuery.value = keyword
   handleSearch()
 }
@@ -219,21 +217,23 @@ const handleSearchKeydown = (e: KeyboardEvent) => {
   if (!showDropdown.value) return
 
   const itemCount = searchQuery.value
-    ? searchSuggestions.value.length
-    : searchHistory.value.length
+    ? Math.min(searchSuggestions.value.length, 5)
+    : displayedHistory.value.length
 
   if (e.key === 'ArrowDown') {
     e.preventDefault()
+    if (itemCount === 0) return
     selectedIndex.value = (selectedIndex.value + 1) % itemCount
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
+    if (itemCount === 0) return
     selectedIndex.value = selectedIndex.value <= 0 ? itemCount - 1 : selectedIndex.value - 1
   } else if (e.key === 'Enter' && selectedIndex.value >= 0) {
     e.preventDefault()
     if (searchQuery.value && searchSuggestions.value[selectedIndex.value]) {
       selectSuggestion(searchSuggestions.value[selectedIndex.value])
-    } else if (!searchQuery.value && searchHistory.value[selectedIndex.value]) {
-      selectHistoryItem(searchHistory.value[selectedIndex.value])
+    } else if (!searchQuery.value && displayedHistory.value[selectedIndex.value]) {
+      selectHistoryItem(displayedHistory.value[selectedIndex.value])
     }
   } else if (e.key === 'Escape') {
     showDropdown.value = false

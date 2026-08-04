@@ -20,6 +20,41 @@ import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchSummary } from '../../shared/types/lyrics'
 
+/** 从高级搜索条件生成历史文案；仅排序/limit 等程序化查询返回 null */
+function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | null | undefined): string | null {
+  if (!criteria) return null
+
+  const keyword = typeof criteria.keyword === 'string' ? criteria.keyword.trim() : ''
+  if (keyword) return keyword
+
+  const parts: string[] = []
+  const push = (label: string, value: unknown) => {
+    if (typeof value === 'string' && value.trim()) {
+      parts.push(`${label}:${value.trim()}`)
+    }
+  }
+  push('歌手', criteria.artist)
+  push('专辑', criteria.album)
+  push('流派', criteria.genre)
+  push('目录', criteria.directory)
+  push('格式', criteria.fileExtension)
+
+  if (criteria.favorite === true) parts.push('收藏')
+  if (criteria.favorite === false) parts.push('未收藏')
+  if (typeof criteria.minDuration === 'number' || typeof criteria.maxDuration === 'number') {
+    const min = typeof criteria.minDuration === 'number' ? criteria.minDuration : ''
+    const max = typeof criteria.maxDuration === 'number' ? criteria.maxDuration : ''
+    parts.push(`时长:${min}-${max}`)
+  }
+  if (typeof criteria.yearFrom === 'number' || typeof criteria.yearTo === 'number') {
+    const from = typeof criteria.yearFrom === 'number' ? criteria.yearFrom : ''
+    const to = typeof criteria.yearTo === 'number' ? criteria.yearTo : ''
+    parts.push(`年份:${from}-${to}`)
+  }
+
+  return parts.length > 0 ? parts.join(' ') : null
+}
+
 export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
   const lyricsService = new LyricsService()
   const lyricsMatchService = new LyricsMatchService()
@@ -447,9 +482,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('advanced-search', async (_, criteria: any) => {
     if (!db) return []
     const results = db.advancedSearch(criteria)
-    // 记录搜索历史
-    const query = criteria.keyword || '高级搜索'
-    db.addSearchHistory(query, 'advanced', criteria)
+    // 仅当存在用户输入的检索条件时才写入历史（纯排序/limit 等程序化查询不算搜索）
+    const historyLabel = buildAdvancedSearchHistoryLabel(criteria)
+    if (historyLabel) {
+      db.addSearchHistory(historyLabel, 'advanced', criteria)
+    }
     return results
   })
 
