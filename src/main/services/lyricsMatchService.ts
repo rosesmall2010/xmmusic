@@ -2,7 +2,7 @@
  * 在线歌词匹配（参考 music-lrc-match：搜索网易云 → 相似度筛选 → 拉取 LRC）
  * 仅在主进程使用
  */
-import { writeFileSync, existsSync } from 'fs'
+import { writeFileSync, existsSync, unlinkSync } from 'fs'
 import { dirname, join, basename, extname } from 'path'
 import { net } from 'electron'
 import type { MusicItem } from '../../shared/types/music'
@@ -272,10 +272,11 @@ export default class LyricsMatchService {
   async matchOne(
     db: MusicDatabase,
     music: MusicItem,
-    options: { force?: boolean } = {}
+    options: { force?: boolean; shouldAbort?: () => boolean } = {}
   ): Promise<LyricsMatchResult> {
     const force = options.force === true
     const title = music.title || music.fileName
+    const isAborted = () => this.cancelled || options.shouldAbort?.() === true
     const cancelledResult = (): LyricsMatchResult => ({
       musicId: music.id,
       title,
@@ -283,7 +284,7 @@ export default class LyricsMatchService {
       message: '已取消'
     })
 
-    if (this.cancelled) return cancelledResult()
+    if (isAborted()) return cancelledResult()
 
     if (!music.filePath || !existsSync(music.filePath)) {
       return { musicId: music.id, title, status: 'failed', message: '音乐文件不存在' }
@@ -304,7 +305,7 @@ export default class LyricsMatchService {
     if (!force) {
       const local = this.lyricsService.findLyricsFile(music.filePath)
       if (local) {
-        if (this.cancelled) return cancelledResult()
+        if (isAborted()) return cancelledResult()
         db.updateAllMusic(music.id, { lyrics_path: local })
         return {
           musicId: music.id,
@@ -328,7 +329,7 @@ export default class LyricsMatchService {
       return { musicId: music.id, title, status: 'failed', message: e?.message || '搜索失败' }
     }
 
-    if (this.cancelled) return cancelledResult()
+    if (isAborted()) return cancelledResult()
 
     if (songs.length === 0) {
       return { musicId: music.id, title, status: 'failed', message: '未找到搜索结果' }
@@ -353,7 +354,7 @@ export default class LyricsMatchService {
       return { musicId: music.id, title, status: 'failed', message: e?.message || '获取歌词失败' }
     }
 
-    if (this.cancelled) return cancelledResult()
+    if (isAborted()) return cancelledResult()
 
     if (lyricPayload.instrumental) {
       return {
@@ -374,10 +375,11 @@ export default class LyricsMatchService {
       }
     }
 
-    if (this.cancelled) return cancelledResult()
+    if (isAborted()) return cancelledResult()
 
     const lrcPath = this.resolveLrcPath(music)
     try {
+      if (isAborted()) return cancelledResult()
       writeFileSync(lrcPath, lyricPayload.lyric, 'utf8')
     } catch (e: any) {
       return {
@@ -386,6 +388,16 @@ export default class LyricsMatchService {
         status: 'failed',
         message: e?.message || '写入歌词文件失败'
       }
+    }
+
+    // 取消可能发生在写文件后、写库前：删除刚写入的文件并终止，避免落盘/写库
+    if (isAborted()) {
+      try {
+        if (existsSync(lrcPath)) unlinkSync(lrcPath)
+      } catch {
+        // 删除失败时仅保留取消结果，避免再写库
+      }
+      return cancelledResult()
     }
 
     db.updateAllMusic(music.id, { lyrics_path: lrcPath })
@@ -443,7 +455,10 @@ export default class LyricsMatchService {
     const runOne = async (index: number) => {
       if (this.cancelled) return
       const music = songs[index]
-      const result = await this.matchOne(db, music, { force })
+      const result = await this.matchOne(db, music, {
+        force,
+        shouldAbort: () => this.cancelled
+      })
       // 取消后：丢弃进行中任务的回调，不计入统计/结果
       if (this.cancelled) return
       results[index] = result

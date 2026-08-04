@@ -154,11 +154,16 @@ const goToLocalMusic = () => {
 
 /** 打乱播放全部本地音乐 */
 const shufflePlayAll = async () => {
-  if (totalCount.value === 0 || shuffleLoading.value) return
+  if (shuffleLoading.value) return
 
   shuffleLoading.value = true
   try {
-    const allSongs = await window.electronAPI.getMusicList(0, totalCount.value)
+    // 每次点击前实时刷新总数，避免使用页面初次挂载时的过期计数
+    const latestTotal = await window.electronAPI.getMusicTotalCount()
+    totalCount.value = latestTotal
+    if (latestTotal <= 0) return
+
+    const allSongs = await window.electronAPI.getMusicList(0, latestTotal)
     if (!allSongs.length) return
 
     playerStore.queue = allSongs
