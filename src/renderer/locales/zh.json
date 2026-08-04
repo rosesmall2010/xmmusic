@@ -107,8 +107,7 @@
       "flame": "火焰",
       "lightning": "闪电",
       "vinyl": "经典唱片",
-      "cd": "光盘",
-      "cassette": "磁带"
+      "cd": "光盘"
     }
   },
   "miniPlayer": {
@@ -116,7 +115,6 @@
     "noMusic": "暂无播放",
     "unknownArtist": "未知艺术家",
     "switchToCd": "切换到 CD 特效",
-    "switchToCassette": "切换到磁带特效",
     "switchToCover": "切换到普通封面"
   },
   "settings": {
