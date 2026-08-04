@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { setLocale } from '@/locales'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
 /** 全屏播放页的视觉特效 */
-export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl'
+export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl' | 'cd'
+/** 迷你播放器封面特效 */
+export type MiniPlayerCoverEffect = 'cover' | 'cd'
 
 /** 特效切换顺序：按钮每次点击按此顺序循环 */
-export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl']
+export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl', 'cd']
 
 // 检测系统语言
 function detectSystemLanguage(): 'zh' | 'en' {
@@ -43,6 +45,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const savedEffect = localStorage.getItem('nowPlayingEffect') as NowPlayingEffect | null
   const nowPlayingEffect = ref<NowPlayingEffect>(
     savedEffect && NOW_PLAYING_EFFECTS.includes(savedEffect) ? savedEffect : 'spectrum'
+  )
+  const savedMiniCoverEffect = localStorage.getItem('miniPlayerCoverEffect') as MiniPlayerCoverEffect | null
+  const miniPlayerCoverEffect = ref<MiniPlayerCoverEffect>(
+    savedMiniCoverEffect === 'cd' ? 'cd' : 'cover'
   )
   // 特效开关：只对频谱/火焰/闪电有意义（唱盘本身不依赖这个开关）
   const nowPlayingEffectEnabled = ref(localStorage.getItem('nowPlayingEffectEnabled') !== 'false')
@@ -91,9 +97,18 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem('nowPlayingEffectEnabled', String(nowPlayingEffectEnabled.value))
   }
 
+  function setMiniPlayerCoverEffect(effect: MiniPlayerCoverEffect) {
+    miniPlayerCoverEffect.value = effect
+    localStorage.setItem('miniPlayerCoverEffect', effect)
+  }
+
+  function toggleMiniPlayerCoverEffect() {
+    setMiniPlayerCoverEffect(miniPlayerCoverEffect.value === 'cover' ? 'cd' : 'cover')
+  }
+
   /** 是否应该为可视化接管 Web Audio：唱盘不读频谱，用户关闭特效开关时也不需要 */
   function shouldCaptureNowPlayingAudio() {
-    return nowPlayingEffect.value !== 'vinyl' && nowPlayingEffectEnabled.value
+    return nowPlayingEffect.value !== 'vinyl' && nowPlayingEffect.value !== 'cd' && nowPlayingEffectEnabled.value
   }
 
   // Helper to apply theme
@@ -135,11 +150,14 @@ export const useSettingsStore = defineStore('settings', () => {
     scanOnStartup,
     nowPlayingEffect,
     nowPlayingEffectEnabled,
+    miniPlayerCoverEffect,
     setTheme,
     setLanguage,
     setNowPlayingEffect,
     cycleNowPlayingEffect,
     toggleNowPlayingEffectEnabled,
+    setMiniPlayerCoverEffect,
+    toggleMiniPlayerCoverEffect,
     shouldCaptureNowPlayingAudio,
     toggleCloseToTray,
     toggleAutoPlay,
