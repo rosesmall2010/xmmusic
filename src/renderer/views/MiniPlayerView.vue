@@ -7,6 +7,13 @@
       <div class="window-controls">
         <button
           class="control-btn"
+          @click="settingsStore.toggleMiniPlayerCoverEffect()"
+          :title="miniCoverToggleTitle"
+        >
+          <component :is="MiniEffectIcon" :size="18" />
+        </button>
+        <button
+          class="control-btn"
           @click="toggleTheme"
           :title="isDarkTheme ? $t('header.switchToLight') : $t('header.switchToDark')"
         >
@@ -22,7 +29,29 @@
     <!-- 主要内容 -->
     <div class="mini-content">
       <div class="cover-section">
-        <div class="cover-wrapper" :class="{ playing: isPlaying }">
+        <CdDisc
+          v-if="miniCoverEffect === 'cd'"
+          :cover-url="displayCoverUrl"
+          :active="isPlaying"
+          :light="!isDarkTheme"
+          alt="cover"
+        >
+          <template #fallback>
+            <DefaultCover mode="fill" />
+          </template>
+        </CdDisc>
+        <CassetteTapeFx
+          v-else-if="miniCoverEffect === 'cassette'"
+          :cover-url="displayCoverUrl"
+          :active="isPlaying"
+          :light="!isDarkTheme"
+          alt="cover"
+        >
+          <template #fallback>
+            <DefaultCover mode="fill" />
+          </template>
+        </CassetteTapeFx>
+        <div v-else class="cover-wrapper" :class="{ playing: isPlaying }">
           <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
           <template v-else>
             <DefaultCover class="fallback-cover" mode="fill" />
@@ -74,12 +103,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun, Disc3, CassetteTape, Disc } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import CdDisc from '@/components/effects/CdDisc.vue'
+import CassetteTapeFx from '@/components/effects/CassetteTape.vue'
 import type { LyricLine } from '@shared/types/lyrics'
 
 // 定义组件名称以支持keep-alive
@@ -88,6 +120,7 @@ defineOptions({
 })
 
 const router = useRouter()
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const settingsStore = useSettingsStore()
 const { play, pause, resume, seek } = usePlayer()
@@ -104,6 +137,21 @@ const currentMusic = computed(() => playerStore.currentMusic)
 const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
+const miniCoverEffect = computed(() => settingsStore.miniPlayerCoverEffect)
+const miniCoverToggleTitle = computed(() => {
+  if (miniCoverEffect.value === 'cover') return t('miniPlayer.switchToCd')
+  if (miniCoverEffect.value === 'cd') return t('miniPlayer.switchToCassette')
+  return t('miniPlayer.switchToCover')
+})
+const MiniEffectIcon = computed(() => {
+  if (miniCoverEffect.value === 'cover') return Disc
+  if (miniCoverEffect.value === 'cd') return CassetteTape
+  return Disc3
+})
+const displayCoverUrl = computed(() => {
+  const path = currentMusic.value?.coverPath
+  return path ? getCoverUrl(path) : null
+})
 
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
@@ -279,7 +327,7 @@ const handleSeek = (e: MouseEvent) => {
   position: absolute;
   top: 0;
   left: 0;
-  right: 72px;
+  right: 108px;
   height: 100%;
   -webkit-app-region: drag;
 }

@@ -36,7 +36,7 @@
           </span>
         </button>
         <button
-          v-if="effect !== 'vinyl'"
+          v-if="effect !== 'vinyl' && effect !== 'cd' && effect !== 'cassette'"
           class="btn-action"
           @click="settingsStore.toggleNowPlayingEffectEnabled()"
         >
@@ -75,7 +75,7 @@
       <div class="main-area" :class="{ 'is-vinyl': effect === 'vinyl' }">
         <!-- 左侧：封面和歌曲信息 -->
         <div class="left-panel" :class="{ 'is-vinyl': effect === 'vinyl' }">
-          <!-- 专辑封面：唱片特效下换成旋转黑胶 -->
+          <!-- 专辑封面：唱片/CD 特效下切换为旋转盘面 -->
           <div class="album-cover-container">
             <VinylRecord
               v-if="effect === 'vinyl'"
@@ -89,6 +89,30 @@
                 <DefaultCover mode="fill" />
               </template>
             </VinylRecord>
+            <CdDisc
+              v-else-if="effect === 'cd'"
+              :cover-url="displayCoverUrl"
+              :active="isPlaying"
+              :light="isLight"
+              :alt="$t('music.cover')"
+              @cover-error="onCoverError"
+            >
+              <template #fallback>
+                <DefaultCover mode="fill" />
+              </template>
+            </CdDisc>
+            <CassetteTapeFx
+              v-else-if="effect === 'cassette'"
+              :cover-url="displayCoverUrl"
+              :active="isPlaying"
+              :light="isLight"
+              :alt="$t('music.cover')"
+              @cover-error="onCoverError"
+            >
+              <template #fallback>
+                <DefaultCover mode="fill" />
+              </template>
+            </CassetteTapeFx>
             <div v-else class="album-cover">
               <DefaultCover v-if="!displayCoverUrl" mode="fill" />
               <template v-else>
@@ -285,10 +309,12 @@ import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackgro
 import FlameBackground from '@/components/effects/FlameBackground.vue'
 import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
+import CdDisc from '@/components/effects/CdDisc.vue'
+import CassetteTapeFx from '@/components/effects/CassetteTape.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc, CassetteTape, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -333,6 +359,8 @@ const EffectIcon = computed(() => {
   if (effect.value === 'flame') return Flame
   if (effect.value === 'lightning') return Zap
   if (effect.value === 'vinyl') return Disc3
+  if (effect.value === 'cd') return Disc
+  if (effect.value === 'cassette') return CassetteTape
   return AudioLines
 })
 
@@ -1373,7 +1401,9 @@ watch(
 }
 
 /* 唱片同样跟容器较小边缩放，避免塌缩或裁切 */
-.album-cover-container :deep(.vinyl) {
+.album-cover-container :deep(.vinyl),
+.album-cover-container :deep(.cd-disc),
+.album-cover-container :deep(.cassette) {
   width: min(100%, 100cqh);
   max-width: 100%;
   max-height: 100%;
