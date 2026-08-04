@@ -49,31 +49,32 @@ export default class TrayService {
 
   /**
    * 解析可用的托盘图标路径（开发 / 打包均兜底）
+   * 优先当前 App 主图标，避免误用过期的小尺寸 png
    */
   private resolveTrayIconPath(): string | null {
-    // Windows 托盘推荐 16×16；macOS / Linux 用 32 更清晰
-    const preferred =
-      process.platform === 'win32' ? ['icon-16.png', 'icon-32.png', 'icon.png'] : ['icon-32.png', 'icon-16.png', 'icon.png']
+    const preferred = [
+      'appicon2.png',
+      'icon.png',
+      'icon-32.png',
+      'icon-16.png',
+      'appicon.png'
+    ]
 
     const bases = [
+      join(app.getAppPath(), 'pic'),
+      join(process.cwd(), 'pic'),
       join(app.getAppPath(), 'build'),
       join(process.resourcesPath, 'build'),
       join(process.cwd(), 'build'),
-      // dist/electron/main/services → 项目根 /build
+      // dist/electron/main/services → 项目根
+      join(__dirname, '../../../pic'),
+      join(__dirname, '../../../../pic'),
       join(__dirname, '../../../build'),
-      join(__dirname, '../../../../build'),
-      join(process.cwd(), 'pic'),
-      join(app.getAppPath(), 'pic')
+      join(__dirname, '../../../../build')
     ]
-
-    const altNames = ['appicon2.png', 'appicon.png']
 
     for (const base of bases) {
       for (const name of preferred) {
-        const p = join(base, name)
-        if (existsSync(p)) return p
-      }
-      for (const name of altNames) {
         const p = join(base, name)
         if (existsSync(p)) return p
       }
@@ -83,7 +84,7 @@ export default class TrayService {
   }
 
   /**
-   * 生成适合当前平台的托盘 NativeImage
+   * 生成适合当前平台的托盘 NativeImage（彩色 App 图标，非 macOS 模板灰图）
    */
   private createTrayImage(): NativeImage {
     const iconPath = this.resolveTrayIconPath()
@@ -93,17 +94,16 @@ export default class TrayService {
       return icon
     }
 
-    // 按平台缩放到托盘合适尺寸（大图直接作托盘在 Windows 上常显示异常）
+    // 按平台缩放到托盘合适尺寸（从高清主图标缩小，保持彩色）
+    // macOS 菜单栏约 22pt；Windows 托盘约 16px
     const size = process.platform === 'darwin' ? 22 : 16
     const { width, height } = icon.getSize()
     if (width !== size || height !== size) {
-      icon = icon.resize({ width: size, height: size })
+      icon = icon.resize({ width: size, height: size, quality: 'best' })
     }
 
-    // 仅 macOS 使用模板图（随菜单栏深浅色自适应）；Windows 上开启会导致图标空白
-    if (process.platform === 'darwin') {
-      icon.setTemplateImage(true)
-    }
+    // 明确关闭模板图：否则 macOS 会把彩色图标渲成灰色剪影
+    icon.setTemplateImage(false)
 
     return icon
   }
