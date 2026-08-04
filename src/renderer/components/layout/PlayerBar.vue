@@ -92,10 +92,6 @@
         <EqualizerPanel v-model="showEqualizer" />
       </div>
 
-      <button class="control-icon-btn has-tip" @click="toggleLyrics" :data-tip="$t('nowPlaying.lyrics')">
-        <FileText :size="18" />
-      </button>
-
       <div class="volume-control">
         <button class="control-icon-btn" @click="toggleMute">
           <component :is="VolumeIcon" :size="18" />
@@ -122,7 +118,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
-import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, FileText, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
+import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import { useEqualizer } from '@/composables/useEqualizer'
 
@@ -282,11 +278,6 @@ const emit = defineEmits<{
 
 const toggleQueue = () => {
   emit('toggle-queue')
-}
-
-const toggleLyrics = () => {
-  // TODO: 打开歌词面板
-  console.log('Toggle lyrics')
 }
 
 const toggleEqualizer = () => {
