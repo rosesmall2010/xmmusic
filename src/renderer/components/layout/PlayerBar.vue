@@ -27,7 +27,6 @@
         <button
           class="control-btn"
           @click="previous"
-          :title="$t('player.previous')"
           :disabled="!hasMusic"
         >
           <SkipBack :size="18" />
@@ -36,7 +35,6 @@
         <button
           class="control-btn play-btn"
           @click="togglePlay"
-          :title="isPlaying ? $t('player.pause') : $t('player.play')"
           :disabled="!hasMusic && queue.length === 0"
         >
           <Play v-if="!isPlaying" :size="20" :style="{ marginLeft: '2px' }" />
@@ -46,21 +44,20 @@
         <button
           class="control-btn"
           @click="next"
-          :title="$t('player.next')"
           :disabled="!hasMusic"
         >
           <SkipForward :size="18" />
         </button>
 
         <button
-          class="control-btn"
+          class="control-btn has-tip"
           @click="togglePlayMode"
-          :title="playModeText"
+          :data-tip="playModeText"
         >
           <component :is="PlayModeIcon" v-if="PlayModeIcon" :size="18" />
         </button>
 
-        <button class="control-btn" @click="toggleQueue" :title="$t('queue.title')">
+        <button class="control-btn has-tip" @click="toggleQueue" :data-tip="$t('queue.title')">
           <List :size="18" />
         </button>
       </div>
@@ -83,24 +80,23 @@
         class="control-icon-btn"
         @click="toggleFavorite"
         :class="{ active: isFavorite }"
-        :title="$t('player.favorites')"
       >
         <Heart :size="18" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
       </button>
 
       <div class="equalizer-wrapper">
-        <button class="control-icon-btn" @click="toggleEqualizer" :title="$t('player.equalizer')">
+        <button class="control-icon-btn has-tip" @click="toggleEqualizer" :data-tip="$t('player.equalizer')">
           <Sliders :size="18" />
         </button>
         <EqualizerPanel v-model="showEqualizer" />
       </div>
 
-      <button class="control-icon-btn" @click="toggleLyrics" :title="$t('nowPlaying.lyrics')">
+      <button class="control-icon-btn has-tip" @click="toggleLyrics" :data-tip="$t('nowPlaying.lyrics')">
         <FileText :size="18" />
       </button>
 
       <div class="volume-control">
-        <button class="control-icon-btn" @click="toggleMute" :title="$t('player.volume')">
+        <button class="control-icon-btn" @click="toggleMute">
           <component :is="VolumeIcon" :size="18" />
         </button>
         <div class="volume-slider">
@@ -471,6 +467,7 @@ watch(
   color: var(--text-color);
   transition: all var(--transition-base) var(--transition-timing);
   font-size: 1.5rem;
+  position: relative;
 }
 
 .control-btn:hover:not(:disabled) {
@@ -525,34 +522,36 @@ watch(
   color: var(--color-primary);
 }
 
-/* Tooltip样式 */
-.control-icon-btn {
+/* 快速自定义 tip：用 data-tip，避免原生 title 延迟与双重提示 */
+.control-btn.has-tip,
+.control-icon-btn.has-tip {
   position: relative;
 }
 
-.control-icon-btn::before {
-  content: attr(title);
+.control-btn.has-tip::before,
+.control-icon-btn.has-tip::before {
+  content: attr(data-tip);
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 6px);
   left: 50%;
-  transform: translateX(-50%) translateY(-4px);
+  transform: translateX(-50%);
   padding: 4px 8px;
-  background: var(--bg-elevated);
-  color: var(--text-color);
+  background: var(--bg-elevated, rgba(0, 0, 0, 0.9));
+  color: var(--text-color, #fff);
   font-size: var(--font-size-xs);
   border-radius: var(--radius-sm);
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--transition-base) var(--transition-timing);
+  transition: opacity 0.12s ease 0.15s;
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
   z-index: 1000;
 }
 
-.control-icon-btn:hover::before {
+.control-btn.has-tip:hover::before,
+.control-icon-btn.has-tip:hover::before {
   opacity: 1;
-  transform: translateX(-50%) translateY(-8px);
 }
 
 /* 进度条 */

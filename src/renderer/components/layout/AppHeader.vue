@@ -66,20 +66,24 @@
     </div>
 
     <div class="header-right">
-      <button class="header-btn" @click="toggleMiniMode" :title="$t('header.miniMode')">
+      <button class="header-btn has-tip" @click="toggleMiniMode" :data-tip="$t('header.miniMode')">
         <Minimize2 :size="18" />
       </button>
 
-      <button class="header-btn" @click="toggleTheme" :title="theme === 'dark' ? $t('header.switchToLight') : $t('header.switchToDark')">
+      <button
+        class="header-btn has-tip"
+        @click="toggleTheme"
+        :data-tip="theme === 'dark' ? $t('header.switchToLight') : $t('header.switchToDark')"
+      >
         <Moon v-if="theme === 'light'" :size="18" />
         <Sun v-else :size="18" />
       </button>
 
-      <button class="header-btn" @click="toggleLanguage" :title="$t('header.switchLanguage')">
+      <button class="header-btn has-tip" @click="toggleLanguage" :data-tip="$t('header.switchLanguage')">
         <Languages :size="18" />
       </button>
 
-      <button class="header-btn" @click="openSettings" :title="$t('header.settings')">
+      <button class="header-btn has-tip" @click="openSettings" :data-tip="$t('header.settings')">
         <Settings :size="18" />
       </button>
 
@@ -515,10 +519,35 @@ const closeWindow = () => {
   /* 优化transition,仅对background做过渡,减少延迟 */
   transition: background var(--transition-fast) var(--transition-timing);
   -webkit-app-region: no-drag;
+  position: relative;
 }
 
 .header-btn:hover {
   background: var(--hover-bg);
+}
+
+.header-btn.has-tip::before {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: var(--bg-elevated, rgba(0, 0, 0, 0.9));
+  color: var(--text-color, #fff);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease 0.15s;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+  z-index: 1100;
+}
+
+.header-btn.has-tip:hover::before {
+  opacity: 1;
 }
 
 /* 窗口控制按钮 */

@@ -187,42 +187,46 @@
 
         <!-- 播放控制 -->
         <div class="controls">
-          <button class="btn-control btn-secondary" @click="toggleFavorite" :title="$t('player.favorites')">
+          <button class="btn-control btn-secondary" @click="toggleFavorite">
             <Heart :size="20" :fill="isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': isFavorite }" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="previous" :title="$t('player.previous')">
+          <button class="btn-control btn-secondary" @click="previous">
             <SkipBack :size="20" />
           </button>
 
-          <button class="btn-control btn-primary" @click="togglePlay" :title="isPlaying ? $t('player.pause') : $t('player.play')">
+          <button class="btn-control btn-primary" @click="togglePlay">
             <Play v-if="!isPlaying" :size="22" :style="{ marginLeft: '2px' }" />
             <Pause v-else :size="22" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="next" :title="$t('player.next')">
+          <button class="btn-control btn-secondary" @click="next">
             <SkipForward :size="20" />
           </button>
 
-          <button class="btn-control btn-secondary" @click="togglePlayMode" :title="playModeText">
+          <button class="btn-control btn-secondary has-tip" @click="togglePlayMode">
             <component :is="PlayModeIcon" :size="20" />
+            <span class="btn-tooltip">{{ playModeText }}</span>
           </button>
 
-          <button class="btn-control btn-secondary" @click="toggleEqualizer" :title="$t('player.equalizer')">
+          <button class="btn-control btn-secondary has-tip" @click="toggleEqualizer">
             <Sliders :size="20" />
+            <span class="btn-tooltip">{{ $t('player.equalizer') }}</span>
           </button>
 
           <button
-            class="btn-control btn-secondary"
+            class="btn-control btn-secondary has-tip"
             @click="handleOnlineMatchLyrics"
             :disabled="!currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate"
-            :title="matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline')"
           >
             <FileText :size="20" />
+            <span class="btn-tooltip">
+              {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+            </span>
           </button>
 
           <div class="volume-control">
-            <button class="btn-control btn-secondary" @click="toggleMute" :title="volumeValue === 0 ? $t('player.unmute') : $t('player.mute')">
+            <button class="btn-control btn-secondary" @click="toggleMute">
               <component :is="VolumeIcon" :size="20" />
             </button>
             <div class="volume-slider">
@@ -1133,7 +1137,7 @@ watch(
   background: var(--np-hover);
 }
 
-/* 自定义tooltip */
+/* 自定义tooltip：短延迟，避免原生 title 约 1s 与旧版 2s 过慢 */
 .btn-tooltip {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1147,11 +1151,12 @@ watch(
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s ease 2s; /* 2秒延迟后才显示 */
+  transition: opacity 0.12s ease 0.15s;
   z-index: 1000;
 }
 
-.btn-action:hover .btn-tooltip {
+.btn-action:hover .btn-tooltip,
+.btn-control.has-tip:hover .btn-tooltip {
   opacity: 1;
 }
 
@@ -1724,6 +1729,7 @@ watch(
   align-items: center;
   justify-content: center;
   transition: transform var(--transition-base);
+  position: relative;
 }
 
 /* 悬停时只加亮不放大，避免按钮溢出容器导致抖动和滚动条 */
