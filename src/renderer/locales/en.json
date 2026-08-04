@@ -106,16 +106,13 @@
       "spectrum": "Neon Spectrum",
       "flame": "Flame",
       "lightning": "Lightning",
-      "vinyl": "Classic Vinyl",
-      "cd": "CD"
+      "vinyl": "Classic Vinyl"
     }
   },
   "miniPlayer": {
     "exitMiniMode": "Exit Mini Mode",
     "noMusic": "No music playing",
-    "unknownArtist": "Unknown Artist",
-    "switchToCd": "Switch to CD effect",
-    "switchToCover": "Switch to normal cover"
+    "unknownArtist": "Unknown Artist"
   },
   "settings": {
     "title": "Settings",

@@ -7,13 +7,6 @@
       <div class="window-controls">
         <button
           class="control-btn"
-          @click="settingsStore.toggleMiniPlayerCoverEffect()"
-          :title="miniCoverEffect === 'cover' ? $t('miniPlayer.switchToCd') : $t('miniPlayer.switchToCover')"
-        >
-          <Disc3 :size="18" />
-        </button>
-        <button
-          class="control-btn"
           @click="toggleTheme"
           :title="isDarkTheme ? $t('header.switchToLight') : $t('header.switchToDark')"
         >
@@ -29,18 +22,7 @@
     <!-- 主要内容 -->
     <div class="mini-content">
       <div class="cover-section">
-        <CdDisc
-          v-if="miniCoverEffect === 'cd'"
-          :cover-url="displayCoverUrl"
-          :active="isPlaying"
-          :light="!isDarkTheme"
-          alt="cover"
-        >
-          <template #fallback>
-            <DefaultCover mode="fill" />
-          </template>
-        </CdDisc>
-        <div v-else class="cover-wrapper" :class="{ playing: isPlaying }">
+        <div class="cover-wrapper" :class="{ playing: isPlaying }">
           <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
           <template v-else>
             <DefaultCover class="fallback-cover" mode="fill" />
@@ -96,9 +78,8 @@ import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun, Disc3 } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
-import CdDisc from '@/components/effects/CdDisc.vue'
 import type { LyricLine } from '@shared/types/lyrics'
 
 // 定义组件名称以支持keep-alive
@@ -123,11 +104,6 @@ const currentMusic = computed(() => playerStore.currentMusic)
 const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
-const miniCoverEffect = computed(() => settingsStore.miniPlayerCoverEffect)
-const displayCoverUrl = computed(() => {
-  const path = currentMusic.value?.coverPath
-  return path ? getCoverUrl(path) : null
-})
 
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
@@ -303,7 +279,7 @@ const handleSeek = (e: MouseEvent) => {
   position: absolute;
   top: 0;
   left: 0;
-  right: 108px;
+  right: 72px;
   height: 100%;
   -webkit-app-region: drag;
 }
