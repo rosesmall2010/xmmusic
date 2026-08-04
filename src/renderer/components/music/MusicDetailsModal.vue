@@ -3,7 +3,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>{{ $t('music.details') }}</h2>
-        <button class="close-btn" @click="close">
+        <button class="close-btn" @click="close" :title="$t('common.close')">
           <X :size="20" />
         </button>
       </div>

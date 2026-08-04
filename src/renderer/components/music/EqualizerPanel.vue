@@ -2,7 +2,7 @@
   <div class="equalizer-panel" v-if="modelValue">
     <div class="panel-header">
       <h3 class="panel-title">{{ $t('player.equalizer') }}</h3>
-      <button class="close-btn" @click="emit('update:modelValue', false)">
+      <button class="close-btn" @click="emit('update:modelValue', false)" :title="$t('common.close')">
         <X :size="16" />
       </button>
     </div>

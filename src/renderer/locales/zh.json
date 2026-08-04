@@ -33,7 +33,12 @@
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
     "settings": "设置",
-    "switchLanguage": "切换语言"
+    "switchLanguage": "切换语言",
+    "clearSearch": "清除搜索"
+  },
+  "window": {
+    "minimize": "最小化",
+    "maximize": "最大化"
   },
   "sidebar": {
     "local": "本地音乐",

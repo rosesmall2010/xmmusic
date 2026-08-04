@@ -33,7 +33,12 @@
     "switchToLight": "Switch to Light Mode",
     "switchToDark": "Switch to Dark Mode",
     "settings": "Settings",
-    "switchLanguage": "Switch Language"
+    "switchLanguage": "Switch Language",
+    "clearSearch": "Clear search"
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize": "Maximize"
   },
   "sidebar": {
     "local": "Local Music",

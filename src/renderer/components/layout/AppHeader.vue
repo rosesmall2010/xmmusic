@@ -17,7 +17,7 @@
             @blur="handleSearchBlur"
             @input="handleSearchInput"
           />
-          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+          <button v-if="searchQuery" class="clear-btn" @click="clearSearch" :title="$t('header.clearSearch')">
             <X :size="20" />
           </button>
         </div>
@@ -84,13 +84,13 @@
       </button>
 
       <div class="window-controls" v-if="!isMac">
-        <button class="win-btn minimize" @click="minimizeWindow">
+        <button class="win-btn minimize" @click="minimizeWindow" :title="$t('window.minimize')">
           <span>−</span>
         </button>
-        <button class="win-btn maximize" @click="maximizeWindow">
+        <button class="win-btn maximize" @click="maximizeWindow" :title="$t('window.maximize')">
           <span>□</span>
         </button>
-        <button class="win-btn close" @click="closeWindow">
+        <button class="win-btn close" @click="closeWindow" :title="$t('common.close')">
           <X :size="24" />
         </button>
       </div>

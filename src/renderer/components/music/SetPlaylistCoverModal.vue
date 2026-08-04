@@ -3,7 +3,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3>{{ $t('playlist.setCover') }}</h3>
-        <button class="close-btn" @click="close">×</button>
+        <button class="close-btn" @click="close" :title="$t('common.close')">×</button>
       </div>
 
       <div class="modal-body">

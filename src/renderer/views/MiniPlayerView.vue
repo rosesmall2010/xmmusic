@@ -41,14 +41,14 @@
 
       <!-- 控制栏 -->
       <div class="controls-section">
-        <button class="control-btn" @click="previous">
+        <button class="control-btn" @click="previous" :title="$t('player.previous')">
           <SkipBack :size="18" />
         </button>
-        <button class="control-btn play-btn" @click="togglePlay">
+        <button class="control-btn play-btn" @click="togglePlay" :title="isPlaying ? $t('player.pause') : $t('player.play')">
           <Play v-if="!isPlaying" :size="20" :style="{ marginLeft: '2px' }" />
           <Pause v-else :size="20" />
         </button>
-        <button class="control-btn" @click="next">
+        <button class="control-btn" @click="next" :title="$t('player.next')">
           <SkipForward :size="18" />
         </button>
       </div>

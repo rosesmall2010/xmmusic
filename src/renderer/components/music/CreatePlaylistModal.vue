@@ -3,7 +3,7 @@
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h3>{{ isEdit ? $t('playlist.edit') : $t('playlist.create') }}</h3>
-        <button class="close-btn" @click="close">
+        <button class="close-btn" @click="close" :title="$t('common.close')">
           <X :size="24" />
         </button>
       </div>
