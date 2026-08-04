@@ -24,7 +24,11 @@
           <p>{{ $t('sidebar.totalSongs', { count: totalCount }) }}</p>
         </div>
 
-        <div class="recommendation-card">
+        <div
+          class="recommendation-card"
+          :class="{ disabled: totalCount === 0 || shuffleLoading }"
+          @click="shufflePlayAll"
+        >
           <div class="card-icon"><Shuffle :size="48" stroke-width="1.5" /></div>
           <h3>{{ $t('player.shuffle') }}</h3>
           <p>{{ $t('discover.shuffleAll') }}</p>
@@ -84,6 +88,7 @@ const recentCount = ref(0)
 const favoritesCount = ref(0)
 const totalCount = ref(0)
 const recentlyAdded = ref<MusicItem[]>([])
+const shuffleLoading = ref(false)
 
 onMounted(async () => {
   // 加载统计数据
@@ -147,6 +152,27 @@ const goToLocalMusic = () => {
   router.push('/local')
 }
 
+/** 打乱播放全部本地音乐 */
+const shufflePlayAll = async () => {
+  if (totalCount.value === 0 || shuffleLoading.value) return
+
+  shuffleLoading.value = true
+  try {
+    const allSongs = await window.electronAPI.getMusicList(0, totalCount.value)
+    if (!allSongs.length) return
+
+    playerStore.queue = allSongs
+    playerStore.playMode = 'random'
+    playerStore.shuffleQueue()
+    playerStore.setCurrentQueueIndex(0)
+    await play(playerStore.queue[0])
+  } catch (error) {
+    console.error('随机播放失败:', error)
+  } finally {
+    shuffleLoading.value = false
+  }
+}
+
 const playMusic = async (music: MusicItem) => {
   playerStore.addToQueue(music)
   const index = playerStore.queue.findIndex(m => m.id === music.id)
@@ -199,6 +225,12 @@ const playMusic = async (music: MusicItem) => {
 .recommendation-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
+}
+
+.recommendation-card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .card-icon {
