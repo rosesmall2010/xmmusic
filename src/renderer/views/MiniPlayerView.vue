@@ -5,6 +5,14 @@
     <div class="mini-header">
       <div class="drag-region"></div>
       <div class="window-controls">
+        <button
+          class="control-btn"
+          @click="toggleTheme"
+          :title="isDarkTheme ? $t('header.switchToLight') : $t('header.switchToDark')"
+        >
+          <Moon v-if="!isDarkTheme" :size="18" />
+          <Sun v-else :size="18" />
+        </button>
         <button class="control-btn close" @click="exitMiniMode" :title="$t('miniPlayer.exitMiniMode')">
           <Maximize2 :size="20" />
         </button>
@@ -70,7 +78,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Maximize2 } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import type { LyricLine } from '@shared/types/lyrics'
 
@@ -84,15 +92,12 @@ const playerStore = usePlayerStore()
 const settingsStore = useSettingsStore()
 const { play, pause, resume, seek } = usePlayer()
 
-// 检测当前主题
+// 当前生效主题（system 解析为实际 light/dark），与顶栏一致
 const isDarkTheme = computed(() => {
-  const appElement = document.getElementById('app')
-  if (!appElement) {
-    return settingsStore.theme === 'dark' || 
-      (settingsStore.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  if (settingsStore.theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
   }
-  return appElement.classList.contains('dark') || 
-    (!appElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  return settingsStore.theme === 'dark'
 })
 
 const currentMusic = computed(() => playerStore.currentMusic)
@@ -177,6 +182,15 @@ const exitMiniMode = async () => {
   } else {
     router.replace('/')
   }
+}
+
+/** 与主界面顶栏同一套逻辑：在 light/dark 间切换并同步窗口外观 */
+const toggleTheme = async () => {
+  const next = isDarkTheme.value ? 'light' : 'dark'
+  settingsStore.setTheme(next)
+  await window.electronAPI.saveSettings({ theme: next })
+  await window.electronAPI.setWindowTheme(next)
+  window.dispatchEvent(new CustomEvent('theme-changed', { detail: next }))
 }
 
 const togglePlay = async () => {
@@ -265,12 +279,15 @@ const handleSeek = (e: MouseEvent) => {
   position: absolute;
   top: 0;
   left: 0;
-  right: 40px;
+  right: 72px;
   height: 100%;
   -webkit-app-region: drag;
 }
 
 .window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   -webkit-app-region: no-drag;
 }
 
