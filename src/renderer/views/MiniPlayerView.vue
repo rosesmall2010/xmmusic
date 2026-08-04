@@ -29,12 +29,13 @@
 
       <div class="info-section">
         <div class="music-title" :title="currentMusic?.title">{{ currentMusic?.title || $t('miniPlayer.noMusic') }}</div>
+        <div class="music-artist" :title="currentMusic?.artist">{{ currentMusic?.artist || $t('miniPlayer.unknownArtist') }}</div>
         <div
-          class="music-secondary"
-          :class="{ lyric: !!currentLyricText }"
-          :title="currentLyricText || currentMusic?.artist || $t('miniPlayer.unknownArtist')"
+          v-if="currentLyricText"
+          class="music-lyric"
+          :title="currentLyricText"
         >
-          {{ currentLyricText || currentMusic?.artist || $t('miniPlayer.unknownArtist') }}
+          {{ currentLyricText }}
         </div>
       </div>
 
@@ -102,7 +103,7 @@ const duration = computed(() => playerStore.duration)
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
 
-/** 有歌词时展示当前一句；无歌词/空行则回退歌手名 */
+/** 有歌词时展示当前一句；无歌词不显示该行 */
 const currentLyricText = computed(() => {
   if (lyrics.value.length === 0 || currentLyricIndex.value < 0) return ''
   const text = lyrics.value[currentLyricIndex.value]?.text?.trim()
@@ -356,18 +357,21 @@ const handleSeek = (e: MouseEvent) => {
   color: var(--text-color);
 }
 
-.music-secondary {
+.music-artist {
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: 1.2em;
-  transition: color var(--transition-fast);
 }
 
-.music-secondary.lyric {
+.music-lyric {
+  margin-top: 6px;
+  font-size: 13px;
   color: var(--color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .progress-section {
