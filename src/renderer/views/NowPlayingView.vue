@@ -1112,11 +1112,12 @@ watch(
   padding: 0 var(--spacing-xl);
   -webkit-app-region: drag;
   position: relative;
-  z-index: 1;
+  /* 高于内容区，避免 tip 被下层盖住；勿用 overflow 裁切 tip */
+  z-index: 20;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .btn-back {
@@ -1179,7 +1180,9 @@ watch(
 .win-btn[data-tip]::before {
   content: attr(data-tip);
   position: absolute;
-  bottom: calc(100% + 6px);
+  /* 顶栏贴顶：tip 向下展开，避免被页面 overflow 裁掉 */
+  top: calc(100% + 6px);
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
   padding: 4px 8px;
@@ -1190,13 +1193,13 @@ watch(
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease; /* 移开：约 0.15s 消失 */
+  transition: opacity 0.15s ease;
   z-index: 1000;
 }
 
 .win-btn[data-tip]:hover::before {
   opacity: 1;
-  transition: opacity 0.12s ease 1s; /* 悬停：约 1s 后显示 */
+  transition: opacity 0.12s ease 1s;
 }
 
 .btn-action {
@@ -1213,6 +1216,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .btn-action:hover {
@@ -1222,7 +1226,6 @@ watch(
 /* 自定义 tip：悬停约 1s 显示，移开约 0.15s 消失 */
 .btn-tooltip {
   position: absolute;
-  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.9);
@@ -1237,21 +1240,44 @@ watch(
   z-index: 1000;
 }
 
-.btn-action:hover .btn-tooltip,
-.btn-control.has-tip:hover .btn-tooltip {
-  opacity: 1;
-  transition: opacity 0.12s ease 1s;
+/* 顶栏按钮：tip 显示在下方（上方会被全屏页 overflow 裁切） */
+.top-bar .btn-tooltip {
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 
-/* tooltip箭头 */
-.btn-tooltip::after {
+.top-bar .btn-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  top: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-bottom-color: rgba(0, 0, 0, 0.9);
+}
+
+/* 底栏控制：tip 显示在上方 */
+.player-footer .btn-tooltip {
+  bottom: calc(100% + 8px);
+  top: auto;
+}
+
+.player-footer .btn-tooltip::after {
   content: '';
   position: absolute;
   top: 100%;
+  bottom: auto;
   left: 50%;
   transform: translateX(-50%);
   border: 4px solid transparent;
   border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+.btn-action:hover .btn-tooltip,
+.btn-control.has-tip:hover .btn-tooltip {
+  opacity: 1;
+  transition: opacity 0.12s ease 1s;
 }
 
 .content {
@@ -1664,8 +1690,11 @@ watch(
   padding: var(--spacing-lg) 0;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  /* 允许 tip 向上溢出，勿用 overflow-x:hidden（会连带裁掉纵向） */
+  overflow: visible;
   box-sizing: border-box;
+  position: relative;
+  z-index: 20;
 }
 
 .progress-section {
@@ -1730,7 +1759,7 @@ watch(
   flex-wrap: wrap;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -1813,6 +1842,7 @@ watch(
   justify-content: center;
   transition: transform var(--transition-base);
   position: relative;
+  overflow: visible;
 }
 
 /* 悬停时只加亮不放大，避免按钮溢出容器导致抖动和滚动条 */
