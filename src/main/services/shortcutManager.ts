@@ -1,6 +1,12 @@
 import { globalShortcut, app, BrowserWindow } from 'electron'
 import type { ShortcutConfig } from '../../shared/types/settings'
 
+/**
+ * 暂时关闭全局快捷键注册：会抢占系统媒体键等，影响其他 App。
+ * 恢复时改为 true 即可。
+ */
+const ENABLE_GLOBAL_SHORTCUTS = false
+
 export default class ShortcutManager {
   private mainWindow: BrowserWindow | null = null
   private shortcuts: Map<string, string> = new Map()
@@ -73,6 +79,12 @@ export default class ShortcutManager {
     // 先注销所有已注册的快捷键
     this.unregisterAll()
 
+    // 暂时不注册全局快捷键，避免影响其他 App
+    if (!ENABLE_GLOBAL_SHORTCUTS) {
+      console.log('⏸️  全局快捷键已暂时禁用（ENABLE_GLOBAL_SHORTCUTS=false）')
+      return
+    }
+
     console.log(`📋 开始注册快捷键，共 ${Object.keys(shortcuts).length} 个`)
 
     // 注册新的快捷键
@@ -128,6 +140,12 @@ export default class ShortcutManager {
     if (oldAccelerator) {
       console.log(`🔄 [快捷键更新] ${action}: ${oldAccelerator} -> ${accelerator}`)
       globalShortcut.unregister(oldAccelerator)
+      this.shortcuts.delete(action)
+    }
+
+    if (!ENABLE_GLOBAL_SHORTCUTS) {
+      console.log(`⏸️  跳过注册（全局快捷键已暂时禁用）: ${action}`)
+      return true
     }
 
     if (!accelerator || accelerator === '') {
@@ -181,6 +199,10 @@ export default class ShortcutManager {
    */
   isAvailable(accelerator: string): boolean {
     if (!accelerator || accelerator === '') {
+      return true
+    }
+
+    if (!ENABLE_GLOBAL_SHORTCUTS) {
       return true
     }
 
