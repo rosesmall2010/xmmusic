@@ -29,7 +29,13 @@
 
       <div class="info-section">
         <div class="music-title" :title="currentMusic?.title">{{ currentMusic?.title || $t('miniPlayer.noMusic') }}</div>
-        <div class="music-artist" :title="currentMusic?.artist">{{ currentMusic?.artist || $t('miniPlayer.unknownArtist') }}</div>
+        <div
+          class="music-secondary"
+          :class="{ lyric: !!currentLyricText }"
+          :title="currentLyricText || currentMusic?.artist || $t('miniPlayer.unknownArtist')"
+        >
+          {{ currentLyricText || currentMusic?.artist || $t('miniPlayer.unknownArtist') }}
+        </div>
       </div>
 
       <!-- 进度条 -->
@@ -57,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
@@ -65,6 +71,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
 import { SkipBack, Play, Pause, SkipForward, Maximize2 } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import type { LyricLine } from '@shared/types/lyrics'
 
 // 定义组件名称以支持keep-alive
 defineOptions({
@@ -92,9 +99,71 @@ const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
 
+const lyrics = ref<LyricLine[]>([])
+const currentLyricIndex = ref(-1)
+
+/** 有歌词时展示当前一句；无歌词/空行则回退歌手名 */
+const currentLyricText = computed(() => {
+  if (lyrics.value.length === 0 || currentLyricIndex.value < 0) return ''
+  const text = lyrics.value[currentLyricIndex.value]?.text?.trim()
+  return text || ''
+})
+
 const progressPercentage = computed(() => {
   if (!duration.value) return 0
   return (currentTime.value / duration.value) * 100
+})
+
+const syncLyricIndex = (time: number) => {
+  if (lyrics.value.length === 0) {
+    currentLyricIndex.value = -1
+    return
+  }
+
+  let index = lyrics.value.findIndex(line => line.time > time)
+  if (index === -1) {
+    index = lyrics.value.length - 1
+  } else {
+    index = Math.max(0, index - 1)
+  }
+
+  if (index !== currentLyricIndex.value) {
+    currentLyricIndex.value = index
+  }
+}
+
+const loadLyrics = async (musicId: number) => {
+  lyrics.value = []
+  currentLyricIndex.value = -1
+
+  try {
+    const lyricsData = await window.electronAPI.loadLyrics(musicId)
+    // 切歌后丢弃过期结果
+    if (currentMusic.value?.id !== musicId) return
+    if (lyricsData?.lines?.length) {
+      lyrics.value = lyricsData.lines
+      syncLyricIndex(currentTime.value)
+    }
+  } catch (error) {
+    console.error('迷你模式加载歌词失败:', error)
+  }
+}
+
+watch(
+  () => currentMusic.value?.id,
+  (id) => {
+    if (id != null) {
+      loadLyrics(id)
+    } else {
+      lyrics.value = []
+      currentLyricIndex.value = -1
+    }
+  },
+  { immediate: true }
+)
+
+watch(currentTime, (time) => {
+  syncLyricIndex(time)
 })
 
 const exitMiniMode = async () => {
@@ -287,12 +356,18 @@ const handleSeek = (e: MouseEvent) => {
   color: var(--text-color);
 }
 
-.music-artist {
+.music-secondary {
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-height: 1.2em;
+  transition: color var(--transition-fast);
+}
+
+.music-secondary.lyric {
+  color: var(--color-primary);
 }
 
 .progress-section {
