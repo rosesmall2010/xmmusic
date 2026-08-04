@@ -54,6 +54,18 @@
           <List :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.showQueue') }}</span>
         </button>
+
+        <div v-if="!isMac" class="window-controls">
+          <button class="win-btn minimize" @click="minimizeWindow" :data-tip="$t('window.minimize')">
+            <span>−</span>
+          </button>
+          <button class="win-btn maximize" @click="maximizeWindow" :data-tip="$t('window.maximize')">
+            <span>□</span>
+          </button>
+          <button class="win-btn close" @click="closeWindow" :data-tip="$t('common.close')">
+            <X :size="18" />
+          </button>
+        </div>
       </div>
     </div>
 
@@ -273,7 +285,7 @@ import VinylRecord from '@/components/effects/VinylRecord.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -538,6 +550,21 @@ const toggleMiniMode = async () => {
   localStorage.setItem('lastRoute', router.currentRoute.value.fullPath)
   await window.electronAPI.setMiniMode(true)
   router.replace('/mini')
+}
+
+/** Windows / Linux 无边框窗口：全屏页右上角需自绘窗口控件 */
+const isMac = ref(navigator.userAgent.includes('Mac'))
+
+const minimizeWindow = () => {
+  window.electronAPI.minimizeWindow()
+}
+
+const maximizeWindow = () => {
+  window.electronAPI.maximizeWindow()
+}
+
+const closeWindow = () => {
+  window.electronAPI.closeWindow()
 }
 
 /** 与主界面顶栏同一套逻辑：在 light/dark 间切换并同步窗口外观 */
