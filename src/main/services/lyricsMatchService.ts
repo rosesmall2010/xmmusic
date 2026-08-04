@@ -276,6 +276,14 @@ export default class LyricsMatchService {
   ): Promise<LyricsMatchResult> {
     const force = options.force === true
     const title = music.title || music.fileName
+    const cancelledResult = (): LyricsMatchResult => ({
+      musicId: music.id,
+      title,
+      status: 'failed',
+      message: '已取消'
+    })
+
+    if (this.cancelled) return cancelledResult()
 
     if (!music.filePath || !existsSync(music.filePath)) {
       return { musicId: music.id, title, status: 'failed', message: '音乐文件不存在' }
@@ -296,6 +304,7 @@ export default class LyricsMatchService {
     if (!force) {
       const local = this.lyricsService.findLyricsFile(music.filePath)
       if (local) {
+        if (this.cancelled) return cancelledResult()
         db.updateAllMusic(music.id, { lyrics_path: local })
         return {
           musicId: music.id,
@@ -318,6 +327,8 @@ export default class LyricsMatchService {
     } catch (e: any) {
       return { musicId: music.id, title, status: 'failed', message: e?.message || '搜索失败' }
     }
+
+    if (this.cancelled) return cancelledResult()
 
     if (songs.length === 0) {
       return { musicId: music.id, title, status: 'failed', message: '未找到搜索结果' }
@@ -342,6 +353,8 @@ export default class LyricsMatchService {
       return { musicId: music.id, title, status: 'failed', message: e?.message || '获取歌词失败' }
     }
 
+    if (this.cancelled) return cancelledResult()
+
     if (lyricPayload.instrumental) {
       return {
         musicId: music.id,
@@ -360,6 +373,8 @@ export default class LyricsMatchService {
         message: '歌词为空'
       }
     }
+
+    if (this.cancelled) return cancelledResult()
 
     const lrcPath = this.resolveLrcPath(music)
     try {
@@ -405,6 +420,9 @@ export default class LyricsMatchService {
     let completed = 0
     let nextIndex = 0
     const results: Array<LyricsMatchResult | undefined> = new Array(total)
+    /** 正在进行中的任务标题（按队列下标） */
+    const activeTitles = new Map<number, string>()
+    let lastDoneTitle = ''
 
     const bump = (status: LyricsMatchStatus) => {
       if (status === 'matched' || status === 'linked_local') success++
@@ -412,14 +430,22 @@ export default class LyricsMatchService {
       else skipped++
     }
 
-    const emitProgress = (music: MusicItem, lastStatus?: LyricsMatchStatus) => {
+    const formatActiveTitle = (): string => {
+      const titles = [...activeTitles.values()]
+      if (titles.length === 0) return lastDoneTitle
+      if (titles.length === 1) return titles[0]
+      return `${titles[0]} 等 ${titles.length} 首`
+    }
+
+    const emitProgress = (lastStatus?: LyricsMatchStatus) => {
       options.onProgress?.({
-        current: completed,
+        // 已完成 + 进行中，避免长期停在 0/N 且与标题脱节
+        current: Math.min(total, completed + activeTitles.size),
         total,
         success,
         failed,
         skipped,
-        currentTitle: music.title || music.fileName,
+        currentTitle: formatActiveTitle(),
         lastStatus
       })
     }
@@ -427,12 +453,24 @@ export default class LyricsMatchService {
     const runOne = async (index: number) => {
       if (this.cancelled) return
       const music = songs[index]
-      emitProgress(music)
-      const result = await this.matchOne(db, music, { force })
-      results[index] = result
-      bump(result.status)
-      completed++
-      emitProgress(music, result.status)
+      const title = music.title || music.fileName
+      activeTitles.set(index, title)
+      emitProgress()
+      try {
+        const result = await this.matchOne(db, music, { force })
+        // 取消后：丢弃进行中任务的回调，不计入统计/结果
+        if (this.cancelled) return
+        results[index] = result
+        bump(result.status)
+        completed++
+        lastDoneTitle = title
+        emitProgress(result.status)
+      } finally {
+        activeTitles.delete(index)
+        if (this.cancelled) {
+          emitProgress()
+        }
+      }
     }
 
     const workerCount = Math.min(BATCH_CONCURRENCY, total)
