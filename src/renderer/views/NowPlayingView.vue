@@ -14,30 +14,22 @@
       </button>
 
       <div class="actions">
-        <button class="btn-action" @click="toggleMiniMode" :title="$t('nowPlaying.switchToMini')">
+        <button class="btn-action" @click="toggleMiniMode">
           <Minimize2 :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.switchToMini') }}</span>
         </button>
-        <button
-          class="btn-action"
-          @click="toggleTheme"
-          :title="isLight ? $t('header.switchToDark') : $t('header.switchToLight')"
-        >
+        <button class="btn-action" @click="toggleTheme">
           <Moon v-if="isLight" :size="20" />
           <Sun v-else :size="20" />
           <span class="btn-tooltip">
             {{ isLight ? $t('header.switchToDark') : $t('header.switchToLight') }}
           </span>
         </button>
-        <button class="btn-action" @click="toggleLanguage" :title="$t('header.switchLanguage')">
+        <button class="btn-action" @click="toggleLanguage">
           <Languages :size="20" />
           <span class="btn-tooltip">{{ $t('header.switchLanguage') }}</span>
         </button>
-        <button
-          class="btn-action"
-          @click="cycleEffect"
-          :title="`${$t('nowPlaying.switchEffect')}：${$t(`nowPlaying.effect.${effect}`)}`"
-        >
+        <button class="btn-action" @click="cycleEffect">
           <component :is="EffectIcon" :size="20" />
           <span class="btn-tooltip">
             {{ $t('nowPlaying.switchEffect') }}：{{ $t(`nowPlaying.effect.${effect}`) }}
@@ -47,7 +39,6 @@
           v-if="effect !== 'vinyl'"
           class="btn-action"
           @click="settingsStore.toggleNowPlayingEffectEnabled()"
-          :title="effectEnabled ? $t('nowPlaying.disableEffect') : $t('nowPlaying.enableEffect')"
         >
           <Eye v-if="effectEnabled" :size="20" />
           <EyeOff v-else :size="20" />
@@ -55,11 +46,11 @@
             {{ effectEnabled ? $t('nowPlaying.disableEffect') : $t('nowPlaying.enableEffect') }}
           </span>
         </button>
-        <button class="btn-action" @click="toggleDesktopLyrics" :title="$t('nowPlaying.desktopLyrics')">
+        <button class="btn-action" @click="toggleDesktopLyrics">
           <Monitor :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.desktopLyrics') }}</span>
         </button>
-        <button class="btn-action" @click="toggleQueue" :title="$t('nowPlaying.showQueue')">
+        <button class="btn-action" @click="toggleQueue">
           <List :size="20" />
           <span class="btn-tooltip">{{ $t('nowPlaying.showQueue') }}</span>
         </button>
