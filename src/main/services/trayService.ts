@@ -1,5 +1,6 @@
-import { app, Tray, Menu, nativeImage, BrowserWindow } from 'electron'
+import { app, Tray, Menu, nativeImage, BrowserWindow, NativeImage } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 
 export default class TrayService {
   private tray: Tray | null = null
@@ -15,15 +16,14 @@ export default class TrayService {
    * 创建系统托盘
    */
   createTray(): void {
-    // 创建托盘图标
-    const iconPath = this.getTrayIcon()
-    const icon = nativeImage.createFromPath(iconPath)
-    icon.setTemplateImage(true) // macOS 支持模板图片
+    const icon = this.createTrayImage()
+    if (icon.isEmpty()) {
+      console.error('❌ 托盘图标加载失败：未找到可用图标文件')
+    }
 
     this.tray = new Tray(icon)
     this.tray.setToolTip('xmmusic')
 
-    // 创建托盘菜单
     this.updateTrayMenu()
 
     // 点击托盘图标显示/隐藏窗口
@@ -48,20 +48,64 @@ export default class TrayService {
   }
 
   /**
-   * 获取托盘图标路径
+   * 解析可用的托盘图标路径（开发 / 打包均兜底）
    */
-  private getTrayIcon(): string {
-    const platform = process.platform
-    if (platform === 'darwin') {
-      // macOS
-      return join(__dirname, '../../assets/tray-icon-mac.png')
-    } else if (platform === 'win32') {
-      // Windows
-      return join(__dirname, '../../assets/tray-icon-win.png')
-    } else {
-      // Linux
-      return join(__dirname, '../../assets/tray-icon-linux.png')
+  private resolveTrayIconPath(): string | null {
+    // Windows 托盘推荐 16×16；macOS / Linux 用 32 更清晰
+    const preferred =
+      process.platform === 'win32' ? ['icon-16.png', 'icon-32.png', 'icon.png'] : ['icon-32.png', 'icon-16.png', 'icon.png']
+
+    const bases = [
+      join(app.getAppPath(), 'build'),
+      join(process.resourcesPath, 'build'),
+      join(process.cwd(), 'build'),
+      // dist/electron/main/services → 项目根 /build
+      join(__dirname, '../../../build'),
+      join(__dirname, '../../../../build'),
+      join(process.cwd(), 'pic'),
+      join(app.getAppPath(), 'pic')
+    ]
+
+    const altNames = ['appicon2.png', 'appicon.png']
+
+    for (const base of bases) {
+      for (const name of preferred) {
+        const p = join(base, name)
+        if (existsSync(p)) return p
+      }
+      for (const name of altNames) {
+        const p = join(base, name)
+        if (existsSync(p)) return p
+      }
     }
+
+    return null
+  }
+
+  /**
+   * 生成适合当前平台的托盘 NativeImage
+   */
+  private createTrayImage(): NativeImage {
+    const iconPath = this.resolveTrayIconPath()
+    let icon = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty()
+
+    if (icon.isEmpty()) {
+      return icon
+    }
+
+    // 按平台缩放到托盘合适尺寸（大图直接作托盘在 Windows 上常显示异常）
+    const size = process.platform === 'darwin' ? 22 : 16
+    const { width, height } = icon.getSize()
+    if (width !== size || height !== size) {
+      icon = icon.resize({ width: size, height: size })
+    }
+
+    // 仅 macOS 使用模板图（随菜单栏深浅色自适应）；Windows 上开启会导致图标空白
+    if (process.platform === 'darwin') {
+      icon.setTemplateImage(true)
+    }
+
+    return icon
   }
 
   /**
@@ -145,13 +189,10 @@ export default class TrayService {
    */
   private updateTrayIcon(): void {
     if (!this.tray) return
-
-    // 可以根据播放状态切换图标
-    // 这里简化处理，保持同一个图标
-    const iconPath = this.getTrayIcon()
-    const icon = nativeImage.createFromPath(iconPath)
-    icon.setTemplateImage(true)
-    this.tray.setImage(icon)
+    const icon = this.createTrayImage()
+    if (!icon.isEmpty()) {
+      this.tray.setImage(icon)
+    }
   }
 
   /**

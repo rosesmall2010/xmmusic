@@ -11,6 +11,11 @@ import TrayService from './services/trayService'
 // 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
 app.name = 'xmmusic'
 
+// Windows：统一 AppUserModelID，避免任务栏/通知与托盘分组错乱
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.rosesmall2010.xmmusic')
+}
+
 // 注册自定义协议特权（必须在 app ready 之前调用）
 // standard: true 是媒体元素能对该协议正常 seek 的必要条件（electron#51442），
 // 否则拖动进度条会触发 FFmpegDemuxer "data source error"，播放管线挂死、歌词不再跟随。
@@ -44,12 +49,35 @@ if (!app.isPackaged && (process.env.NODE_ENV === 'development' || !process.env.N
   console.log('='.repeat(60))
 }
 
+/**
+ * Release 单实例：同一系统仅允许一个已打包实例运行。
+ * Dev（未打包）不抢锁，可多开；与 Release 的 userData/锁互不干扰。
+ * 必须在 app ready 之前调用；second-instance 在下方 mainWindow 声明后再注册。
+ */
+if (app.isPackaged) {
+  const gotTheLock = app.requestSingleInstanceLock()
+  if (!gotTheLock) {
+    console.log('⚠️ 已有 xmmusic Release 实例在运行，退出本进程')
+    app.quit()
+    process.exit(0)
+  }
+}
+
 let mainWindow: BrowserWindow | null = null
 let db: MusicDatabase | null = null
 let fileMonitor: FileMonitor | null = null
 let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 let isMainWindowReady = false // 跟踪主窗口是否就绪
+
+if (app.isPackaged) {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
 
 /** 根据扩展名返回媒体/图片 MIME，缺省用 octet-stream */
 function getLocalFileContentType(filePath: string): string {
