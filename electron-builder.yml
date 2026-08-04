@@ -25,6 +25,7 @@ files:
   - build/icon-32.png
   - build/icon-64.png
   - build/icon.png
+  - build/tray-icon-mac.png
   - pic/appicon2.png
 
 asarUnpack:

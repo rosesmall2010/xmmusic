@@ -52,13 +52,9 @@ export default class TrayService {
    * 优先当前 App 主图标，避免误用过期的小尺寸 png
    */
   private resolveTrayIconPath(): string | null {
-    const preferred = [
-      'appicon2.png',
-      'icon.png',
-      'icon-32.png',
-      'icon-16.png',
-      'appicon.png'
-    ]
+    const preferred = process.platform === 'darwin'
+      ? ['tray-icon-mac.png', 'appicon2.png', 'icon.png', 'icon-32.png', 'icon-16.png', 'appicon.png']
+      : ['appicon2.png', 'icon.png', 'icon-32.png', 'icon-16.png', 'appicon.png']
 
     const bases = [
       join(app.getAppPath(), 'pic'),
