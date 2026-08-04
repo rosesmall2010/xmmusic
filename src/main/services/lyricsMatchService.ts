@@ -33,6 +33,8 @@ const SIMILARITY_THRESHOLD = 75
 const PICK_LIST_MIN_SIMILARITY = 35
 const REQUEST_TIMEOUT_MS = 12000
 const REQUEST_GAP_MS = 120
+/** 批量匹配同时进行的任务数 */
+const BATCH_CONCURRENCY = 3
 
 type SearchSong = {
   id: number
@@ -384,6 +386,7 @@ export default class LyricsMatchService {
 
   /**
    * 批量匹配：默认只处理无歌词歌曲；forceAll 时对传入列表强制重匹配
+   * 同时最多 BATCH_CONCURRENCY 路并发，加快大批量匹配
    */
   async matchBatch(
     db: MusicDatabase,
@@ -399,7 +402,9 @@ export default class LyricsMatchService {
     let success = 0
     let failed = 0
     let skipped = 0
-    const results: LyricsMatchResult[] = []
+    let completed = 0
+    let nextIndex = 0
+    const results: Array<LyricsMatchResult | undefined> = new Array(total)
 
     const bump = (status: LyricsMatchStatus) => {
       if (status === 'matched' || status === 'linked_local') success++
@@ -407,23 +412,43 @@ export default class LyricsMatchService {
       else skipped++
     }
 
-    for (let i = 0; i < songs.length; i++) {
-      if (this.cancelled) break
-      const music = songs[i]
-      const result = await this.matchOne(db, music, { force })
-      results.push(result)
-      bump(result.status)
+    const emitProgress = (music: MusicItem, lastStatus?: LyricsMatchStatus) => {
       options.onProgress?.({
-        current: i + 1,
+        current: completed,
         total,
         success,
         failed,
         skipped,
         currentTitle: music.title || music.fileName,
-        lastStatus: result.status
+        lastStatus
       })
-      await sleep(REQUEST_GAP_MS)
     }
+
+    const runOne = async (index: number) => {
+      if (this.cancelled) return
+      const music = songs[index]
+      emitProgress(music)
+      const result = await this.matchOne(db, music, { force })
+      results[index] = result
+      bump(result.status)
+      completed++
+      emitProgress(music, result.status)
+    }
+
+    const workerCount = Math.min(BATCH_CONCURRENCY, total)
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (!this.cancelled) {
+        const index = nextIndex++
+        if (index >= total) break
+        await runOne(index)
+        // 同 worker 领取下一首前稍作间隔，减轻上游 API 压力
+        if (!this.cancelled && nextIndex < total) {
+          await sleep(REQUEST_GAP_MS)
+        }
+      }
+    })
+
+    await Promise.all(workers)
 
     return {
       total,
@@ -431,7 +456,7 @@ export default class LyricsMatchService {
       failed,
       skipped,
       cancelled: this.cancelled,
-      results
+      results: results.filter((r): r is LyricsMatchResult => !!r)
     }
   }
 }
