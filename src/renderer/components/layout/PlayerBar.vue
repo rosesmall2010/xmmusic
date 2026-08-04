@@ -543,7 +543,7 @@ watch(
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease 0.15s;
+  transition: opacity 0.12s ease 1s;
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
   z-index: 1000;

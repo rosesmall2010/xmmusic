@@ -1151,7 +1151,7 @@ watch(
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease 0.15s;
+  transition: opacity 0.12s ease 1s;
   z-index: 1000;
 }
 
