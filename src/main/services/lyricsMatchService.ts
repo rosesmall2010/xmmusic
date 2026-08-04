@@ -466,15 +466,19 @@ export default class LyricsMatchService {
       }
     })
 
-    await Promise.all(workers)
-
-    return {
-      total,
-      success,
-      failed,
-      skipped,
-      cancelled: this.cancelled,
-      results: results.filter((r): r is LyricsMatchResult => !!r)
+    try {
+      await Promise.all(workers)
+      return {
+        total,
+        success,
+        failed,
+        skipped,
+        cancelled: this.cancelled,
+        results: results.filter((r): r is LyricsMatchResult => !!r)
+      }
+    } finally {
+      // 批量结束（含取消）后复位，避免后续单曲 matchOne 一直返回「已取消」
+      this.resetCancel()
     }
   }
 }
