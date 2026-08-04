@@ -420,8 +420,6 @@ export default class LyricsMatchService {
     let completed = 0
     let nextIndex = 0
     const results: Array<LyricsMatchResult | undefined> = new Array(total)
-    /** 正在进行中的任务标题（按队列下标） */
-    const activeTitles = new Map<number, string>()
     let lastDoneTitle = ''
 
     const bump = (status: LyricsMatchStatus) => {
@@ -430,22 +428,14 @@ export default class LyricsMatchService {
       else skipped++
     }
 
-    const formatActiveTitle = (): string => {
-      const titles = [...activeTitles.values()]
-      if (titles.length === 0) return lastDoneTitle
-      if (titles.length === 1) return titles[0]
-      return `${titles[0]} 等 ${titles.length} 首`
-    }
-
     const emitProgress = (lastStatus?: LyricsMatchStatus) => {
       options.onProgress?.({
-        // 已完成 + 进行中，避免长期停在 0/N 且与标题脱节
-        current: Math.min(total, completed + activeTitles.size),
+        current: completed,
         total,
         success,
         failed,
         skipped,
-        currentTitle: formatActiveTitle(),
+        currentTitle: lastDoneTitle,
         lastStatus
       })
     }
@@ -453,24 +443,14 @@ export default class LyricsMatchService {
     const runOne = async (index: number) => {
       if (this.cancelled) return
       const music = songs[index]
-      const title = music.title || music.fileName
-      activeTitles.set(index, title)
-      emitProgress()
-      try {
-        const result = await this.matchOne(db, music, { force })
-        // 取消后：丢弃进行中任务的回调，不计入统计/结果
-        if (this.cancelled) return
-        results[index] = result
-        bump(result.status)
-        completed++
-        lastDoneTitle = title
-        emitProgress(result.status)
-      } finally {
-        activeTitles.delete(index)
-        if (this.cancelled) {
-          emitProgress()
-        }
-      }
+      const result = await this.matchOne(db, music, { force })
+      // 取消后：丢弃进行中任务的回调，不计入统计/结果
+      if (this.cancelled) return
+      results[index] = result
+      bump(result.status)
+      completed++
+      lastDoneTitle = music.title || music.fileName
+      emitProgress(result.status)
     }
 
     const workerCount = Math.min(BATCH_CONCURRENCY, total)
