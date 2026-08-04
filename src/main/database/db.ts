@@ -2345,16 +2345,18 @@ export default class MusicDatabase {
     if (!this.db || !query || query.trim() === '') return []
 
     try {
-      // 从音乐标题、艺术家、专辑中搜索建议
+      // 从本地库（local_music + all_music）中取建议，避免旧表 music 不存在导致报错
       const stmt = this.db.prepare(`
         SELECT DISTINCT
           CASE
-            WHEN title LIKE ? THEN title
-            WHEN artist LIKE ? THEN artist
-            WHEN album LIKE ? THEN album
+            WHEN am.title LIKE ? THEN am.title
+            WHEN am.artist LIKE ? THEN am.artist
+            WHEN am.album LIKE ? THEN am.album
           END AS suggestion
-        FROM music
-        WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
+        FROM local_music lm
+        JOIN all_music am ON lm.music_id = am.id
+        WHERE am.is_duplicate = 0
+          AND (am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ?)
         LIMIT ?
       `)
       const likeQuery = `%${query.trim()}%`
