@@ -107,7 +107,8 @@
       "flame": "Flame",
       "lightning": "Lightning",
       "vinyl": "Classic Vinyl",
-      "cd": "CD"
+      "cd": "CD",
+      "cassette": "Cassette"
     }
   },
   "miniPlayer": {
@@ -115,6 +116,7 @@
     "noMusic": "No music playing",
     "unknownArtist": "Unknown Artist",
     "switchToCd": "Switch to CD effect",
+    "switchToCassette": "Switch to cassette effect",
     "switchToCover": "Switch to normal cover"
   },
   "settings": {
