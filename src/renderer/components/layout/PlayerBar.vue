@@ -543,7 +543,7 @@ watch(
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease 1s;
+  transition: opacity 0.15s ease; /* 移开：约 0.15s 消失 */
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
   z-index: 1000;
@@ -552,6 +552,7 @@ watch(
 .control-btn.has-tip:hover::before,
 .control-icon-btn.has-tip:hover::before {
   opacity: 1;
+  transition: opacity 0.12s ease 1s; /* 悬停：约 1s 后显示 */
 }
 
 /* 进度条 */

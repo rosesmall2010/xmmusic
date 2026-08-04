@@ -1141,7 +1141,62 @@ watch(
 .actions {
   display: flex;
   gap: var(--spacing-md);
+  align-items: center;
   -webkit-app-region: no-drag;
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  margin-left: var(--spacing-sm);
+  -webkit-app-region: no-drag;
+}
+
+.win-btn {
+  width: 46px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--np-fg);
+  font-size: var(--font-size-base);
+  transition: background var(--transition-fast) var(--transition-timing);
+  position: relative;
+}
+
+.win-btn:hover {
+  background: var(--np-hover);
+}
+
+.win-btn.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.win-btn[data-tip]::before {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease; /* 移开：约 0.15s 消失 */
+  z-index: 1000;
+}
+
+.win-btn[data-tip]:hover::before {
+  opacity: 1;
+  transition: opacity 0.12s ease 1s; /* 悬停：约 1s 后显示 */
 }
 
 .btn-action {
@@ -1164,7 +1219,7 @@ watch(
   background: var(--np-hover);
 }
 
-/* 自定义tooltip：短延迟，避免原生 title 约 1s 与旧版 2s 过慢 */
+/* 自定义 tip：悬停约 1s 显示，移开约 0.15s 消失 */
 .btn-tooltip {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -1178,13 +1233,14 @@ watch(
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease 1s;
+  transition: opacity 0.15s ease;
   z-index: 1000;
 }
 
 .btn-action:hover .btn-tooltip,
 .btn-control.has-tip:hover .btn-tooltip {
   opacity: 1;
+  transition: opacity 0.12s ease 1s;
 }
 
 /* tooltip箭头 */
