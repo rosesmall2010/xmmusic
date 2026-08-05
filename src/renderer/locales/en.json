@@ -93,6 +93,7 @@
     "switchEffect": "Switch Effect",
     "disableEffect": "Disable Effect",
     "enableEffect": "Enable Effect",
+    "effectToggleUnavailable": "Not available for this effect",
     "matchLyricsOnline": "Match Lyrics Online",
     "matchingLyrics": "Searching lyrics...",
     "replaceLyricsConfirm": "\"{title}\" already has lyrics. Replace with the online match?",

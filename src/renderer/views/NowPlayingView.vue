@@ -36,14 +36,18 @@
           </span>
         </button>
         <button
-          v-if="showEffectToggle"
           class="btn-action"
+          :disabled="effectToggleDisabled"
           @click="settingsStore.toggleNowPlayingEffectEnabled()"
         >
           <Eye v-if="effectEnabled" :size="20" />
           <EyeOff v-else :size="20" />
           <span class="btn-tooltip">
-            {{ effectEnabled ? $t('nowPlaying.disableEffect') : $t('nowPlaying.enableEffect') }}
+            {{
+              effectToggleDisabled
+                ? $t('nowPlaying.effectToggleUnavailable')
+                : (effectEnabled ? $t('nowPlaying.disableEffect') : $t('nowPlaying.enableEffect'))
+            }}
           </span>
         </button>
         <button class="btn-action" @click="toggleDesktopLyrics">
@@ -365,8 +369,8 @@ const EffectIcon = computed(() => {
   return AudioLines
 })
 
-/** vinyl/cd/cassette 是纯动画封面、不接管音频，隐藏「特效开关」按钮 */
-const showEffectToggle = computed(() => !['vinyl', 'cd', 'cassette'].includes(effect.value))
+/** vinyl/cd/cassette 是纯动画封面、不接管音频，特效开关保留占位但禁用，避免顶栏按钮移位 */
+const effectToggleDisabled = computed(() => ['vinyl', 'cd', 'cassette'].includes(effect.value))
 
 const cycleEffect = () => {
   settingsStore.cycleNowPlayingEffect()
@@ -1259,6 +1263,15 @@ watch(
 
 .btn-action:hover {
   background: var(--np-hover);
+}
+
+.btn-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-action:disabled:hover {
+  background: none;
 }
 
 /* 自定义 tip：悬停约 1s 显示，移开约 0.15s 消失；颜色随主题 */

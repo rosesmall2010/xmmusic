@@ -93,6 +93,7 @@
     "switchEffect": "切换特效",
     "disableEffect": "关闭特效",
     "enableEffect": "开启特效",
+    "effectToggleUnavailable": "当前特效无需开关",
     "matchLyricsOnline": "在线匹配歌词",
     "matchingLyrics": "正在搜索歌词...",
     "replaceLyricsConfirm": "「{title}」已有歌词，是否替换为在线匹配的歌词？",
