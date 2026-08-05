@@ -1,14 +1,27 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { setLocale } from '@/locales'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
 /** 全屏播放页的视觉特效 */
 export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl' | 'cd' | 'cassette'
+/** 迷你封面形态：无特效 / 唱片 / CD / 磁带 */
+export type MiniCoverStyle = 'plain' | 'vinyl' | 'cd' | 'cassette'
 
 /** 特效切换顺序：按钮每次点击按此顺序循环 */
 export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl', 'cd', 'cassette']
+export const MINI_COVER_STYLES: MiniCoverStyle[] = ['plain', 'vinyl', 'cd', 'cassette']
+
+const DISC_EFFECTS: Array<'vinyl' | 'cd' | 'cassette'> = ['vinyl', 'cd', 'cassette']
+
+function isDiscEffect(effect: NowPlayingEffect): effect is 'vinyl' | 'cd' | 'cassette' {
+  return (DISC_EFFECTS as string[]).includes(effect)
+}
+
+function isMiniCoverStyle(value: string | null): value is MiniCoverStyle {
+  return !!value && (MINI_COVER_STYLES as string[]).includes(value)
+}
 
 // 检测系统语言
 function detectSystemLanguage(): 'zh' | 'en' {
@@ -46,6 +59,17 @@ export const useSettingsStore = defineStore('settings', () => {
   )
   // 特效开关：只对频谱/火焰/闪电有意义（唱盘本身不依赖这个开关）
   const nowPlayingEffectEnabled = ref(localStorage.getItem('nowPlayingEffectEnabled') !== 'false')
+
+  // 迷你封面形态
+  const savedMiniCover = localStorage.getItem('miniCoverStyle')
+  const miniCoverStyle = ref<MiniCoverStyle>(
+    isMiniCoverStyle(savedMiniCover) ? savedMiniCover : 'plain'
+  )
+  // 切入迷你时的全屏特效快照：迷你为「无特效」退出时用来还原
+  const savedBeforeMini = localStorage.getItem('effectBeforeMini') as NowPlayingEffect | null
+  const effectBeforeMini = ref<NowPlayingEffect | null>(
+    savedBeforeMini && NOW_PLAYING_EFFECTS.includes(savedBeforeMini) ? savedBeforeMini : null
+  )
 
   // Actions
   function setTheme(newTheme: Theme) {
@@ -89,6 +113,46 @@ export const useSettingsStore = defineStore('settings', () => {
   function toggleNowPlayingEffectEnabled() {
     nowPlayingEffectEnabled.value = !nowPlayingEffectEnabled.value
     localStorage.setItem('nowPlayingEffectEnabled', String(nowPlayingEffectEnabled.value))
+  }
+
+  function setMiniCoverStyle(style: MiniCoverStyle) {
+    miniCoverStyle.value = style
+    localStorage.setItem('miniCoverStyle', style)
+  }
+
+  function cycleMiniCoverStyle() {
+    const idx = MINI_COVER_STYLES.indexOf(miniCoverStyle.value)
+    setMiniCoverStyle(MINI_COVER_STYLES[(idx + 1) % MINI_COVER_STYLES.length])
+  }
+
+  /**
+   * 进入迷你：记住当前全屏特效；
+   * 唱片/CD/磁带 → 迷你同名；频谱/火焰/闪电 → 迷你无特效
+   */
+  function syncMiniCoverOnEnter() {
+    effectBeforeMini.value = nowPlayingEffect.value
+    localStorage.setItem('effectBeforeMini', nowPlayingEffect.value)
+
+    if (isDiscEffect(nowPlayingEffect.value)) {
+      setMiniCoverStyle(nowPlayingEffect.value)
+    } else {
+      setMiniCoverStyle('plain')
+    }
+  }
+
+  /**
+   * 退出迷你：迷你是唱片/CD/磁带 → 全屏同名；
+   * 迷你无特效 → 还原切入迷你时的全屏特效
+   */
+  function syncFullscreenEffectOnExit() {
+    if (miniCoverStyle.value !== 'plain') {
+      setNowPlayingEffect(miniCoverStyle.value)
+      return
+    }
+    const restore = effectBeforeMini.value
+    if (restore && NOW_PLAYING_EFFECTS.includes(restore)) {
+      setNowPlayingEffect(restore)
+    }
   }
 
   /** 是否应该为可视化接管 Web Audio：唱盘/CD/磁带不读频谱，用户关闭特效开关时也不需要 */
@@ -137,11 +201,16 @@ export const useSettingsStore = defineStore('settings', () => {
     scanOnStartup,
     nowPlayingEffect,
     nowPlayingEffectEnabled,
+    miniCoverStyle,
     setTheme,
     setLanguage,
     setNowPlayingEffect,
     cycleNowPlayingEffect,
     toggleNowPlayingEffectEnabled,
+    setMiniCoverStyle,
+    cycleMiniCoverStyle,
+    syncMiniCoverOnEnter,
+    syncFullscreenEffectOnExit,
     shouldCaptureNowPlayingAudio,
     toggleCloseToTray,
     toggleAutoPlay,

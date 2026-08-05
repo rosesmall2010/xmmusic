@@ -142,45 +142,20 @@ const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
 
-/** 迷你封面形态：普通方形 / 唱片 / CD / 磁带 */
-type MiniCoverStyle = 'plain' | 'vinyl' | 'cd' | 'cassette'
-const MINI_COVER_STYLES: MiniCoverStyle[] = ['plain', 'vinyl', 'cd', 'cassette']
-const miniCoverStyle = ref<MiniCoverStyle>('plain')
+/** 迷你封面：无特效 / 唱片 / CD / 磁带，与 settingsStore.miniCoverStyle 同步 */
+const miniCoverStyle = computed(() => settingsStore.miniCoverStyle)
 
 const coverUrl = computed(() =>
   currentMusic.value?.coverPath ? getCoverUrl(currentMusic.value.coverPath) : null
 )
 
-/**
- * 从全屏特效同步迷你封面：
- * - 全屏是唱片/CD/磁带时，直接带过去（覆盖迷你本地偏好）
- * - 否则沿用迷你自己保存的形态；没有则普通方形
- * keep-alive 下用 onActivated，每次进入迷你都会跑
- */
-const syncCoverFromFullscreen = () => {
-  const fx = settingsStore.nowPlayingEffect
-  if (fx === 'vinyl' || fx === 'cd' || fx === 'cassette') {
-    miniCoverStyle.value = fx
-    localStorage.setItem('miniCoverStyle', fx)
-    return
-  }
-  const saved = localStorage.getItem('miniCoverStyle') as MiniCoverStyle | null
-  if (saved && MINI_COVER_STYLES.includes(saved)) {
-    miniCoverStyle.value = saved
-    return
-  }
-  miniCoverStyle.value = 'plain'
-}
+// keep-alive：每次进入迷你都按当前全屏特效映射封面
+onMounted(() => settingsStore.syncMiniCoverOnEnter())
+onActivated(() => settingsStore.syncMiniCoverOnEnter())
 
-onMounted(syncCoverFromFullscreen)
-onActivated(syncCoverFromFullscreen)
-
-/** 循环切换封面形态并持久化（迷你偏好，用 localStorage 即可，不进 AppSettings） */
+/** 循环切换封面形态并持久化 */
 const cycleMiniCover = () => {
-  const idx = MINI_COVER_STYLES.indexOf(miniCoverStyle.value)
-  const next = MINI_COVER_STYLES[(idx + 1) % MINI_COVER_STYLES.length]
-  miniCoverStyle.value = next
-  localStorage.setItem('miniCoverStyle', next)
+  settingsStore.cycleMiniCoverStyle()
 }
 
 const lyrics = ref<LyricLine[]>([])
@@ -251,6 +226,8 @@ watch(currentTime, (time) => {
 })
 
 const exitMiniMode = async () => {
+  // 先按迷你封面回写全屏特效，再退窗/跳转，保证还原页读到正确值
+  settingsStore.syncFullscreenEffectOnExit()
   await window.electronAPI.setMiniMode(false)
   // 恢复之前的路由路径
   const lastRoute = localStorage.getItem('lastRoute')
