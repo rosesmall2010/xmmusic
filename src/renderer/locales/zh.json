@@ -106,13 +106,16 @@
       "spectrum": "霓虹频谱",
       "flame": "火焰",
       "lightning": "闪电",
-      "vinyl": "经典唱片"
+      "vinyl": "经典唱片",
+      "cd": "CD",
+      "cassette": "磁带"
     }
   },
   "miniPlayer": {
     "exitMiniMode": "退出迷你模式",
     "noMusic": "暂无播放",
-    "unknownArtist": "未知艺术家"
+    "unknownArtist": "未知艺术家",
+    "switchCover": "切换封面样式"
   },
   "settings": {
     "title": "设置",

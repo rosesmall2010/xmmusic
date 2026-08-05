@@ -22,7 +22,7 @@
         </div>
       </div>
 
-      <svg class="vinyl-arm" viewBox="0 0 100 100" aria-hidden="true">
+      <svg v-if="showArm" class="vinyl-arm" viewBox="0 0 100 100" aria-hidden="true">
         <circle cx="86" cy="10" r="6.2" class="arm-base" />
         <circle cx="86" cy="10" r="3.4" class="arm-pivot" />
         <circle cx="86" cy="10" r="1.2" class="arm-pivot-core" />
@@ -65,11 +65,13 @@ const props = withDefaults(defineProps<{
   active?: boolean
   light?: boolean
   alt?: string
+  showArm?: boolean
 }>(), {
   coverUrl: null,
   active: false,
   light: false,
-  alt: ''
+  alt: '',
+  showArm: true
 })
 
 defineEmits<{ (e: 'coverError'): void }>()

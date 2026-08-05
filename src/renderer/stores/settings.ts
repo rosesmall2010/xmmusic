@@ -5,10 +5,10 @@ import { setLocale } from '@/locales'
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
 /** 全屏播放页的视觉特效 */
-export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl'
+export type NowPlayingEffect = 'spectrum' | 'flame' | 'lightning' | 'vinyl' | 'cd' | 'cassette'
 
 /** 特效切换顺序：按钮每次点击按此顺序循环 */
-export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl']
+export const NOW_PLAYING_EFFECTS: NowPlayingEffect[] = ['spectrum', 'flame', 'lightning', 'vinyl', 'cd', 'cassette']
 
 // 检测系统语言
 function detectSystemLanguage(): 'zh' | 'en' {
@@ -91,9 +91,11 @@ export const useSettingsStore = defineStore('settings', () => {
     localStorage.setItem('nowPlayingEffectEnabled', String(nowPlayingEffectEnabled.value))
   }
 
-  /** 是否应该为可视化接管 Web Audio：唱盘不读频谱，用户关闭特效开关时也不需要 */
+  /** 是否应该为可视化接管 Web Audio：唱盘/CD/磁带不读频谱，用户关闭特效开关时也不需要 */
   function shouldCaptureNowPlayingAudio() {
-    return nowPlayingEffect.value !== 'vinyl' && nowPlayingEffectEnabled.value
+    const fx = nowPlayingEffect.value
+    if (fx === 'vinyl' || fx === 'cd' || fx === 'cassette') return false
+    return nowPlayingEffectEnabled.value
   }
 
   // Helper to apply theme

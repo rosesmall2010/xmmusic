@@ -7,6 +7,13 @@
       <div class="window-controls">
         <button
           class="control-btn"
+          @click="cycleMiniCover"
+          :title="$t('miniPlayer.switchCover')"
+        >
+          <Disc3 :size="18" />
+        </button>
+        <button
+          class="control-btn"
           @click="toggleTheme"
           :title="isDarkTheme ? $t('header.switchToLight') : $t('header.switchToDark')"
         >
@@ -22,7 +29,35 @@
     <!-- 主要内容 -->
     <div class="mini-content">
       <div class="cover-section">
-        <div class="cover-wrapper" :class="{ playing: isPlaying }">
+        <VinylRecord
+          v-if="miniCoverStyle === 'vinyl'"
+          :cover-url="coverUrl"
+          :active="isPlaying"
+          :light="!isDarkTheme"
+          :show-arm="false"
+          alt="cover"
+        >
+          <template #fallback><DefaultCover mode="fill" /></template>
+        </VinylRecord>
+        <CDDisc
+          v-else-if="miniCoverStyle === 'cd'"
+          :cover-url="coverUrl"
+          :active="isPlaying"
+          :light="!isDarkTheme"
+          alt="cover"
+        >
+          <template #fallback><DefaultCover mode="fill" /></template>
+        </CDDisc>
+        <Cassette
+          v-else-if="miniCoverStyle === 'cassette'"
+          :cover-url="coverUrl"
+          :active="isPlaying"
+          :light="!isDarkTheme"
+          alt="cover"
+        >
+          <template #fallback><DefaultCover mode="fill" /></template>
+        </Cassette>
+        <div v-else class="cover-wrapper" :class="{ playing: isPlaying }">
           <DefaultCover v-if="!currentMusic?.coverPath" mode="fill" />
           <template v-else>
             <DefaultCover class="fallback-cover" mode="fill" />
@@ -72,14 +107,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import { getCoverUrl } from '@/utils/media'
-import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun } from 'lucide-vue-next'
+import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun, Disc3 } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
+import VinylRecord from '@/components/effects/VinylRecord.vue'
+import CDDisc from '@/components/effects/CDDisc.vue'
+import Cassette from '@/components/effects/Cassette.vue'
 import type { LyricLine } from '@shared/types/lyrics'
 
 // 定义组件名称以支持keep-alive
@@ -104,6 +142,34 @@ const currentMusic = computed(() => playerStore.currentMusic)
 const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
+
+/** 迷你封面形态：普通方形 / 唱片 / CD / 磁带 */
+type MiniCoverStyle = 'plain' | 'vinyl' | 'cd' | 'cassette'
+const MINI_COVER_STYLES: MiniCoverStyle[] = ['plain', 'vinyl', 'cd', 'cassette']
+const miniCoverStyle = ref<MiniCoverStyle>('plain')
+
+const coverUrl = computed(() =>
+  currentMusic.value?.coverPath ? getCoverUrl(currentMusic.value.coverPath) : null
+)
+
+onMounted(() => {
+  // 优先用迷你自己的偏好；没有则跟随全屏特效映射（vinyl/cd/cassette 同名，其余用普通方形）
+  const saved = localStorage.getItem('miniCoverStyle') as MiniCoverStyle | null
+  if (saved && MINI_COVER_STYLES.includes(saved)) {
+    miniCoverStyle.value = saved
+    return
+  }
+  const fx = settingsStore.nowPlayingEffect
+  miniCoverStyle.value = fx === 'vinyl' || fx === 'cd' || fx === 'cassette' ? fx : 'plain'
+})
+
+/** 循环切换封面形态并持久化（迷你偏好，用 localStorage 即可，不进 AppSettings） */
+const cycleMiniCover = () => {
+  const idx = MINI_COVER_STYLES.indexOf(miniCoverStyle.value)
+  const next = MINI_COVER_STYLES[(idx + 1) % MINI_COVER_STYLES.length]
+  miniCoverStyle.value = next
+  localStorage.setItem('miniCoverStyle', next)
+}
 
 const lyrics = ref<LyricLine[]>([])
 const currentLyricIndex = ref(-1)
@@ -320,6 +386,14 @@ const handleSeek = (e: MouseEvent) => {
   width: 180px;
   height: 180px;
   margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-section :deep(.cassette) {
+  width: 100%;
+  max-height: 100%;
 }
 
 .cover-wrapper {
@@ -337,6 +411,7 @@ const handleSeek = (e: MouseEvent) => {
   object-fit: cover;
   position: relative;
   z-index: 1;
+  border-radius: inherit;
 }
 
 .fallback-cover {

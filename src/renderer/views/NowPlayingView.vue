@@ -36,7 +36,7 @@
           </span>
         </button>
         <button
-          v-if="effect !== 'vinyl'"
+          v-if="showEffectToggle"
           class="btn-action"
           @click="settingsStore.toggleNowPlayingEffectEnabled()"
         >
@@ -89,6 +89,30 @@
                 <DefaultCover mode="fill" />
               </template>
             </VinylRecord>
+            <CDDisc
+              v-else-if="effect === 'cd'"
+              :cover-url="displayCoverUrl"
+              :active="isPlaying"
+              :light="isLight"
+              :alt="$t('music.cover')"
+              @cover-error="onCoverError"
+            >
+              <template #fallback>
+                <DefaultCover mode="fill" />
+              </template>
+            </CDDisc>
+            <Cassette
+              v-else-if="effect === 'cassette'"
+              :cover-url="displayCoverUrl"
+              :active="isPlaying"
+              :light="isLight"
+              :alt="$t('music.cover')"
+              @cover-error="onCoverError"
+            >
+              <template #fallback>
+                <DefaultCover mode="fill" />
+              </template>
+            </Cassette>
             <div v-else class="album-cover">
               <DefaultCover v-if="!displayCoverUrl" mode="fill" />
               <template v-else>
@@ -285,10 +309,13 @@ import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackgro
 import FlameBackground from '@/components/effects/FlameBackground.vue'
 import LightningBackground from '@/components/effects/LightningBackground.vue'
 import VinylRecord from '@/components/effects/VinylRecord.vue'
+import CDDisc from '@/components/effects/CDDisc.vue'
+import Cassette from '@/components/effects/Cassette.vue'
+import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -333,8 +360,13 @@ const EffectIcon = computed(() => {
   if (effect.value === 'flame') return Flame
   if (effect.value === 'lightning') return Zap
   if (effect.value === 'vinyl') return Disc3
+  if (effect.value === 'cd') return Disc2
+  if (effect.value === 'cassette') return CassetteIcon
   return AudioLines
 })
+
+/** vinyl/cd/cassette 是纯动画封面、不接管音频，隐藏「特效开关」按钮 */
+const showEffectToggle = computed(() => !['vinyl', 'cd', 'cassette'].includes(effect.value))
 
 const cycleEffect = () => {
   settingsStore.cycleNowPlayingEffect()
@@ -1372,12 +1404,21 @@ watch(
   flex-shrink: 0;
 }
 
-/* 唱片同样跟容器较小边缩放，避免塌缩或裁切 */
-.album-cover-container :deep(.vinyl) {
+/* 唱片/CD 跟容器较小边缩放；磁带为横向 1.57 比例，按高度反推宽度 */
+.album-cover-container :deep(.vinyl),
+.album-cover-container :deep(.cd-disc) {
   width: min(100%, 100cqh);
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
+  height: auto;
+}
+
+.album-cover-container :deep(.cassette) {
+  width: min(100%, calc(100cqh * 1.57));
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1.57;
   height: auto;
 }
 
@@ -1387,6 +1428,8 @@ watch(
   object-fit: cover;
   position: relative;
   z-index: 1;
+  /* img 是独立合成层，父级圆角 overflow:hidden 裁不住它的方角（浅色下露出灰角），自身圆角兜底 */
+  border-radius: inherit;
 }
 
 .fallback-cover {
@@ -1396,6 +1439,7 @@ watch(
   width: 100%;
   height: 100%;
   z-index: 0;
+  border-radius: inherit;
 }
 
 .song-info {
