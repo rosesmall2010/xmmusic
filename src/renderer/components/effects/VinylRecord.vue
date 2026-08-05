@@ -289,12 +289,12 @@ onBeforeUnmount(() => {
 }
 
 .vinyl.is-light {
-  --shadow: 0 16px 40px rgba(20, 22, 26, 0.28);
+  --shadow: 0 8px 18px rgba(20, 22, 26, 0.18);
   --label-ring: rgba(255, 255, 255, 0.12);
   --hole: #0c0e13;
   --arm-metal: #aeb4bf;
   --arm-metal-2: #7a8190;
-  --arm-shadow: rgba(20, 22, 26, 0.28);
+  --arm-shadow: rgba(20, 22, 26, 0.2);
 }
 
 .vinyl-stage {

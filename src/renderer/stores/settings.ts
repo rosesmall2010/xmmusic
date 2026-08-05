@@ -15,12 +15,18 @@ export const MINI_COVER_STYLES: MiniCoverStyle[] = ['plain', 'vinyl', 'cd', 'cas
 
 const DISC_EFFECTS: Array<'vinyl' | 'cd' | 'cassette'> = ['vinyl', 'cd', 'cassette']
 
-function isDiscEffect(effect: NowPlayingEffect): effect is 'vinyl' | 'cd' | 'cassette' {
+export function isDiscEffect(effect: NowPlayingEffect): effect is 'vinyl' | 'cd' | 'cassette' {
   return (DISC_EFFECTS as string[]).includes(effect)
 }
 
 function isMiniCoverStyle(value: string | null): value is MiniCoverStyle {
   return !!value && (MINI_COVER_STYLES as string[]).includes(value)
+}
+
+/** 当前是否在全屏播放路由（hash 路由：#/playing） */
+export function isOnNowPlayingRoute(): boolean {
+  const hash = window.location.hash || ''
+  return hash.includes('/playing')
 }
 
 // 检测系统语言
@@ -60,16 +66,13 @@ export const useSettingsStore = defineStore('settings', () => {
   // 特效开关：只对频谱/火焰/闪电有意义（唱盘本身不依赖这个开关）
   const nowPlayingEffectEnabled = ref(localStorage.getItem('nowPlayingEffectEnabled') !== 'false')
 
-  // 迷你封面形态
+  // 迷你封面形态（进迷你时会被全屏特效映射覆盖；用户在迷你内手动切换会写回）
   const savedMiniCover = localStorage.getItem('miniCoverStyle')
   const miniCoverStyle = ref<MiniCoverStyle>(
     isMiniCoverStyle(savedMiniCover) ? savedMiniCover : 'plain'
   )
-  // 切入迷你时的全屏特效快照：迷你为「无特效」退出时用来还原
-  const savedBeforeMini = localStorage.getItem('effectBeforeMini') as NowPlayingEffect | null
-  const effectBeforeMini = ref<NowPlayingEffect | null>(
-    savedBeforeMini && NOW_PLAYING_EFFECTS.includes(savedBeforeMini) ? savedBeforeMini : null
-  )
+  // 切入迷你时的全屏特效快照：迷你为「无特效」退出时用来还原（会话级即可）
+  const effectBeforeMini = ref<NowPlayingEffect | null>(null)
 
   // Actions
   function setTheme(newTheme: Theme) {
@@ -131,7 +134,6 @@ export const useSettingsStore = defineStore('settings', () => {
    */
   function syncMiniCoverOnEnter() {
     effectBeforeMini.value = nowPlayingEffect.value
-    localStorage.setItem('effectBeforeMini', nowPlayingEffect.value)
 
     if (isDiscEffect(nowPlayingEffect.value)) {
       setMiniCoverStyle(nowPlayingEffect.value)
@@ -147,18 +149,24 @@ export const useSettingsStore = defineStore('settings', () => {
   function syncFullscreenEffectOnExit() {
     if (miniCoverStyle.value !== 'plain') {
       setNowPlayingEffect(miniCoverStyle.value)
+      effectBeforeMini.value = null
       return
     }
     const restore = effectBeforeMini.value
     if (restore && NOW_PLAYING_EFFECTS.includes(restore)) {
       setNowPlayingEffect(restore)
     }
+    effectBeforeMini.value = null
   }
 
-  /** 是否应该为可视化接管 Web Audio：唱盘/CD/磁带不读频谱，用户关闭特效开关时也不需要 */
+  /**
+   * 是否应为可视化接管 Web Audio。
+   * 仅全屏播放页 + 频谱类特效 + 开关开启；唱盘类 / 迷你 / 其它路由都不接管。
+   * （均衡器是否接管由 equalizer.enabled 单独决定，不走本函数）
+   */
   function shouldCaptureNowPlayingAudio() {
-    const fx = nowPlayingEffect.value
-    if (fx === 'vinyl' || fx === 'cd' || fx === 'cassette') return false
+    if (!isOnNowPlayingRoute()) return false
+    if (isDiscEffect(nowPlayingEffect.value)) return false
     return nowPlayingEffectEnabled.value
   }
 

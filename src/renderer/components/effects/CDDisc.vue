@@ -1,10 +1,8 @@
 <template>
-  <!-- CD：盘面（银盘+虹彩数据环+同心纹）一次性烧到 canvas 位图，旋转时只转这张位图，
-       与 VinylRecord 同思路，避免每帧重算渐变/合成 -->
+  <!-- CD：封面铺满整盘，canvas 只叠外圈同心纹与外缘高光；旋转时转整盘位图容器 -->
   <div class="cd-disc" :class="{ 'is-light': light }">
     <div class="cd-stage">
       <div ref="discRef" class="cd-body">
-        <canvas ref="canvasRef" class="cd-canvas" aria-hidden="true"></canvas>
         <div class="cd-label">
           <img
             v-if="coverUrl"
@@ -17,6 +15,7 @@
             <slot name="fallback" />
           </div>
         </div>
+        <canvas ref="canvasRef" class="cd-canvas" aria-hidden="true"></canvas>
         <span class="cd-hub" aria-hidden="true"></span>
       </div>
     </div>
@@ -80,7 +79,7 @@ const stop = () => {
   rafId = 0
 }
 
-/** 把 CD 盘面（银底 + 虹彩数据环 + 同心纹 + 高光）一次性画到 canvas，旋转只转位图 */
+/** 把 CD 外圈纹路与外缘高光画到 canvas（透明底），不盖住封面对比度 */
 const drawDisc = () => {
   const canvas = canvasRef.value
   const el = discRef.value
@@ -109,9 +108,8 @@ const drawDisc = () => {
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
   ctx.clip()
 
-  // 封面铺满整盘，canvas 只叠加同心纹路与扫光高光，不加彩虹遮罩
-  // 数据区同心细纹
-  const grooveColor = props.light ? 'rgba(120,128,140,0.10)' : 'rgba(255,255,255,0.06)'
+  // 仅外圈数据区细纹（中心留给封面），source-over 低透明，不用 soft-light 以免发灰
+  const grooveColor = props.light ? 'rgba(80,88,100,0.18)' : 'rgba(255,255,255,0.12)'
   for (let rr = r * 0.42; rr < r * 0.995; rr += size * 0.006) {
     ctx.beginPath()
     ctx.arc(cx, cy, rr, 0, Math.PI * 2)
@@ -120,22 +118,12 @@ const drawDisc = () => {
     ctx.stroke()
   }
 
-  // 外缘高光
+  // 外缘高光描边
   ctx.beginPath()
   ctx.arc(cx, cy, r - size * 0.004, 0, Math.PI * 2)
   ctx.lineWidth = Math.max(1, size * 0.006)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
   ctx.stroke()
-
-  // 直线扫光：soft-light 烧入
-  ctx.globalCompositeOperation = 'soft-light'
-  const sheen = ctx.createLinearGradient(0, 0, size, size)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.5)')
-  sheen.addColorStop(0.3, 'rgba(255,255,255,0)')
-  sheen.addColorStop(0.7, 'rgba(255,255,255,0)')
-  sheen.addColorStop(1, 'rgba(255,255,255,0.35)')
-  ctx.fillStyle = sheen
-  ctx.fillRect(0, 0, size, size)
 
   ctx.restore()
 }
@@ -215,9 +203,10 @@ onBeforeUnmount(() => {
   inset: 0;
   border-radius: 50%;
   z-index: 2;
+  pointer-events: none;
 }
 
-/* 封面铺满整盘背面，canvas 反光叠加在其上，中心留孔给 cd-hub */
+/* 封面铺满整盘，canvas 纹路叠在其上，中心留孔给 cd-hub */
 .cd-label {
   position: absolute;
   inset: 0;

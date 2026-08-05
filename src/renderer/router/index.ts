@@ -109,9 +109,4 @@ const router = createRouter({
   routes,
 })
 
-// 路由守卫
-router.beforeEach((_to, _from, next) => {
-  next()
-})
-
 export default router

@@ -34,7 +34,9 @@
           :cover-url="coverUrl"
           :active="isPlaying"
           :light="!isDarkTheme"
+          :show-arm="false"
           alt="cover"
+          @cover-error="onCoverError"
         >
           <template #fallback><DefaultCover mode="fill" /></template>
         </VinylRecord>
@@ -44,6 +46,7 @@
           :active="isPlaying"
           :light="!isDarkTheme"
           alt="cover"
+          @cover-error="onCoverError"
         >
           <template #fallback><DefaultCover mode="fill" /></template>
         </CDDisc>
@@ -53,6 +56,7 @@
           :active="isPlaying"
           :light="!isDarkTheme"
           alt="cover"
+          @cover-error="onCoverError"
         >
           <template #fallback><DefaultCover mode="fill" /></template>
         </Cassette>
@@ -106,11 +110,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onActivated } from 'vue'
+import { computed, ref, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
+import { useEqualizer } from '@/composables/useEqualizer'
 import { getCoverUrl } from '@/utils/media'
 import { SkipBack, Play, Pause, SkipForward, Maximize2, Moon, Sun, Disc3 } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
@@ -128,6 +133,7 @@ const router = useRouter()
 const playerStore = usePlayerStore()
 const settingsStore = useSettingsStore()
 const { play, pause, resume, seek } = usePlayer()
+const equalizer = useEqualizer()
 
 // 当前生效主题（system 解析为实际 light/dark），与顶栏一致
 const isDarkTheme = computed(() => {
@@ -145,13 +151,29 @@ const duration = computed(() => playerStore.duration)
 /** 迷你封面：无特效 / 唱片 / CD / 磁带，与 settingsStore.miniCoverStyle 同步 */
 const miniCoverStyle = computed(() => settingsStore.miniCoverStyle)
 
-const coverUrl = computed(() =>
-  currentMusic.value?.coverPath ? getCoverUrl(currentMusic.value.coverPath) : null
-)
+/** 封面加载失败时走 fallback，切歌复位 */
+const coverBroken = ref(false)
+watch(() => currentMusic.value?.id, () => {
+  coverBroken.value = false
+})
 
-// keep-alive：每次进入迷你都按当前全屏特效映射封面
-onMounted(() => settingsStore.syncMiniCoverOnEnter())
-onActivated(() => settingsStore.syncMiniCoverOnEnter())
+const coverUrl = computed(() => {
+  if (coverBroken.value || !currentMusic.value?.coverPath) return null
+  return getCoverUrl(currentMusic.value.coverPath)
+})
+
+const onCoverError = () => {
+  coverBroken.value = true
+}
+
+// keep-alive：仅 onActivated，避免首次与 onMounted 双重 sync
+onActivated(() => {
+  settingsStore.syncMiniCoverOnEnter()
+  // 迷你无可视化：未开 EQ 且已为频谱接管时释放 Web Audio
+  if (!equalizer.enabled.value && equalizer.isCaptured()) {
+    window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
+  }
+})
 
 /** 循环切换封面形态并持久化 */
 const cycleMiniCover = () => {

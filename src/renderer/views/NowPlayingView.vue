@@ -37,8 +37,9 @@
         </button>
         <button
           class="btn-action"
-          :disabled="effectToggleDisabled"
-          @click="settingsStore.toggleNowPlayingEffectEnabled()"
+          :class="{ 'is-disabled': effectToggleDisabled }"
+          :aria-disabled="effectToggleDisabled"
+          @click="onEffectToggleClick"
         >
           <Eye v-if="effectEnabled" :size="20" />
           <EyeOff v-else :size="20" />
@@ -306,7 +307,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useElementSize } from '@vueuse/core'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
+import { useSettingsStore, isDiscEffect } from '@/stores/settings'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
@@ -370,10 +371,16 @@ const EffectIcon = computed(() => {
 })
 
 /** vinyl/cd/cassette 是纯动画封面、不接管音频，特效开关保留占位但禁用，避免顶栏按钮移位 */
-const effectToggleDisabled = computed(() => ['vinyl', 'cd', 'cassette'].includes(effect.value))
+const effectToggleDisabled = computed(() => isDiscEffect(effect.value))
 
 const cycleEffect = () => {
   settingsStore.cycleNowPlayingEffect()
+}
+
+/** 用 aria-disabled 而非原生 disabled，保证 tip 仍可悬停显示 */
+const onEffectToggleClick = () => {
+  if (effectToggleDisabled.value) return
+  settingsStore.toggleNowPlayingEffectEnabled()
 }
 
 const backgroundColor = ref('#1a1a1a')
@@ -1023,6 +1030,13 @@ watch(
   { immediate: true }
 )
 
+// 离开全屏页：无可视化消费者时释放仅为频谱挂上的 Web Audio（EQ 开着则保留）
+onUnmounted(() => {
+  if (!equalizer.enabled.value && equalizer.isCaptured()) {
+    window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
+  }
+})
+
 // 监听播放进度更新歌词
 watch(currentTime, (time) => {
   syncLyricIndex(time)
@@ -1094,8 +1108,6 @@ watch(
     -1px 0 0 var(--np-outline),
     1px 0 0 var(--np-outline),
     0 0 4px var(--np-outline-glow);
-  /* 封面外沿不再用大模糊投影，避免半透明色晕 */
-  --np-cover-shadow: none;
 
   position: fixed;
   top: 0;
@@ -1132,7 +1144,6 @@ watch(
   --np-fill: var(--color-primary);
   --np-outline: rgba(255, 255, 255, 0.95);
   --np-outline-glow: rgba(255, 255, 255, 0.85);
-  --np-cover-shadow: none;
 
   background-color: #fafbfc;
 }
@@ -1265,12 +1276,12 @@ watch(
   background: var(--np-hover);
 }
 
-.btn-action:disabled {
+.btn-action.is-disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
-.btn-action:disabled:hover {
+.btn-action.is-disabled:hover {
   background: none;
 }
 
