@@ -34,7 +34,6 @@
           :cover-url="coverUrl"
           :active="isPlaying"
           :light="!isDarkTheme"
-          :show-arm="false"
           alt="cover"
         >
           <template #fallback><DefaultCover mode="fill" /></template>
@@ -107,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
@@ -152,16 +151,29 @@ const coverUrl = computed(() =>
   currentMusic.value?.coverPath ? getCoverUrl(currentMusic.value.coverPath) : null
 )
 
-onMounted(() => {
-  // 优先用迷你自己的偏好；没有则跟随全屏特效映射（vinyl/cd/cassette 同名，其余用普通方形）
+/**
+ * 从全屏特效同步迷你封面：
+ * - 全屏是唱片/CD/磁带时，直接带过去（覆盖迷你本地偏好）
+ * - 否则沿用迷你自己保存的形态；没有则普通方形
+ * keep-alive 下用 onActivated，每次进入迷你都会跑
+ */
+const syncCoverFromFullscreen = () => {
+  const fx = settingsStore.nowPlayingEffect
+  if (fx === 'vinyl' || fx === 'cd' || fx === 'cassette') {
+    miniCoverStyle.value = fx
+    localStorage.setItem('miniCoverStyle', fx)
+    return
+  }
   const saved = localStorage.getItem('miniCoverStyle') as MiniCoverStyle | null
   if (saved && MINI_COVER_STYLES.includes(saved)) {
     miniCoverStyle.value = saved
     return
   }
-  const fx = settingsStore.nowPlayingEffect
-  miniCoverStyle.value = fx === 'vinyl' || fx === 'cd' || fx === 'cassette' ? fx : 'plain'
-})
+  miniCoverStyle.value = 'plain'
+}
+
+onMounted(syncCoverFromFullscreen)
+onActivated(syncCoverFromFullscreen)
 
 /** 循环切换封面形态并持久化（迷你偏好，用 localStorage 即可，不进 AppSettings） */
 const cycleMiniCover = () => {
@@ -351,6 +363,8 @@ const handleSeek = (e: MouseEvent) => {
 }
 
 .window-controls {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -378,7 +392,7 @@ const handleSeek = (e: MouseEvent) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 20px 20px;
+  padding: 10px 20px 14px;
   gap: 15px;
 }
 
@@ -495,7 +509,7 @@ const handleSeek = (e: MouseEvent) => {
   align-items: center;
   gap: 16px;
   margin-top: auto;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .control-btn {
