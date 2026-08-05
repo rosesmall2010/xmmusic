@@ -185,6 +185,8 @@ onBeforeUnmount(() => {
   --hub: #f4f4f6;
   --hub-tooth: #d8d9de;
   --screw: #9a9b9f;
+  /* 壳体仅保留内描边，去掉外投影半透明晕边 */
+  --shell-shadow: none;
 
   position: relative;
   width: 100%;
@@ -206,6 +208,7 @@ onBeforeUnmount(() => {
   --rib: rgba(0, 0, 0, 0.12);
   --label-edge: rgba(0, 0, 0, 0.35);
   --screw: #6a6b70;
+  --shell-shadow: none;
 }
 
 .cassette-shell {
@@ -216,7 +219,7 @@ onBeforeUnmount(() => {
   background:
     linear-gradient(180deg, var(--shell-light) 0%, var(--shell) 42%, var(--shell-dark) 100%);
   box-shadow:
-    0 14px 32px rgba(0, 0, 0, 0.38),
+    var(--shell-shadow),
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
     inset 0 -1px 0 rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px rgba(0, 0, 0, 0.12);

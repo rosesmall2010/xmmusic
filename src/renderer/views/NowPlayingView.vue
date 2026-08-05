@@ -130,7 +130,7 @@
           <div class="song-info">
             <h1 class="song-title">{{ currentMusic?.title || $t('nowPlaying.noMusic') }}</h1>
             <p class="song-artist">{{ currentMusic?.artist || $t('nowPlaying.unknownArtist') }}</p>
-            <p class="song-album" v-if="currentMusic?.album">{{ currentMusic.album }}</p>
+            <p class="song-album" :class="{ 'is-empty': !currentMusic?.album }">{{ currentMusic?.album || ' ' }}</p>
           </div>
         </div>
 
@@ -1090,7 +1090,8 @@ watch(
     -1px 0 0 var(--np-outline),
     1px 0 0 var(--np-outline),
     0 0 4px var(--np-outline-glow);
-  --np-cover-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  /* 封面外沿不再用大模糊投影，避免半透明色晕 */
+  --np-cover-shadow: none;
 
   position: fixed;
   top: 0;
@@ -1127,7 +1128,7 @@ watch(
   --np-fill: var(--color-primary);
   --np-outline: rgba(255, 255, 255, 0.95);
   --np-outline-glow: rgba(255, 255, 255, 0.85);
-  --np-cover-shadow: 0 18px 44px rgba(20, 22, 26, 0.16);
+  --np-cover-shadow: none;
 
   background-color: #fafbfc;
 }
@@ -1398,10 +1399,12 @@ watch(
   height: auto;
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--np-cover-shadow);
+  box-shadow: none;
   position: relative;
   margin: 0 auto;
   flex-shrink: 0;
+  /* 不透明底，避免圆角抗锯齿透出背景形成浅色晕边 */
+  background: #ffffff;
 }
 
 /* 唱片/CD 跟容器较小边缩放；磁带为横向 1.57 比例，按高度反推宽度 */
@@ -1420,6 +1423,15 @@ watch(
   max-height: 100%;
   aspect-ratio: 1.57;
   height: auto;
+}
+
+.now-playing-view.is-light .album-cover {
+  background: #ffffff;
+}
+
+.now-playing-view:not(.is-light) .album-cover {
+  /* 深色下默认封面外沿是白边，底用白才能衔接；真实封面会铺满盖住 */
+  background: #ffffff;
 }
 
 .album-cover img {
@@ -1462,17 +1474,31 @@ watch(
   font-weight: 700;
   margin-bottom: var(--spacing-xs);
   color: var(--np-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .song-artist {
   font-size: var(--font-size-base);
   color: var(--np-fg-2);
   margin-bottom: var(--spacing-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .song-album {
   font-size: var(--font-size-sm);
   color: var(--np-fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 专辑名可能为空，用不可见占位保留一行高度，避免封面区域可用高度随歌曲跳变 */
+.song-album.is-empty {
+  visibility: hidden;
 }
 
 /* 右侧面板 - 歌词/队列 */

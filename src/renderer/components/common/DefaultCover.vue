@@ -56,8 +56,11 @@ const coverClasses = computed(() => ({
   width: 100% !important;
   height: 100% !important;
   border-radius: inherit;
-  box-shadow: none;
+  box-shadow: none !important;
   transition: none;
+  /* 避免父级投影/滤镜在缩放到大封面时渗出浅色晕边 */
+  filter: none;
+  outline: none;
 }
 
 .default-cover img {
@@ -66,6 +69,10 @@ const coverClasses = computed(() => ({
   object-fit: cover;
   display: block;
   border-radius: inherit;
+  /* 位图缩放时关闭插值渗色感（Chromium 对边缘抗锯齿更干净） */
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 /* Override styles for fallback mode */
