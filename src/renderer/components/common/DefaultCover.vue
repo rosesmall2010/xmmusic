@@ -56,6 +56,8 @@ const coverClasses = computed(() => ({
   width: 100% !important;
   height: 100% !important;
   border-radius: inherit;
+  box-shadow: none;
+  transition: none;
 }
 
 .default-cover img {
