@@ -169,11 +169,25 @@ const onCoverError = () => {
 // keep-alive：仅 onActivated，避免首次与 onMounted 双重 sync
 onActivated(() => {
   settingsStore.syncMiniCoverOnEnter()
-  // 迷你无可视化：未开 EQ 且已为频谱接管时释放 Web Audio
+  // 迷你无可视化：未开 EQ 且已为频谱接管时释放 Web Audio，与普通模式「原生直出」对齐
   if (!equalizer.enabled.value && equalizer.isCaptured()) {
     window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
   }
 })
+
+/**
+ * 与 PlayerBar 对齐：音效开启且正在播放时确保挂上滤波链。
+ * 迷你是 blank 布局、没有 PlayerBar，必须在这里自己保活，否则全屏/普通开着音效进迷你后
+ * 若捕获曾被释放，听感会掉回干声。
+ */
+watch(
+  [isPlaying, () => equalizer.enabled.value],
+  ([playing, eqOn]) => {
+    if (!playing || !eqOn) return
+    equalizer.ensureCapturedForEq()
+  },
+  { immediate: true }
+)
 
 /** 循环切换封面形态并持久化 */
 const cycleMiniCover = () => {
