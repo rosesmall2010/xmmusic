@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="dialog-overlay" @click.self="close">
+  <!-- 编辑标签含表单，禁止点遮罩关闭，避免误触丢失未保存内容 -->
+  <div v-if="show" class="dialog-overlay">
     <div class="dialog edit-tag-dialog" :class="{ 'has-id3': rawID3Tags }">
       <h3>{{ $t('tagEditor.title') }}</h3>
 
