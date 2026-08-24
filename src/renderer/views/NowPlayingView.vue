@@ -1,5 +1,5 @@
 <template>
-  <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle">
+  <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle" @click="closeQueueContextMenu">
     <!-- 背景特效：随所选特效切换；唱片特效的主体在封面区，背景保持干净 -->
     <div class="background-effects" aria-hidden="true">
       <AudioEqualizerBackground v-if="effect === 'spectrum' && effectEnabled" :active="isPlaying" :light="isLight" />
@@ -188,6 +188,7 @@
                   :class="{ active: currentQueueIndex === item.index }"
                   :style="{ height: queueItemHeight + 'px', transform: `translateY(${item.index * queueItemHeight}px)` }"
                   @dblclick="playQueueItem(item.index)"
+                  @contextmenu.prevent="showQueueContextMenu($event, item.music, item.index)"
                 >
                   <div class="item-index">
                     <Volume2 v-if="currentQueueIndex === item.index" :size="14" class="playing-icon" />
@@ -298,11 +299,70 @@
       @close="closeLyricsPick"
       @select="onSelectLyricsCandidate"
     />
+
+    <!-- 队列右键菜单（不含批量操作） -->
+    <div
+      v-if="queueContextMenu.visible && queueContextMenu.music"
+      class="np-context-menu"
+      :style="{ top: queueContextMenu.y + 'px', left: queueContextMenu.x + 'px' }"
+      @click.stop
+    >
+      <div class="menu-item" @click="playFromContextMenu">
+        {{ $t('music.play') }}
+      </div>
+      <div class="menu-item" @click="toggleFavoriteFromContextMenu">
+        <Heart
+          :size="16"
+          :fill="queueContextMenu.isFavorite ? 'currentColor' : 'none'"
+          :class="{ 'text-red-500': queueContextMenu.isFavorite }"
+          class="icon"
+        />
+        {{ queueContextMenu.isFavorite ? $t('music.removeFromFavorites') : $t('music.addToFavorites') }}
+      </div>
+      <div class="menu-item" @click="openAddToPlaylistFromContextMenu">
+        <Music :size="16" class="icon" />
+        {{ $t('music.addToPlaylist') }}
+      </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="openEditTagFromContextMenu">
+        <Edit :size="16" class="icon" />
+        {{ $t('music.editTags') }}
+      </div>
+      <div class="menu-item" @click="openFileExplorerFromContextMenu">
+        <FolderOpen :size="16" class="icon" />
+        {{ $t('music.openInExplorer') }}
+      </div>
+      <div class="menu-item" @click="showDetailsFromContextMenu">
+        <Info :size="16" class="icon" />
+        {{ $t('music.viewDetails') }}
+      </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item delete" @click="removeFromContextMenu">
+        <Trash2 :size="16" class="icon" />
+        {{ $t('music.removeFromQueue') }}
+      </div>
+    </div>
+
+    <AddToPlaylistModal
+      v-model="showAddToPlaylist"
+      :music-to-ad="playlistMusic"
+    />
+    <EditTagModal
+      :show="showEditTag"
+      :music="editingMusic"
+      @close="showEditTag = false; editingMusic = null"
+      @saved="onTagSaved"
+    />
+    <MusicDetailsModal
+      :show="showDetailsDialog"
+      :music="detailsMusic"
+      @close="showDetailsDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useElementSize } from '@vueuse/core'
@@ -320,10 +380,13 @@ import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, Edit, FolderOpen, Info, Trash2 } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
+import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
+import EditTagModal from '@/components/music/EditTagModal.vue'
+import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { LyricsMatchCandidate } from '@shared/types/lyrics'
 
 const router = useRouter()
@@ -402,6 +465,7 @@ const handleQueueScroll = (e: Event) => {
   requestAnimationFrame(() => {
     queueScrollTop.value = target.scrollTop
   })
+  closeQueueContextMenu()
 }
 
 const queueTotalHeight = computed(() => queue.value.length * queueItemHeight)
@@ -579,6 +643,7 @@ const toggleFavorite = async () => {
 
 const toggleQueue = () => {
   // 在NowPlayingView中，切换右侧面板显示队列
+  closeQueueContextMenu()
   rightPanelMode.value = rightPanelMode.value === 'queue' ? 'lyrics' : 'queue'
 }
 
@@ -589,6 +654,144 @@ const playQueueItem = async (index: number) => {
 
 const removeQueueItem = (index: number) => {
   playerStore.removeFromQueue(index)
+}
+
+// —— 队列右键菜单（不含批量操作） ——
+const queueContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  music: null as MusicItem | null,
+  index: -1,
+  isFavorite: false
+})
+const showAddToPlaylist = ref(false)
+const playlistMusic = ref<MusicItem | null>(null)
+const showEditTag = ref(false)
+const editingMusic = ref<MusicItem | null>(null)
+const showDetailsDialog = ref(false)
+const detailsMusic = ref<MusicItem | null>(null)
+
+const closeQueueContextMenu = () => {
+  queueContextMenu.visible = false
+}
+
+const adjustQueueContextMenuPosition = () => {
+  if (!queueContextMenu.visible) return
+  const menuElement = document.querySelector('.np-context-menu') as HTMLElement | null
+  if (!menuElement) return
+
+  const menuRect = menuElement.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = menuRect.width || 200
+  const menuHeight = menuRect.height || 280
+
+  let adjustedX = queueContextMenu.x
+  let adjustedY = queueContextMenu.y
+  if (adjustedX + menuWidth > viewportWidth) adjustedX = viewportWidth - menuWidth - 10
+  if (adjustedX < 0) adjustedX = 10
+  if (adjustedY + menuHeight > viewportHeight) adjustedY = viewportHeight - menuHeight - 10
+  if (adjustedY < 0) adjustedY = 10
+
+  queueContextMenu.x = adjustedX
+  queueContextMenu.y = adjustedY
+}
+
+const showQueueContextMenu = async (event: MouseEvent, music: MusicItem, index: number) => {
+  event.stopPropagation()
+  const targetId = music.id
+  queueContextMenu.music = music
+  queueContextMenu.index = index
+  queueContextMenu.visible = true
+  queueContextMenu.x = event.clientX
+  queueContextMenu.y = event.clientY
+  queueContextMenu.isFavorite = !!music.favorite
+  try {
+    const fav = await window.electronAPI.isFileFavorite(targetId)
+    // 快速连开另一项时，丢弃过期结果
+    if (queueContextMenu.music?.id !== targetId) return
+    queueContextMenu.isFavorite = fav
+  } catch {
+    if (queueContextMenu.music?.id === targetId) {
+      queueContextMenu.isFavorite = !!music.favorite
+    }
+  }
+  if (queueContextMenu.music?.id !== targetId) return
+  await nextTick()
+  adjustQueueContextMenuPosition()
+}
+
+const playFromContextMenu = async () => {
+  const music = queueContextMenu.music
+  closeQueueContextMenu()
+  if (!music) return
+  const index = queue.value.findIndex(m => m.id === music.id)
+  if (index >= 0) await playQueueItem(index)
+}
+
+const toggleFavoriteFromContextMenu = async () => {
+  const music = queueContextMenu.music
+  if (!music) return
+  const targetId = music.id
+  const next = !queueContextMenu.isFavorite
+  queueContextMenu.isFavorite = next
+  try {
+    const latest = await window.electronAPI.toggleFavorite(targetId)
+    if (queueContextMenu.music?.id === targetId) {
+      queueContextMenu.isFavorite = latest
+    }
+    music.favorite = latest
+    if (currentMusic.value?.id === targetId) {
+      isFavorite.value = latest
+    }
+    window.dispatchEvent(new Event('favorites-updated'))
+  } catch (e) {
+    if (queueContextMenu.music?.id === targetId) {
+      queueContextMenu.isFavorite = !next
+    }
+    console.error('切换收藏失败', e)
+  }
+  closeQueueContextMenu()
+}
+
+const openAddToPlaylistFromContextMenu = () => {
+  playlistMusic.value = queueContextMenu.music
+  showAddToPlaylist.value = true
+  closeQueueContextMenu()
+}
+
+const openEditTagFromContextMenu = () => {
+  editingMusic.value = queueContextMenu.music
+  showEditTag.value = true
+  closeQueueContextMenu()
+}
+
+const openFileExplorerFromContextMenu = () => {
+  const music = queueContextMenu.music
+  closeQueueContextMenu()
+  if (music) window.electronAPI.openInFileExplorer(music.filePath)
+}
+
+const showDetailsFromContextMenu = () => {
+  detailsMusic.value = queueContextMenu.music
+  showDetailsDialog.value = true
+  closeQueueContextMenu()
+}
+
+const removeFromContextMenu = () => {
+  const music = queueContextMenu.music
+  closeQueueContextMenu()
+  if (!music) return
+  // 按 id 查找，避免菜单打开后队列变动导致下标过期删错歌
+  const index = queue.value.findIndex(m => m.id === music.id)
+  if (index >= 0) removeQueueItem(index)
+}
+
+const onTagSaved = () => {
+  // EditTagModal 已派发 music-metadata-updated，playerStore 会同步当前曲/队列项
+  showEditTag.value = false
+  editingMusic.value = null
 }
 
 const toggleMiniMode = async () => {
@@ -1031,7 +1234,18 @@ watch(
 )
 
 // 离开全屏页：无可视化消费者时释放仅为频谱挂上的 Web Audio（EQ 开着则保留）
+const onQueueContextMenuKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && queueContextMenu.visible) {
+    closeQueueContextMenu()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onQueueContextMenuKeydown)
+})
+
 onUnmounted(() => {
+  window.removeEventListener('keydown', onQueueContextMenuKeydown)
   if (!equalizer.enabled.value && equalizer.isCaptured()) {
     window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
   }
@@ -1054,6 +1268,7 @@ watch(currentQueueIndex, () => {
 
 // 切换到队列 → 滚到当前曲；切回歌词 → 按当前进度对齐并滚到可见区
 watch(rightPanelMode, (mode) => {
+  closeQueueContextMenu()
   if (mode === 'queue') {
     setTimeout(() => {
       scrollToCurrentQueueItem()
@@ -1781,6 +1996,48 @@ watch(
   color: var(--np-fg-5);
   font-size: var(--font-size-base);
   text-shadow: var(--np-text-outline);
+}
+
+/* 队列右键菜单：用全局 elevated 底，保证深/浅主题可读；z-index 高于全屏页 */
+.np-context-menu {
+  position: fixed;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-xs);
+  min-width: 180px;
+  z-index: calc(var(--z-modal) + 10);
+  color: var(--text-color);
+}
+
+.np-context-menu .menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: var(--spacing-xs) 0;
+}
+
+.np-context-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  cursor: pointer;
+  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  transition: background var(--transition-fast);
+}
+
+.np-context-menu .menu-item .icon {
+  flex-shrink: 0;
+}
+
+.np-context-menu .menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.np-context-menu .menu-item.delete {
+  color: var(--color-danger, #ef4444);
 }
 
 /* 底部播放控制区 */
