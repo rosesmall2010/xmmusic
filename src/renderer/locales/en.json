@@ -431,7 +431,11 @@
     "matchDone": "Lyrics matching done: {success} succeeded, {skipped} skipped, {failed} failed",
     "matchCancelled": "Matching cancelled: {success} succeeded, {skipped} skipped, {failed} failed",
     "matchSuccessCount": "{count} succeeded",
-    "matchError": "Batch lyrics matching failed"
+    "matchError": "Batch lyrics matching failed",
+    "locateCurrent": "Locate Current",
+    "locatingCurrent": "Locating…",
+    "locateCurrentTip": "Scroll the list to the currently playing song",
+    "currentNotInList": "The currently playing song is not in the local music list"
   },
   "desktopLyrics": {
     "lock": "Lock",

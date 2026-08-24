@@ -469,6 +469,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getLocalMusicCount()
   })
 
+  ipcMain.handle('get-local-music-index', (_, musicId: number) => {
+    if (!db) return null
+    return db.getLocalMusicIndexByMusicId(musicId)
+  })
+
   ipcMain.handle('search-music', async (_, query: string) => {
     if (!db) return []
     const results = db.searchMusic(query)

@@ -431,7 +431,11 @@
     "matchDone": "歌词匹配完成：成功 {success}，跳过 {skipped}，失败 {failed}",
     "matchCancelled": "已取消匹配：成功 {success}，跳过 {skipped}，失败 {failed}",
     "matchSuccessCount": "成功 {count}",
-    "matchError": "批量匹配歌词失败"
+    "matchError": "批量匹配歌词失败",
+    "locateCurrent": "定位当前",
+    "locatingCurrent": "定位中…",
+    "locateCurrentTip": "将列表滚动到正在播放的歌曲",
+    "currentNotInList": "当前播放的歌曲不在本地音乐列表中"
   },
   "desktopLyrics": {
     "lock": "锁定",

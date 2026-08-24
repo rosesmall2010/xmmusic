@@ -17,6 +17,16 @@ export const useMusicStore = defineStore('music', () => {
   const advancedResults = ref<MusicItem[]>([])
   const advancedCriteria = ref<AdvancedSearchCriteria | null>(null)
   const advancedLoading = ref(false)
+  /** 播放栏「定位当前」：待滚动的列表下标；null 表示无待处理 */
+  const pendingLocateIndex = ref<number | null>(null)
+  /** 递增以通知 LocalMusicList 执行定位（已在本地页时） */
+  const locateRequestSeq = ref(0)
+  /** 定位进行中（加载列表 + 滚动），防止重复点击 */
+  const locatingCurrent = ref(false)
+  /** 预查缓存：当前曲在本地列表中的下标 */
+  const cachedLocateMusicId = ref<number | null>(null)
+  const cachedLocateIndex = ref<number | null>(null)
+  let locateCacheEpoch = 0
   /** 列表加载世代：清空/强制重置时递增，丢弃进行中的过期分页结果 */
   let loadEpoch = 0
 
@@ -25,6 +35,9 @@ export const useMusicStore = defineStore('music', () => {
     return currentOffset.value < totalCount.value
   })
   const isAdvancedMode = computed(() => !!advancedCriteria.value)
+  const currentInLocalList = computed(
+    () => cachedLocateMusicId.value != null && cachedLocateIndex.value != null && cachedLocateIndex.value >= 0
+  )
 
   /** 立即清空本地列表状态（供「清除所有」等），并作废进行中的 loadMusic */
   function resetLocalList() {
@@ -132,6 +145,51 @@ export const useMusicStore = defineStore('music', () => {
     currentView.value = 'playlist-detail'
   }
 
+  /** 查询当前播放曲在本地列表中的下标；不在库中返回 null */
+  async function resolveLocalMusicIndex(musicId: number): Promise<number | null> {
+    const index = await window.electronAPI.getLocalMusicIndex(musicId)
+    if (index == null || index < 0) return null
+    return index
+  }
+
+  /**
+   * 预查当前曲是否在本地库。
+   * reset=true：切歌时先清空缓存（按钮立刻禁用），避免沿用上一首状态。
+   */
+  async function refreshLocateCache(musicId: number | undefined, reset = true) {
+    locateCacheEpoch += 1
+    const epoch = locateCacheEpoch
+    cachedLocateMusicId.value = musicId ?? null
+    if (reset || !musicId) {
+      cachedLocateIndex.value = null
+    }
+    if (!musicId) return
+
+    const index = await resolveLocalMusicIndex(musicId)
+    if (epoch !== locateCacheEpoch) return
+    cachedLocateIndex.value = index
+  }
+
+  /** 播放栏触发：使用预查缓存下标，避免点击时再查一次 */
+  function requestLocateCurrent(musicId: number): boolean {
+    if (locatingCurrent.value) return false
+    if (cachedLocateMusicId.value !== musicId || cachedLocateIndex.value == null) return false
+
+    locatingCurrent.value = true
+    pendingLocateIndex.value = cachedLocateIndex.value
+    locateRequestSeq.value += 1
+    return true
+  }
+
+  function clearPendingLocate() {
+    pendingLocateIndex.value = null
+  }
+
+  /** 定位流程结束（加载 + 滚动完成后由列表页调用） */
+  function finishLocateCurrent() {
+    locatingCurrent.value = false
+  }
+
   return {
     musicList,
     totalCount,
@@ -145,6 +203,7 @@ export const useMusicStore = defineStore('music', () => {
     advancedCriteria,
     advancedLoading,
     isAdvancedMode,
+    currentInLocalList,
     hasMore,
     loadMusic,
     searchMusic,
@@ -156,6 +215,14 @@ export const useMusicStore = defineStore('music', () => {
     setCurrentView,
     loadPlaylists,
     selectPlaylist,
-    currentOffset
+    currentOffset,
+    pendingLocateIndex,
+    locateRequestSeq,
+    locatingCurrent,
+    resolveLocalMusicIndex,
+    refreshLocateCache,
+    requestLocateCurrent,
+    clearPendingLocate,
+    finishLocateCurrent
   }
 })

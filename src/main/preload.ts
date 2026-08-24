@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMusicList: (offset: number, limit: number) =>
     ipcRenderer.invoke('get-music-list', offset, limit),
   getMusicTotalCount: () => ipcRenderer.invoke('get-music-total-count'),
+  getLocalMusicIndex: (musicId: number) => ipcRenderer.invoke('get-local-music-index', musicId),
   searchMusic: (query: string) => ipcRenderer.invoke('search-music', query),
   advancedSearch: (criteria: AdvancedSearchCriteria) => ipcRenderer.invoke('advanced-search', criteria),
   getSearchHistory: () => ipcRenderer.invoke('get-search-history'),
@@ -305,12 +306,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMusicAudioInfo: (musicId: number) => ipcRenderer.invoke('get-music-audio-info', musicId),
   extractMusicCover: (musicId: number, outputPath: string) => ipcRenderer.invoke('extract-music-cover', musicId, outputPath),
 
-  // 通用事件监听
+  // 通用事件监听：返回取消订阅函数，避免 removeAllListeners 误伤其他组件
   on: (channel: string, listener: (...args: any[]) => void) => {
     const validChannels = ['music-updated', 'music-list-refresh']
-    if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-    }
+    if (!validChannels.includes(channel)) return () => {}
+    const wrapped = (event: Electron.IpcRendererEvent, ...args: any[]) => listener(event, ...args)
+    ipcRenderer.on(channel, wrapped)
+    return () => ipcRenderer.removeListener(channel, wrapped)
   },
   removeAllListeners: (channel: string) => {
     const validChannels = ['music-updated', 'music-list-refresh']
@@ -336,6 +338,7 @@ declare global {
       scanMusicFolder: (path: string) => Promise<ScanResult>
       getMusicList: (offset: number, limit: number) => Promise<MusicItem[]>
       getMusicTotalCount: () => Promise<number>
+      getLocalMusicIndex: (musicId: number) => Promise<number | null>
       searchMusic: (query: string) => Promise<MusicItem[]>
       advancedSearch: (criteria: AdvancedSearchCriteria) => Promise<MusicItem[]>
       getSearchHistory: () => Promise<Array<{ query: string; searchType: string; createdAt: string }>>

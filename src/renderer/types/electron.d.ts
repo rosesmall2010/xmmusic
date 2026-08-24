@@ -38,6 +38,7 @@ export interface ElectronAPI {
   // 数据库操作
   getMusicList: (offset: number, limit: number) => Promise<any[]>
   getMusicTotalCount: () => Promise<number>
+  getLocalMusicIndex: (musicId: number) => Promise<number | null>
   searchMusic: (query: string) => Promise<any[]>
   advancedSearch: (criteria: any) => Promise<any[]>
   getSearchHistory: () => Promise<any[]>
@@ -205,7 +206,7 @@ export interface ElectronAPI {
   extractMusicCover: (musicId: number, outputPath: string) => Promise<boolean>
 
   // 事件监听
-  on: (channel: string, listener: (...args: any[]) => void) => void
+  on: (channel: string, listener: (...args: any[]) => void) => () => void
   removeAllListeners: (channel: string) => void
 }
 

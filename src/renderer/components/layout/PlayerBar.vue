@@ -92,6 +92,19 @@
         <EqualizerPanel v-model="showEqualizer" />
       </div>
 
+      <span
+        class="locate-btn-wrap has-tip"
+        :data-tip="locateCurrentTip"
+      >
+        <button
+          class="control-icon-btn"
+          @click="handleLocateCurrent"
+          :disabled="!canLocateCurrent"
+        >
+          <LocateFixed :size="18" />
+        </button>
+      </span>
+
       <div class="volume-control">
         <button class="control-icon-btn" @click="toggleMute">
           <component :is="VolumeIcon" :size="18" />
@@ -111,20 +124,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
+import { useMusicStore } from '@/stores/music'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
-import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, Volume2, VolumeX, Sliders } from 'lucide-vue-next'
+import { Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, List, ListOrdered, Volume2, VolumeX, Sliders, LocateFixed } from 'lucide-vue-next'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import { useEqualizer } from '@/composables/useEqualizer'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const playerStore = usePlayerStore()
+const musicStore = useMusicStore()
 const { play, pause, resume, seek, setVolume } = usePlayer()
 
 // 音量：直接绑定到 playerStore.volume，避免初始化时子组件先挂载导致显示/保存不同步
@@ -150,6 +166,15 @@ const duration = computed(() => playerStore.duration)
 const playMode = computed(() => playerStore.playMode)
 const queue = computed(() => playerStore.queue)
 const hasMusic = computed(() => !!currentMusic.value || queue.value.length > 0)
+const canLocateCurrent = computed(
+  () => !!currentMusic.value && musicStore.currentInLocalList && !musicStore.locatingCurrent
+)
+const locateCurrentTip = computed(() => {
+  if (!currentMusic.value) return t('player.noMusic')
+  if (!musicStore.currentInLocalList) return t('localMusic.currentNotInList')
+  if (musicStore.locatingCurrent) return t('localMusic.locatingCurrent')
+  return t('localMusic.locateCurrentTip')
+})
 
 const progressPercentage = computed(() => {
   if (!duration.value) return 0
@@ -284,6 +309,22 @@ const toggleEqualizer = () => {
   showEqualizer.value = !showEqualizer.value
 }
 
+/** 定位当前播放：跳转本地音乐页并将列表居中到该曲 */
+const handleLocateCurrent = async () => {
+  const music = currentMusic.value
+  if (!music || !canLocateCurrent.value) return
+
+  const ok = musicStore.requestLocateCurrent(music.id)
+  if (!ok) {
+    await musicStore.refreshLocateCache(music.id, true)
+    return
+  }
+
+  if (route.path !== '/local') {
+    await router.push('/local')
+  }
+}
+
 const openNowPlaying = () => {
   if (currentMusic.value) {
     router.push('/playing')
@@ -305,6 +346,31 @@ watch(currentMusic, async (music) => {
     isFavorite.value = false
   }
 }, { immediate: true })
+
+watch(
+  () => currentMusic.value?.id,
+  (musicId) => {
+    void musicStore.refreshLocateCache(musicId, true)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => musicStore.totalCount,
+  () => {
+    void musicStore.refreshLocateCache(currentMusic.value?.id, false)
+  }
+)
+
+let unsubMusicListRefresh: (() => void) | undefined
+onMounted(() => {
+  unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', () => {
+    void musicStore.refreshLocateCache(currentMusic.value?.id, false)
+  })
+})
+onUnmounted(() => {
+  unsubMusicListRefresh?.()
+})
 
 // 仅在「音效已开启」时接管 Web Audio；平时走原生 Audio 直出，音质更干净
 watch(
@@ -510,18 +576,30 @@ watch(
   color: var(--text-color);
 }
 
+.control-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-icon-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 .control-icon-btn.active {
   color: var(--color-primary);
 }
 
 /* 快速自定义 tip：用 data-tip，避免原生 title 延迟与双重提示 */
 .control-btn.has-tip,
-.control-icon-btn.has-tip {
+.control-icon-btn.has-tip,
+.locate-btn-wrap.has-tip {
   position: relative;
 }
 
 .control-btn.has-tip::before,
-.control-icon-btn.has-tip::before {
+.control-icon-btn.has-tip::before,
+.locate-btn-wrap.has-tip::before {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 6px);
@@ -542,7 +620,8 @@ watch(
 }
 
 .control-btn.has-tip:hover::before,
-.control-icon-btn.has-tip:hover::before {
+.control-icon-btn.has-tip:hover::before,
+.locate-btn-wrap.has-tip:hover::before {
   opacity: 1;
   transition: opacity 0.12s ease 1s; /* 悬停：约 1s 后显示 */
 }

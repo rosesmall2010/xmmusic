@@ -854,6 +854,24 @@ onUnmounted(() => {
 // 同时监听队列引用本身（覆盖"播放全部"等整体替换，哪怕新旧长度相同也能捕获到）
 // 和 length（覆盖 push/splice 式的增删），避免对上万条歌曲的队列做 deep 遍历
 watch(() => [playerStore.queue, playerStore.queue.length], updateQueueStatus)
+
+/** 虚拟列表滚到指定下标（居中），供父组件「定位当前播放」等调用 */
+const scrollToIndex = async (index: number) => {
+  if (!containerRef.value || index < 0 || index >= props.songs.length) return
+
+  // 刚挂载或路由切换后 clientHeight 可能仍为 0，需等布局完成再算 scrollTop
+  for (let i = 0; i < 30; i++) {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    if (containerRef.value.clientHeight > 0) break
+  }
+
+  if (!containerRef.value || containerRef.value.clientHeight <= 0) return
+
+  const targetTop = index * itemHeight - containerRef.value.clientHeight / 2 + itemHeight / 2
+  containerRef.value.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' })
+}
+
+defineExpose({ scrollToIndex })
 </script>
 
 <style scoped>

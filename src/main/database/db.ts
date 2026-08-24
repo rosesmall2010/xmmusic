@@ -2892,6 +2892,25 @@ export default class MusicDatabase {
   }
 
   /**
+   * 获取歌曲在本地音乐列表中的下标（0 起，与 getLocalMusicPaginated 排序一致：added_at DESC, music_id DESC）
+   */
+  getLocalMusicIndexByMusicId(musicId: number): number | null {
+    if (!this.isInLocalMusicByMusicId(musicId)) return null
+
+    const targetStmt = this.db!.prepare('SELECT added_at FROM local_music WHERE music_id = ?')
+    const target = targetStmt.get(musicId) as { added_at: string } | undefined
+    if (!target) return null
+
+    const indexStmt = this.db!.prepare(`
+      SELECT COUNT(*) as count FROM local_music lm
+      WHERE lm.added_at > ?
+         OR (lm.added_at = ? AND lm.music_id > ?)
+    `)
+    const result = indexStmt.get(target.added_at, target.added_at, musicId) as { count: number }
+    return result.count
+  }
+
+  /**
    * 分页获取本地音乐列表（v1.0.6 使用 music_id，包含收藏和队列状态）
    */
   getLocalMusicPaginated(offset: number, limit: number): MusicItem[] {
@@ -2906,7 +2925,7 @@ export default class MusicDatabase {
       JOIN music_dir md ON am.dir_id = md.id
       LEFT JOIN favorites f ON am.id = f.music_id
       LEFT JOIN play_queue pq ON am.id = pq.music_id
-      ORDER BY lm.added_at DESC
+      ORDER BY lm.added_at DESC, lm.music_id DESC
       LIMIT ? OFFSET ?
     `)
     const rows = stmt.all(limit, offset) as any[]
