@@ -1207,13 +1207,25 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return null
     }
 
+    const parseWithOffset = (lyrics: LyricsData): LyricsData => {
+      // 用户手动校准的每曲偏移（毫秒）叠加在歌词自带 offset 之上；
+      // 读取端也做 NaN 防护 + 钳制，避免库中脏值/异常大值把歌词整体推飞
+      const raw = Number(music.lyricsOffset)
+      const manualMs = Number.isFinite(raw) ? Math.max(-30000, Math.min(30000, raw)) : 0
+      if (!lyrics?.lines || manualMs === 0) return lyrics
+      return {
+        ...lyrics,
+        lines: lyrics.lines.map((l) => ({ ...l, time: l.time + manualMs / 1000 }))
+      }
+    }
+
     console.log(`🔍 加载歌词：音乐ID=${musicId}, 文件路径=${music.filePath}`)
 
     // 1. 如果数据库中有歌词路径，直接使用
     if (music.lyricsPath && existsSync(music.lyricsPath)) {
       console.log(`✅ 使用数据库中的歌词路径: ${music.lyricsPath}`)
       try {
-        return lyricsService.parseLyrics(music.lyricsPath)
+        return parseWithOffset(lyricsService.parseLyrics(music.lyricsPath))
       } catch (error) {
         console.error('❌ 解析歌词文件失败:', error)
         // 如果解析失败，继续尝试自动查找
@@ -1236,7 +1248,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
         // 保存歌词路径到数据库（使用 updateAllMusic 因为这是新架构）
         db.updateAllMusic(musicId, { lyrics_path: lyricsPath })
         console.log(`✅ 歌词已解析并保存到数据库，共 ${lyrics.lines?.length || 0} 行`)
-        return lyrics
+        return parseWithOffset(lyrics)
       } catch (error: any) {
         console.error('❌ 解析歌词文件失败:', error?.message || error)
       }
@@ -1261,6 +1273,13 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('update-music-lyrics-path', async (_, musicId: number, lyricsPath: string) => {
     if (!db) return
     db.updateMusic(musicId, { lyricsPath })
+  })
+
+  /** 保存用户手动校准的歌词时间偏移（毫秒） */
+  ipcMain.handle('update-music-lyrics-offset', async (_, musicId: number, offsetMs: number) => {
+    if (!db) return
+    const ms = Math.round(Number(offsetMs) || 0)
+    db.updateAllMusic(musicId, { lyrics_offset: Math.max(-30000, Math.min(30000, ms)) })
   })
 
   /** 单曲匹配 / 重新匹配歌词 */

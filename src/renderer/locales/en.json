@@ -103,6 +103,10 @@
     "similarity": "Similarity",
     "useSelectedLyrics": "Use Selected",
     "applyingLyrics": "Saving...",
+    "lyricsOffset": "Lyrics Offset",
+    "lyricsOffsetUnit": "sec",
+    "lyricsOffsetReset": "Reset",
+    "lyricsOffsetHint": "If lyrics lag or lead by a few seconds, adjust this slider to align (0.5s steps)",
     "effect": {
       "spectrum": "Neon Spectrum",
       "flame": "Flame",

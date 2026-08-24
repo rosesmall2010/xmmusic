@@ -20,6 +20,7 @@ export interface MusicItem {
   channels: number
   coverPath: string | null
   lyricsPath: string | null
+  lyricsOffset: number
   playCount: number
   lastPlayedAt: string | null
   favorite: boolean

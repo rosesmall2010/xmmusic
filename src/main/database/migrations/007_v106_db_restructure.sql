@@ -109,6 +109,9 @@ CREATE TABLE IF NOT EXISTS all_music (
   cover_path TEXT,                         -- 封面路径（相对路径或完整路径）
   lyrics_path TEXT,                        -- 歌词路径（相对路径或完整路径）
 
+  -- 歌词时间偏移（毫秒，用户手动校准；正数=歌词提前/负值=歌词延后）
+  lyrics_offset INTEGER NOT NULL DEFAULT 0,
+
   -- 状态字段
   is_exists INTEGER DEFAULT 1,           -- 文件是否存在（1=存在，0=不存在）
   is_playable INTEGER DEFAULT 1,          -- 是否可以播放（1=可播放，0=不可播放）

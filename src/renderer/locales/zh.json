@@ -103,6 +103,10 @@
     "similarity": "相似度",
     "useSelectedLyrics": "使用选中项",
     "applyingLyrics": "正在写入...",
+    "lyricsOffset": "歌词偏移",
+    "lyricsOffsetUnit": "秒",
+    "lyricsOffsetReset": "归零",
+    "lyricsOffsetHint": "歌词与歌声相差几秒时，拖动此滑块校准（每 0.5 秒一档）",
     "effect": {
       "spectrum": "霓虹频谱",
       "flame": "火焰",

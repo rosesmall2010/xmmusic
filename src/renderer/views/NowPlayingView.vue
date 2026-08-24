@@ -173,6 +173,29 @@
               </p>
               <p v-if="lyrics.length === 0" class="lyrics-line empty">{{ $t('nowPlaying.noLyrics') }}</p>
             </div>
+            <div v-if="currentMusic && hasRealLyrics" class="lyrics-offset-bar">
+              <label class="offset-label" :title="$t('nowPlaying.lyricsOffsetHint')">
+                {{ $t('nowPlaying.lyricsOffset') }}
+              </label>
+              <input
+                type="range"
+                class="offset-slider"
+                min="-30000"
+                max="30000"
+                step="500"
+                :value="lyricsOffsetMs"
+                @input="onLyricsOffsetInput"
+              />
+              <span class="offset-value">{{ (lyricsOffsetMs / 1000).toFixed(1) }}{{ $t('nowPlaying.lyricsOffsetUnit') }}</span>
+              <button
+                type="button"
+                class="offset-reset"
+                :disabled="lyricsOffsetMs === 0"
+                @click="resetLyricsOffset"
+              >
+                {{ $t('nowPlaying.lyricsOffsetReset') }}
+              </button>
+            </div>
           </div>
 
           <!-- 队列面板：虚拟滚动，避免万级队列一次性渲染全部 DOM 节点。这里挂在 v-show 里，
@@ -449,11 +472,59 @@ const onEffectToggleClick = () => {
 const backgroundColor = ref('#1a1a1a')
 /** 展示中的封面 URL：切歌时等新图加载完成再替换，避免 img 清空透白 */
 const displayCoverUrl = ref<string | null>(null)
-const lyrics = ref<LyricLine[]>([])
+// 歌词逻辑
+/**
+ * 歌词偏移手动校准（毫秒）：正数=歌词提前，负数=歌词延后
+ * - lyricsOffsetMs：滑块当前值 = 最终生效偏移
+ * - persistedOffsetMs：本曲已写库、且主进程加载时已烘进 rawLyricsLines 行时间戳的基线
+ * rawLyricsLines 已含 persistedOffsetMs，所以 computed 只需再补 (滑块值 - 基线) 的差值，
+ * 避免与主进程重复叠加；迷你/桌面窗口只读主进程返回值，天然是单份偏移
+ */
+const lyricsOffsetMs = ref(0)
+const persistedOffsetMs = ref(0)
+const rawLyricsLines = ref<LyricLine[]>([])
+/** 已有歌词 + 相对基线的增量偏移的最终展示行 */
+const lyrics = computed<LyricLine[]>(() => {
+  const deltaSec = (lyricsOffsetMs.value - persistedOffsetMs.value) / 1000
+  if (deltaSec === 0) return rawLyricsLines.value
+  return rawLyricsLines.value.map((l) => ({ ...l, time: l.time + deltaSec }))
+})
+/** 是否加载到真正的歌词（非「暂无歌词/加载失败」占位），决定校准条是否显示 */
+const hasRealLyrics = ref(false)
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
 const rightPanelMode = ref<'lyrics' | 'queue'>('lyrics') // 右侧面板模式
+
+const loadLyrics = async () => {
+  rawLyricsLines.value = []
+  hasRealLyrics.value = false
+  currentLyricIndex.value = -1
+
+  if (!currentMusic.value) return
+
+  // 基线 = 主进程加载时按 DB lyrics_offset 烘进行时间戳的量。
+  // 由 loadLyrics 统一在每次（含 afterLyricsMatched 重载）灌 raw 时同步设定，
+  // 保证 rawLyricsLines 的内建偏移与 persistedOffsetMs 永远一致，computed 的差值才准确
+  const baseline = currentMusic.value.lyricsOffset || 0
+  persistedOffsetMs.value = baseline
+
+  try {
+    // 尝试获取歌词
+    // 优先查找同名 lrc 文件；主进程已按本曲偏移微调过行时间戳，
+    // 这里先存原始行，本地按 (滑块值-基线) 差值再叠加
+    const lyricsData = await window.electronAPI.loadLyrics(currentMusic.value.id)
+    if (lyricsData && lyricsData.lines) {
+      rawLyricsLines.value = lyricsData.lines
+      hasRealLyrics.value = lyricsData.lines.length > 0
+    } else {
+      rawLyricsLines.value = [{ time: 0, text: t('nowPlaying.noLyrics') }]
+    }
+  } catch (error) {
+    console.error('Failed to load lyrics:', error)
+    rawLyricsLines.value = [{ time: 0, text: t('nowPlaying.lyricsLoadError') }]
+  }
+}
 
 // 队列虚拟滚动：只渲染可视区域，逻辑与 PlayQueueDrawer.vue 保持一致
 const queueItemHeight = 60
@@ -976,28 +1047,6 @@ const lightenColorForBackground = (r: number, g: number, b: number): string => {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-// 歌词逻辑
-const loadLyrics = async () => {
-  lyrics.value = []
-  currentLyricIndex.value = -1
-
-  if (!currentMusic.value) return
-
-  try {
-    // 尝试获取歌词
-    // 优先查找同名 lrc 文件
-    const lyricsData = await window.electronAPI.loadLyrics(currentMusic.value.id)
-    if (lyricsData && lyricsData.lines) {
-      lyrics.value = lyricsData.lines
-    } else {
-      lyrics.value = [{ time: 0, text: t('nowPlaying.noLyrics') }]
-    }
-  } catch (error) {
-    console.error('Failed to load lyrics:', error)
-    lyrics.value = [{ time: 0, text: t('nowPlaying.lyricsLoadError') }]
-  }
-}
-
 /** 应用匹配结果后刷新歌词面板与当前曲元数据 */
 const afterLyricsMatched = async (targetMusicId: number, lyricsPath?: string) => {
   if (currentMusic.value?.id === targetMusicId && lyricsPath) {
@@ -1153,8 +1202,87 @@ const syncLyricIndex = (time: number, forceScroll = false) => {
   }
 }
 
+// —— 歌词偏移手动校准（实时应用 + 持久化） ——
+/** 滑块 input：改滑块值即改 computed 差值，实时重算高亮，节流后写库 */
+const onLyricsOffsetInput = (e: Event) => {
+  const el = e.target as HTMLInputElement
+  const ms = Math.round(Number(el.value) || 0)
+  lyricsOffsetMs.value = ms
+  syncLyricIndex(currentTime.value)
+  scheduleOffsetPersist()
+}
+
+const resetLyricsOffset = () => {
+  if (lyricsOffsetMs.value === 0) return
+  lyricsOffsetMs.value = 0
+  syncLyricIndex(currentTime.value, true)
+  void persistLyricsOffset()
+}
+
+/** 滑块拖动过程中会高频触发 input，节流到停止拖动后 300ms 再写库 */
+let offsetPersistTimer: ReturnType<typeof setTimeout> | null = null
+/** 记录待写入的曲目 id 与偏移，切歌时可据此立即 flush，避免写错曲/丢失 */
+let pendingOffset: { musicId: number; offsetMs: number } | null = null
+const scheduleOffsetPersist = () => {
+  const music = currentMusic.value
+  if (!music) return
+  pendingOffset = { musicId: music.id, offsetMs: lyricsOffsetMs.value }
+  if (offsetPersistTimer) clearTimeout(offsetPersistTimer)
+  offsetPersistTimer = setTimeout(() => {
+    void flushOffsetPersist()
+  }, 300)
+}
+
+/** 写库 + 回写内存：偏移落库后就地更新 store 中该曲的 lyricsOffset，
+ *  使切走再切回、或重新匹配歌词触发 loadLyrics 时基线读到最新值。
+ *  刻意就地改字段而非替换对象引用/派发 metadata 事件——避免触发 watch(currentMusic)
+ *  造成拖动时每次写库都重载歌词 */
+const writeOffset = async (musicId: number, offsetMs: number) => {
+  try {
+    await window.electronAPI.updateMusicLyricsOffset(musicId, offsetMs)
+    // 主进程写入端会钳制到 ±30s，这里回写用同样钳制值保持一致
+    const clamped = Math.max(-30000, Math.min(30000, offsetMs))
+    if (currentMusic.value?.id === musicId) {
+      currentMusic.value.lyricsOffset = clamped
+    }
+    const inQueue = playerStore.queue.find((m) => m.id === musicId)
+    if (inQueue) inQueue.lyricsOffset = clamped
+  } catch (error) {
+    console.error('保存歌词偏移失败:', error)
+  }
+}
+
+/** 立即写出待持久化的偏移（切歌/组件卸载时调用），清空定时器与待写记录 */
+const flushOffsetPersist = async () => {
+  if (offsetPersistTimer) {
+    clearTimeout(offsetPersistTimer)
+    offsetPersistTimer = null
+  }
+  const pending = pendingOffset
+  pendingOffset = null
+  if (!pending) return
+  await writeOffset(pending.musicId, pending.offsetMs)
+}
+
+/** 重置按钮：立即写当前曲，不走节流 */
+const persistLyricsOffset = async () => {
+  const music = currentMusic.value
+  if (!music) return
+  // 取消可能在途的节流写，避免其之后覆盖本次立即写
+  if (offsetPersistTimer) {
+    clearTimeout(offsetPersistTimer)
+    offsetPersistTimer = null
+  }
+  pendingOffset = null
+  await writeOffset(music.id, lyricsOffsetMs.value)
+}
+
 // 监听当前音乐变化
 watch(currentMusic, async (music, prev, onCleanup) => {
+  // 切歌前先把上一曲在途的偏移写出，避免节流未触发就被新曲覆盖导致丢失
+  if (prev && (!music || prev.id !== music.id)) {
+    await flushOffsetPersist()
+  }
   // 切歌时关闭未完成的歌词选择，防止把候选写到新曲
   if (prev && music && prev.id !== music.id) {
     if (showLyricsPick.value || lyricsMatchTargetId.value != null) {
@@ -1170,6 +1298,8 @@ watch(currentMusic, async (music, prev, onCleanup) => {
   if (music) {
     isFavorite.value = await window.electronAPI.isFileFavorite(music.id)
     if (cancelled) return
+    // 滑块初值 = 本曲已存偏移；基线由 loadLyrics 统一设定，二者一致 → delta=0 不重复叠加
+    lyricsOffsetMs.value = music.lyricsOffset || 0
     await loadLyrics()
     if (cancelled) return
     // 切歌/重载后若进度未变（暂停），currentTime watch 不会补高亮
@@ -1246,6 +1376,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onQueueContextMenuKeydown)
+  // 离开全屏页时把在途偏移写出，避免节流未触发就丢失
+  void flushOffsetPersist()
   if (!equalizer.enabled.value && equalizer.isCaptured()) {
     window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
   }
@@ -1831,6 +1963,59 @@ watch(
 
 .lyrics-line.empty {
   color: var(--np-fg-5);
+}
+
+/* 歌词偏移手动校准条：歌词与歌声相差几秒时的微调工具 */
+.lyrics-offset-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--np-border);
+  background: color-mix(in srgb, var(--np-hover-soft) 60%, transparent);
+}
+
+.offset-label {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--np-fg-4);
+  cursor: help;
+  white-space: nowrap;
+}
+
+.offset-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--np-fill, var(--color-primary));
+}
+
+.offset-value {
+  flex-shrink: 0;
+  min-width: 52px;
+  text-align: right;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--np-fg-2);
+}
+
+.offset-reset {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  background: var(--np-hover);
+  color: var(--np-fg-2);
+}
+
+.offset-reset:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.offset-reset:hover:not(:disabled) {
+  background: var(--np-hover-soft);
 }
 
 /* 队列面板 */

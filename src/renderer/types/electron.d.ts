@@ -164,6 +164,7 @@ export interface ElectronAPI {
   } | null>
   parseLyricsFile: (filePath: string) => Promise<any>
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
+  updateMusicLyricsOffset: (musicId: number, offsetMs: number) => Promise<void>
 
   // 系统托盘
   updateTrayPlayState: (isPlaying: boolean) => void

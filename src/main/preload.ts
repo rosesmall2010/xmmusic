@@ -261,6 +261,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   parseLyricsFile: (filePath: string) => ipcRenderer.invoke('parse-lyrics-file', filePath),
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) =>
     ipcRenderer.invoke('update-music-lyrics-path', musicId, lyricsPath),
+  updateMusicLyricsOffset: (musicId: number, offsetMs: number) =>
+    ipcRenderer.invoke('update-music-lyrics-offset', musicId, offsetMs),
   matchLyrics: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-lyrics', musicId, options),
   searchLyricsCandidates: (musicId: number) =>

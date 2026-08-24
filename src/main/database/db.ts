@@ -278,6 +278,16 @@ export default class MusicDatabase {
           }
         }
       }
+      // 幂等补列：旧库（DB_VERSION=3，all_music 建表时未含该列）在此 ALTER 补上。
+      // SQLite 的 ADD COLUMN 无 IF NOT EXISTS，靠 PRAGMA table_info 先探测是否已有；
+      // 新库由 007 建表语句自带该列，探测到即跳过。若表尚不存在（理论上迁移已建好，
+      // 此处仅为防御）则跳过，交由后续流程处理，避免对不存在的表 ALTER 抛错。
+      const allMusicCols = this.db!.prepare(`PRAGMA table_info(all_music)`).all() as Array<{ name: string }>
+      if (allMusicCols.length > 0 && !allMusicCols.some((c) => c.name === 'lyrics_offset')) {
+        this.db!.exec(`ALTER TABLE all_music ADD COLUMN lyrics_offset INTEGER NOT NULL DEFAULT 0`)
+        console.log('✅ 已为 all_music 表补充 lyrics_offset 列')
+      }
+
     } catch (error: any) {
       console.error('❌ v1.0.6 数据库迁移失败:', error)
       console.error('错误详情:', error.message)
@@ -460,6 +470,7 @@ export default class MusicDatabase {
     genre: string | null
     cover_path: string | null
     lyrics_path: string | null
+    lyrics_offset: number
     file_size: number
     is_exists: number
     is_playable: number
@@ -499,6 +510,10 @@ export default class MusicDatabase {
     if (updates.lyrics_path !== undefined) {
       fields.push('lyrics_path = ?')
       values.push(updates.lyrics_path)
+    }
+    if (updates.lyrics_offset !== undefined) {
+      fields.push('lyrics_offset = ?')
+      values.push(updates.lyrics_offset)
     }
     if (updates.is_exists !== undefined) {
       fields.push('is_exists = ?')
@@ -581,6 +596,7 @@ export default class MusicDatabase {
       channels: row.channels || 0,
       coverPath: row.cover_path,
       lyricsPath: row.lyrics_path,
+      lyricsOffset: row.lyrics_offset || 0,
       playCount: row.play_count || 0,
       lastPlayedAt: row.last_played_at,
       favorite: false, // 需要从 favorites 表查询
@@ -2405,6 +2421,7 @@ export default class MusicDatabase {
         channels: 0,
         coverPath: null,
         lyricsPath: null,
+        lyricsOffset: 0,
         playCount: 0,
         lastPlayedAt: null,
         favorite: false,
@@ -2436,6 +2453,7 @@ export default class MusicDatabase {
       channels: row.channels || 0,
       coverPath: row.cover_path,
       lyricsPath: row.lyrics_path,
+      lyricsOffset: row.lyrics_offset || 0,
       playCount: row.play_count || 0,
       lastPlayedAt: row.last_played_at,
       favorite: isFavorite, // 从独立的收藏表获取
