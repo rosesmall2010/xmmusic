@@ -104,6 +104,7 @@ erDiagram
 | `channels` | INTEGER | 声道数 | |
 | `cover_path` | TEXT | 封面路径 | |
 | `lyrics_path` | TEXT | 歌词路径 | |
+| `lyrics_offset` | INTEGER | 歌词时间偏移(毫秒) | 默认 0，正值歌词提前/负值延后，用户手动校准 |
 | `play_count` | INTEGER | 播放次数 | 默认 0 |
 | `last_played_at` | DATETIME | 上次播放时间 | |
 | `favorite` | INTEGER | (旧)是否收藏 | 默认 0, 已由 `favorites` 表接管 |
