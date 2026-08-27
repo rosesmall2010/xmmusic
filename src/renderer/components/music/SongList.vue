@@ -178,6 +178,10 @@
         <Edit :size="16" class="icon" />
         {{ $t('music.editTags') }}
       </div>
+      <div class="menu-item" @click="openNewTagInfo(contextMenu.music!)">
+        <FileEdit :size="16" class="icon" />
+        {{ $t('music.newTagInfo') }}
+      </div>
       <div
         v-if="showLyricsMatch && hasLyrics(contextMenu.music!)"
         class="menu-item"
@@ -234,6 +238,12 @@
       @close="closeEditTag"
       @saved="handleTagSaved"
     />
+    <NewTagInfoModal
+      :show="showNewTagInfo"
+      :music="newTagInfoMusic"
+      @close="closeNewTagInfo"
+      @saved="handleTagSaved"
+    />
     <MusicDetailsModal
       :show="showDetailsDialog"
       :music="detailsMusic"
@@ -247,10 +257,11 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, Edit, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import EditTagModal from '@/components/music/EditTagModal.vue'
+import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { MusicItem } from '@shared/types/music'
 import { useElementSize } from '@vueuse/core'
@@ -335,6 +346,10 @@ const showBatchAddToPlaylist = ref(false)
 // Edit Tag Modal
 const showEditTag = ref(false)
 const editingMusic = ref<MusicItem | null>(null)
+
+// New Tag Info Modal
+const showNewTagInfo = ref(false)
+const newTagInfoMusic = ref<MusicItem | null>(null)
 
 const contextMenu = reactive({
   visible: false,
@@ -810,6 +825,18 @@ const closeEditTag = () => {
 const handleTagSaved = () => {
   // Emit event to refresh the list
   emit('songs-updated')
+}
+
+// New Tag Info Modal handlers
+const openNewTagInfo = (music: MusicItem) => {
+  newTagInfoMusic.value = music
+  showNewTagInfo.value = true
+  closeContextMenu()
+}
+
+const closeNewTagInfo = () => {
+  showNewTagInfo.value = false
+  newTagInfoMusic.value = null
 }
 
 // 在文件管理器中打开
