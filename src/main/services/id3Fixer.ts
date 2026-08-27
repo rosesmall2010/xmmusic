@@ -65,6 +65,12 @@ export type Id3FixFieldFlags = {
   genre?: boolean
 }
 
+// 部分老版本打标签工具在字段为空时会写入字面文本 "null"/"undefined"，视为无效值
+function sanitizeTagValue(value: string | undefined | null): string | undefined {
+  if (!value) return undefined
+  return /^(null|undefined)$/i.test(value.trim()) ? undefined : value
+}
+
 export default class ID3Fixer {
   private backupDir: string
 
@@ -94,11 +100,11 @@ export default class ID3Fixer {
       }
 
       return {
-        title: tags.title || '',
-        artist: tags.artist || '',
-        album: tags.album || '',
-        year: tags.year || undefined,
-        genre: tags.genre || undefined
+        title: sanitizeTagValue(tags.title) || '',
+        artist: sanitizeTagValue(tags.artist) || '',
+        album: sanitizeTagValue(tags.album) || '',
+        year: sanitizeTagValue(tags.year),
+        genre: sanitizeTagValue(tags.genre)
       }
     } catch (error) {
       console.error('读取ID3标签失败:', error)
