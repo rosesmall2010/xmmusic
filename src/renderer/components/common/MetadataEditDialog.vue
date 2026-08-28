@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="dialog-overlay" @click.self="close">
+  <div v-if="show" class="dialog-overlay">
     <div class="dialog metadata-dialog">
       <h3>{{ isBatch ? $t('metadataEdit.batchEdit') : $t('metadataEdit.edit') }}</h3>
 

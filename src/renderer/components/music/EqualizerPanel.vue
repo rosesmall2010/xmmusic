@@ -1,6 +1,6 @@
 <template>
   <transition name="eq-fade">
-    <div class="eq-overlay" v-if="modelValue" @click.self="emit('update:modelValue', false)">
+    <div class="eq-overlay" v-if="modelValue">
       <div class="equalizer-panel">
         <!-- 头部 -->
         <div class="panel-header">
@@ -87,6 +87,9 @@
             <button class="btn-secondary" @click="handleReset" :disabled="!enabled">
               <RotateCcw :size="14" />
               {{ $t('equalizer.reset') }}
+            </button>
+            <button class="btn-primary" @click="emit('update:modelValue', false)">
+              {{ $t('common.confirm') }}
             </button>
           </div>
         </div>
@@ -669,5 +672,25 @@ input:checked + .slider:before {
 .btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-primary {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: none;
+  border-radius: var(--radius-base);
+  background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary-dark));
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--transition-timing);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 6px 16px -4px rgba(var(--color-primary-rgb), 0.6);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
 }
 </style>

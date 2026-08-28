@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="dialog-overlay" @click.self="emitClose">
+  <div v-if="show" class="dialog-overlay">
     <div class="dialog lyrics-match-dialog" role="dialog" aria-modal="true">
       <h3>{{ $t('nowPlaying.selectLyricsTitle') }}</h3>
       <p class="hint">{{ $t('nowPlaying.selectLyricsHint', { title: musicTitle }) }}</p>

@@ -97,7 +97,7 @@
     </div>
 
     <!-- 扫描目录管理对话框 -->
-    <div v-if="showDirManageDialog" class="dialog-overlay" @click.self="closeDirManageDialog">
+    <div v-if="showDirManageDialog" class="dialog-overlay">
       <div class="dir-manage-dialog">
         <div class="dialog-header">
           <h3 class="dialog-title">{{ $t('settings.setupScanDirectories') }}</h3>
@@ -161,7 +161,7 @@
     </div>
 
     <!-- 删除确认对话框 -->
-    <div v-if="showDeleteConfirmDialog" class="dialog-overlay" @click.self="cancelDelete">
+    <div v-if="showDeleteConfirmDialog" class="dialog-overlay">
       <div class="dialog-content delete-confirm-dialog">
         <h3 class="dialog-title">{{ $t('settings.deleteConfirm') }}</h3>
         <div class="dialog-body">
@@ -180,7 +180,7 @@
     </div>
 
     <!-- 添加/编辑目录对话框 -->
-    <div v-if="showAddDirDialog" class="dialog-overlay" @click.self="closeAddDirDialog">
+    <div v-if="showAddDirDialog" class="dialog-overlay">
       <div class="dialog-content">
         <h3 class="dialog-title">{{ editingDir ? $t('settings.editDirectory') : $t('settings.addDirectory') }}</h3>
         <div class="dialog-body">

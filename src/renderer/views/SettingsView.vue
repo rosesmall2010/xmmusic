@@ -219,7 +219,7 @@
     </div>
 
     <!-- 添加/编辑目录对话框 -->
-    <div v-if="showAddDirDialog" class="dialog-overlay" @click.self="closeDialog">
+    <div v-if="showAddDirDialog" class="dialog-overlay">
       <div class="dialog-content">
         <h3 class="dialog-title">{{ editingDir ? '编辑目录' : '添加目录' }}</h3>
         <div class="dialog-body">

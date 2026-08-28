@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click.self="close">
+  <div v-if="show" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
         <h3>{{ $t('playlist.setCover') }}</h3>

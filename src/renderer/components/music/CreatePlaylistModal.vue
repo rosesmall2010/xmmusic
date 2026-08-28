@@ -1,6 +1,6 @@
 <template>
-  <div v-if="modelValue" class="modal-overlay" @click="close">
-    <div class="modal-content" @click.stop>
+  <div v-if="modelValue" class="modal-overlay">
+    <div class="modal-content">
       <div class="modal-header">
         <h3>{{ isEdit ? $t('playlist.edit') : $t('playlist.create') }}</h3>
         <button class="close-btn" @click="close" :title="$t('common.close')">
