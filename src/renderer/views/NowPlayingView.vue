@@ -1,5 +1,5 @@
 <template>
-  <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle" @click="closeQueueContextMenu">
+  <div class="now-playing-view" :class="{ 'is-light': isLight }" :style="backgroundStyle" @click="closeQueueContextMenu(); closeLyricsContextMenu()">
     <!-- 背景特效：随所选特效切换；唱片特效的主体在封面区，背景保持干净 -->
     <div class="background-effects" aria-hidden="true">
       <AudioEqualizerBackground v-if="effect === 'spectrum' && effectEnabled" :active="isPlaying" :light="isLight" />
@@ -161,7 +161,7 @@
 
           <!-- 歌词面板 -->
           <div v-show="rightPanelMode === 'lyrics'" class="lyrics-panel">
-            <div class="lyrics-container" ref="lyricsContainerRef">
+            <div class="lyrics-container" ref="lyricsContainerRef" @contextmenu.prevent="showLyricsContextMenu">
               <p
                 v-for="(line, index) in lyrics"
                 :key="index"
@@ -169,32 +169,10 @@
                 :class="{ active: index === currentLyricIndex }"
                 @click="seek(line.time)"
               >
+                <span v-if="showLyricsTime" class="lyrics-time">{{ formatLyricTime(line.time) }}</span>
                 {{ line.text }}
               </p>
               <p v-if="lyrics.length === 0" class="lyrics-line empty">{{ $t('nowPlaying.noLyrics') }}</p>
-            </div>
-            <div v-if="currentMusic && hasRealLyrics" class="lyrics-offset-bar">
-              <label class="offset-label" :title="$t('nowPlaying.lyricsOffsetHint')">
-                {{ $t('nowPlaying.lyricsOffset') }}
-              </label>
-              <input
-                type="range"
-                class="offset-slider"
-                min="-30000"
-                max="30000"
-                step="500"
-                :value="lyricsOffsetMs"
-                @input="onLyricsOffsetInput"
-              />
-              <span class="offset-value">{{ (lyricsOffsetMs / 1000).toFixed(1) }}{{ $t('nowPlaying.lyricsOffsetUnit') }}</span>
-              <button
-                type="button"
-                class="offset-reset"
-                :disabled="lyricsOffsetMs === 0"
-                @click="resetLyricsOffset"
-              >
-                {{ $t('nowPlaying.lyricsOffsetReset') }}
-              </button>
             </div>
           </div>
 
@@ -348,7 +326,7 @@
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="openEditTagFromContextMenu">
-        <Edit :size="16" class="icon" />
+        <FileEdit :size="16" class="icon" />
         {{ $t('music.editTags') }}
       </div>
       <div class="menu-item" @click="openFileExplorerFromContextMenu">
@@ -366,11 +344,57 @@
       </div>
     </div>
 
+    <!-- 歌词区右键菜单：偏移校准 + 在线匹配歌词 -->
+    <div
+      v-if="lyricsContextMenu.visible"
+      class="np-context-menu np-lyrics-menu"
+      :style="{ top: lyricsContextMenu.y + 'px', left: lyricsContextMenu.x + 'px' }"
+      @click.stop
+    >
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(500)">
+        {{ $t('nowPlaying.lyricsForward05') }}
+      </div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(-500)">
+        {{ $t('nowPlaying.lyricsBackward05') }}
+      </div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(1000)">
+        {{ $t('nowPlaying.lyricsForward1') }}
+      </div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(-1000)">
+        {{ $t('nowPlaying.lyricsBackward1') }}
+      </div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(2000)">
+        {{ $t('nowPlaying.lyricsForward2') }}
+      </div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="nudgeLyricsOffset(-2000)">
+        {{ $t('nowPlaying.lyricsBackward2') }}
+      </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" :class="{ disabled: !hasRealLyrics }" @click="resetLyricsOffsetFromMenu">
+        <RotateCcw :size="16" class="icon" />
+        {{ $t('nowPlaying.lyricsOffsetReset') }}
+      </div>
+      <div class="menu-divider"></div>
+      <div
+        class="menu-item"
+        :class="{ disabled: !currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate }"
+        @click="matchLyricsFromMenu"
+      >
+        <FileText :size="16" class="icon" />
+        {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+      </div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" @click="toggleLyricsTimeFromMenu">
+        <Clock :size="16" class="icon" />
+        {{ showLyricsTime ? $t('nowPlaying.hideLyricsTime') : $t('nowPlaying.showLyricsTime') }}
+      </div>
+    </div>
+
     <AddToPlaylistModal
       v-model="showAddToPlaylist"
       :music-to-ad="playlistMusic"
     />
-    <EditTagModal
+    <NewTagInfoModal
       :show="showEditTag"
       :music="editingMusic"
       @close="showEditTag = false; editingMusic = null"
@@ -403,12 +427,12 @@ import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, Edit, FolderOpen, Info, Trash2 } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
-import EditTagModal from '@/components/music/EditTagModal.vue'
+import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { LyricsMatchCandidate } from '@shared/types/lyrics'
 
@@ -491,6 +515,8 @@ const lyrics = computed<LyricLine[]>(() => {
 })
 /** 是否加载到真正的歌词（非「暂无歌词/加载失败」占位），决定校准条是否显示 */
 const hasRealLyrics = ref(false)
+/** 是否在每句歌词前显示时间戳，便于观察偏移调整效果 */
+const showLyricsTime = ref(false)
 const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
@@ -793,6 +819,72 @@ const showQueueContextMenu = async (event: MouseEvent, music: MusicItem, index: 
   adjustQueueContextMenuPosition()
 }
 
+// —— 歌词区右键菜单：偏移校准 + 在线匹配歌词 ——
+const lyricsContextMenu = reactive({ visible: false, x: 0, y: 0 })
+
+const closeLyricsContextMenu = () => {
+  lyricsContextMenu.visible = false
+}
+
+const adjustLyricsContextMenuPosition = () => {
+  if (!lyricsContextMenu.visible) return
+  const menuElement = document.querySelector('.np-lyrics-menu') as HTMLElement | null
+  if (!menuElement) return
+
+  const menuRect = menuElement.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const menuWidth = menuRect.width || 160
+  const menuHeight = menuRect.height || 320
+
+  let adjustedX = lyricsContextMenu.x
+  let adjustedY = lyricsContextMenu.y
+  if (adjustedX + menuWidth > viewportWidth) adjustedX = viewportWidth - menuWidth - 10
+  if (adjustedX < 0) adjustedX = 10
+  if (adjustedY + menuHeight > viewportHeight) adjustedY = viewportHeight - menuHeight - 10
+  if (adjustedY < 0) adjustedY = 10
+
+  lyricsContextMenu.x = adjustedX
+  lyricsContextMenu.y = adjustedY
+}
+
+const showLyricsContextMenu = async (event: MouseEvent) => {
+  event.stopPropagation()
+  lyricsContextMenu.visible = true
+  lyricsContextMenu.x = event.clientX
+  lyricsContextMenu.y = event.clientY
+  await nextTick()
+  adjustLyricsContextMenuPosition()
+}
+
+/** 前进/后退：按固定步进调整偏移，正数=歌词提前、负数=歌词延后，与原滑块共用同一套持久化逻辑 */
+const nudgeLyricsOffset = (deltaMs: number) => {
+  closeLyricsContextMenu()
+  if (!hasRealLyrics.value) return
+  const next = Math.max(-30000, Math.min(30000, lyricsOffsetMs.value + deltaMs))
+  if (next === lyricsOffsetMs.value) return
+  lyricsOffsetMs.value = next
+  syncLyricIndex(currentTime.value)
+  scheduleOffsetPersist()
+}
+
+const resetLyricsOffsetFromMenu = () => {
+  closeLyricsContextMenu()
+  if (!hasRealLyrics.value) return
+  resetLyricsOffset()
+}
+
+const matchLyricsFromMenu = () => {
+  closeLyricsContextMenu()
+  if (!currentMusic.value || matchingLyrics.value || showLyricsPick.value || applyingLyricsCandidate.value) return
+  handleOnlineMatchLyrics()
+}
+
+const toggleLyricsTimeFromMenu = () => {
+  closeLyricsContextMenu()
+  showLyricsTime.value = !showLyricsTime.value
+}
+
 const playFromContextMenu = async () => {
   const music = queueContextMenu.music
   closeQueueContextMenu()
@@ -860,7 +952,7 @@ const removeFromContextMenu = () => {
 }
 
 const onTagSaved = () => {
-  // EditTagModal 已派发 music-metadata-updated，playerStore 会同步当前曲/队列项
+  // NewTagInfoModal 已派发 music-metadata-updated，playerStore 会同步当前曲/队列项
   showEditTag.value = false
   editingMusic.value = null
 }
@@ -946,6 +1038,16 @@ const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+/** 歌词行时间戳（精确到 0.1 秒），供右键菜单「显示歌词时间」时展示，方便对照偏移调整效果；偏移可致行时间为负，需单独处理符号避免拼出乱码 */
+const formatLyricTime = (seconds: number) => {
+  if (isNaN(seconds)) return '00:00.0'
+  const sign = seconds < 0 ? '-' : ''
+  const abs = Math.abs(seconds)
+  const mins = Math.floor(abs / 60)
+  const secs = (abs % 60).toFixed(1).padStart(4, '0')
+  return `${sign}${mins.toString().padStart(2, '0')}:${secs}`
 }
 
 
@@ -1202,16 +1304,7 @@ const syncLyricIndex = (time: number, forceScroll = false) => {
   }
 }
 
-// —— 歌词偏移手动校准（实时应用 + 持久化） ——
-/** 滑块 input：改滑块值即改 computed 差值，实时重算高亮，节流后写库 */
-const onLyricsOffsetInput = (e: Event) => {
-  const el = e.target as HTMLInputElement
-  const ms = Math.round(Number(el.value) || 0)
-  lyricsOffsetMs.value = ms
-  syncLyricIndex(currentTime.value)
-  scheduleOffsetPersist()
-}
-
+// —— 歌词偏移手动校准（右键菜单触发，实时应用 + 持久化） ——
 const resetLyricsOffset = () => {
   if (lyricsOffsetMs.value === 0) return
   lyricsOffsetMs.value = 0
@@ -1367,6 +1460,9 @@ watch(
 const onQueueContextMenuKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape' && queueContextMenu.visible) {
     closeQueueContextMenu()
+  }
+  if (e.key === 'Escape' && lyricsContextMenu.visible) {
+    closeLyricsContextMenu()
   }
 }
 
@@ -1922,10 +2018,13 @@ watch(
   overflow: hidden;
   position: relative;
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .lyrics-container {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 50% 0;
   text-align: center;
@@ -1961,61 +2060,16 @@ watch(
   text-shadow: var(--np-text-outline), 0 0 6px var(--np-outline-glow);
 }
 
+.lyrics-time {
+  display: inline-block;
+  margin-right: var(--spacing-sm);
+  font-size: 0.7em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
 .lyrics-line.empty {
   color: var(--np-fg-5);
-}
-
-/* 歌词偏移手动校准条：歌词与歌声相差几秒时的微调工具 */
-.lyrics-offset-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--np-border);
-  background: color-mix(in srgb, var(--np-hover-soft) 60%, transparent);
-}
-
-.offset-label {
-  flex-shrink: 0;
-  font-size: 0.78rem;
-  color: var(--np-fg-4);
-  cursor: help;
-  white-space: nowrap;
-}
-
-.offset-slider {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--np-fill, var(--color-primary));
-}
-
-.offset-value {
-  flex-shrink: 0;
-  min-width: 52px;
-  text-align: right;
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--np-fg-2);
-}
-
-.offset-reset {
-  flex-shrink: 0;
-  border: none;
-  border-radius: 6px;
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  cursor: pointer;
-  background: var(--np-hover);
-  color: var(--np-fg-2);
-}
-
-.offset-reset:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.offset-reset:hover:not(:disabled) {
-  background: var(--np-hover-soft);
 }
 
 /* 队列面板 */
@@ -2223,6 +2277,12 @@ watch(
 
 .np-context-menu .menu-item.delete {
   color: var(--color-danger, #ef4444);
+}
+
+.np-context-menu .menu-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* 底部播放控制区 */

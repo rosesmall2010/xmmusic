@@ -174,13 +174,9 @@
         {{ $t('music.addToPlaylist') }}
       </div>
       <div class="menu-divider"></div>
-      <div class="menu-item" @click="openEditTag(contextMenu.music!)">
-        <Edit :size="16" class="icon" />
-        {{ $t('music.editTags') }}
-      </div>
       <div class="menu-item" @click="openNewTagInfo(contextMenu.music!)">
         <FileEdit :size="16" class="icon" />
-        {{ $t('music.newTagInfo') }}
+        {{ $t('music.editTags') }}
       </div>
       <div
         v-if="showLyricsMatch && hasLyrics(contextMenu.music!)"
@@ -232,12 +228,6 @@
       :music-list-to-ad="Array.from(selectedSongs).map(filePath => props.songs.find(s => s.filePath === filePath)!).filter(Boolean)"
       @added="handleBatchAddedToPlaylist"
     />
-    <EditTagModal
-      :show="showEditTag"
-      :music="editingMusic"
-      @close="closeEditTag"
-      @saved="handleTagSaved"
-    />
     <NewTagInfoModal
       :show="showNewTagInfo"
       :music="newTagInfoMusic"
@@ -257,10 +247,9 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, Edit, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
-import EditTagModal from '@/components/music/EditTagModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { MusicItem } from '@shared/types/music'
@@ -342,10 +331,6 @@ const offsetY = computed(() => visibleRange.value.start * itemHeight)
 const showAddToPlaylist = ref(false)
 const selectedMusic = ref<MusicItem | null>(null)
 const showBatchAddToPlaylist = ref(false)
-
-// Edit Tag Modal
-const showEditTag = ref(false)
-const editingMusic = ref<MusicItem | null>(null)
 
 // New Tag Info Modal
 const showNewTagInfo = ref(false)
@@ -808,18 +793,6 @@ const formatChannels = (channels: number) => {
   if (channels === 1) return t('music.mono')
   if (channels === 2) return t('music.stereo')
   return `${channels}ch`
-}
-
-// Edit Tag Modal handlers
-const openEditTag = (music: MusicItem) => {
-  editingMusic.value = music
-  showEditTag.value = true
-  closeContextMenu()
-}
-
-const closeEditTag = () => {
-  showEditTag.value = false
-  editingMusic.value = null
 }
 
 const handleTagSaved = () => {

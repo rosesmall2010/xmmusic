@@ -267,6 +267,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('match-lyrics', musicId, options),
   searchLyricsCandidates: (musicId: number) =>
     ipcRenderer.invoke('search-lyrics-candidates', musicId),
+  previewLyricsCandidate: (songId: number) =>
+    ipcRenderer.invoke('preview-lyrics-candidate', songId),
   applyLyricsCandidate: (musicId: number, songId: number) =>
     ipcRenderer.invoke('apply-lyrics-candidate', musicId, songId),
   getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
@@ -453,6 +455,7 @@ declare global {
         hasExistingLyrics: boolean
         candidates: LyricsMatchCandidate[]
       }>
+      previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
       applyLyricsCandidate: (musicId: number, songId: number) => Promise<LyricsMatchResult>
       getMusicWithoutLyricsCount: () => Promise<number>
       batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>

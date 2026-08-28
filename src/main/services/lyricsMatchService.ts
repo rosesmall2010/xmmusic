@@ -222,6 +222,13 @@ export default class LyricsMatchService {
   }
 
   /**
+   * 预览候选歌词文本（供选择对话框展示），不写文件/不写库
+   */
+  async previewLyric(songId: number): Promise<{ lyric: string | null; instrumental: boolean }> {
+    return this.fetchLyric(songId)
+  }
+
+  /**
    * 按用户选定的网易云 songId 下载并写入歌词
    */
   async applyCandidate(

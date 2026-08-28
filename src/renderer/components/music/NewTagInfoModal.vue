@@ -145,7 +145,7 @@
                 </div>
               </td>
               <td class="col-value col-edited">
-                <input v-model="editedData[field]" type="text" :disabled="loading" @keyup.enter="save" />
+                <input v-model="editedData[field]" type="text" :disabled="loading" @keyup.enter="save()" />
               </td>
             </tr>
           </tbody>
@@ -159,8 +159,16 @@
       </div>
 
       <div class="dialog-actions">
-        <button @click="save" class="btn-primary" :disabled="loading || !hasChanges">
+        <button @click="save()" class="btn-primary" :disabled="loading || !hasChanges">
           {{ $t('tagInfoEditor.save') }}
+        </button>
+        <button
+          v-if="isMp3"
+          @click="save(true)"
+          class="btn-secondary"
+          :disabled="loading || !hasChanges"
+        >
+          {{ $t('tagInfoEditor.syncDbOnly') }}
         </button>
         <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('tagInfoEditor.cancel') }}</button>
       </div>
@@ -362,7 +370,7 @@ const buildUpdates = () => ({
   genre: editedData.genre.trim() || null
 })
 
-const save = async () => {
+const save = async (dbOnly = false) => {
   if (!hasChanges.value || !props.music) return
 
   try {
@@ -370,7 +378,7 @@ const save = async () => {
     const updates = buildUpdates()
     let updatedMusic: MusicItem | null = null
 
-    if (isMp3.value) {
+    if (isMp3.value && !dbOnly) {
       const success = await window.electronAPI.updateMusicMetadata(props.music.id, updates)
       if (success) {
         updatedMusic = {

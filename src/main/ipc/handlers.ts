@@ -1304,6 +1304,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
   })
 
+  /** 预览候选歌词文本（供选择对话框展示，不写文件/不写库） */
+  ipcMain.handle('preview-lyrics-candidate', async (_, songId: number) => {
+    return lyricsMatchService.previewLyric(songId)
+  })
+
   /** 应用用户选中的候选歌词 */
   ipcMain.handle('apply-lyrics-candidate', async (_, musicId: number, songId: number) => {
     if (!db) throw new Error('数据库未初始化')

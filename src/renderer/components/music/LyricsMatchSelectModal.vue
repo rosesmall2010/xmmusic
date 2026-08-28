@@ -28,6 +28,12 @@
         </button>
       </div>
 
+      <div class="preview-box">
+        <div v-if="previewLoading" class="preview-hint">{{ $t('nowPlaying.loadingLyricsPreview') }}</div>
+        <div v-else-if="previewError" class="preview-hint">{{ previewError }}</div>
+        <textarea v-else readonly class="preview-text" :value="previewText"></textarea>
+      </div>
+
       <div class="dialog-actions">
         <button class="btn-secondary" type="button" :disabled="applying" @click="emitClose">
           {{ $t('common.cancel') }}
@@ -47,7 +53,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   show: boolean
@@ -62,6 +71,36 @@ const emit = defineEmits<{
 }>()
 
 const selectedId = ref<number | null>(null)
+const previewText = ref('')
+const previewLoading = ref(false)
+const previewError = ref('')
+const previewCache = new Map<number, string>()
+
+const loadPreview = async (songId: number) => {
+  const cached = previewCache.get(songId)
+  if (cached !== undefined) {
+    previewText.value = cached
+    previewError.value = ''
+    previewLoading.value = false
+    return
+  }
+  previewLoading.value = true
+  previewError.value = ''
+  try {
+    const result = await window.electronAPI.previewLyricsCandidate(songId)
+    if (selectedId.value !== songId) return
+    const text = result.instrumental
+      ? t('nowPlaying.previewInstrumental')
+      : result.lyric || t('nowPlaying.previewEmpty')
+    previewCache.set(songId, text)
+    previewText.value = text
+  } catch (error: any) {
+    if (selectedId.value !== songId) return
+    previewError.value = error?.message || t('nowPlaying.previewFailed')
+  } finally {
+    if (selectedId.value === songId) previewLoading.value = false
+  }
+}
 
 watch(
   () => [props.show, props.candidates] as const,
@@ -70,10 +109,20 @@ watch(
       selectedId.value = props.candidates[0].songId
     } else if (!show) {
       selectedId.value = null
+      previewCache.clear()
     }
   },
   { immediate: true }
 )
+
+watch(selectedId, (id) => {
+  if (id == null) {
+    previewText.value = ''
+    previewError.value = ''
+    return
+  }
+  loadPreview(id)
+})
 
 const emitClose = () => {
   if (props.applying) return
@@ -99,8 +148,8 @@ const confirmSelect = () => {
 }
 
 .lyrics-match-dialog {
-  width: min(480px, 100%);
-  max-height: min(70vh, 560px);
+  width: min(640px, 100%);
+  max-height: min(82vh, 680px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -125,13 +174,45 @@ const confirmSelect = () => {
 }
 
 .candidate-list {
-  flex: 1;
+  flex: 1 1 auto;
+  max-height: 220px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 4px 0;
   padding-right: 2px;
+}
+
+.preview-box {
+  flex-shrink: 0;
+  height: 160px;
+}
+
+.preview-text {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.preview-hint {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  font-size: 0.82rem;
 }
 
 .candidate-item {
