@@ -212,24 +212,22 @@ export default class LyricsService {
       }
 
       // 解析时间标签 [mm:ss.xx] 或 [mm:ss]
-      const timeMatches = trimmedLine.matchAll(/\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g)
+      const timeMatches = trimmedLine.matchAll(/\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]/g)
       const times: number[] = []
 
       for (const match of timeMatches) {
         const minutes = parseInt(match[1], 10)
         const seconds = parseInt(match[2], 10)
-        // 支持2位或3位毫秒数
-        const msStr = match[3] || '0'
-        const ms = parseInt(msStr, 10)
-        // 如果是2位，则是百分之一秒；如果是3位，则是毫秒
-        const centiseconds = msStr.length === 3 ? ms / 10 : ms
+        // 小数位数不固定：1 位为十分之一秒，2 位为百分之一秒，3 位为毫秒
+        const fractionStr = match[3] || '0'
+        const fraction = parseInt(fractionStr, 10) / Math.pow(10, fractionStr.length)
 
-        const time = minutes * 60 + seconds + centiseconds / 100
+        const time = minutes * 60 + seconds + fraction
         times.push(time)
       }
 
       // 提取歌词文本（移除所有时间标签）
-      const text = trimmedLine.replace(/\[\d{2}:\d{2}(?:\.\d{2,3})?\]/g, '').trim()
+      const text = trimmedLine.replace(/\[\d{2}:\d{2}(?:\.\d{1,3})?\]/g, '').trim()
 
       if (times.length > 0 && text) {
         // 如果有多个时间标签，为每个时间创建一行
