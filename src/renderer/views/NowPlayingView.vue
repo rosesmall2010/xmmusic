@@ -318,6 +318,7 @@
       :applying="applyingCoverCandidate"
       @close="closeCoverPick"
       @select="onSelectCoverCandidate"
+      @select-local="onSelectLocalCover"
     />
 
     <!-- 队列右键菜单（不含批量操作） -->
@@ -1392,8 +1393,56 @@ const onSelectCoverCandidate = async (payload: { songId: number; coverUrl: strin
   await applyCoverSongId(payload.songId, payload.coverUrl, id, title, coverMatchNeedsForce.value)
 }
 
+/** 应用用户从弹窗选择的本地图片封面 */
+const onSelectLocalCover = async (localPath: string) => {
+  const targetMusicId = coverMatchTargetId.value
+  const targetTitle = coverMatchTargetTitle.value
+  if (targetMusicId == null) return
+  if (currentMusic.value?.id !== targetMusicId) {
+    closeCoverPick()
+    return
+  }
+  applyingCoverCandidate.value = true
+  try {
+    const result = await window.electronAPI.applyLocalCover(targetMusicId, localPath, {
+      force: coverMatchNeedsForce.value
+    })
+    const stillOnTarget = currentMusic.value?.id === targetMusicId
+    if (result.status === 'matched') {
+      closeCoverPick()
+      afterCoverMatched(targetMusicId, result.coverPath)
+      if (!stillOnTarget) return
+      if (result.fileNotUpdated) {
+        alert(t('music.matchCoverDbOnly', { title: targetTitle }))
+      } else {
+        alert(t('music.matchCoverSuccess', { title: targetTitle }))
+      }
+    } else if (!stillOnTarget) {
+      closeCoverPick()
+      return
+    } else if (result.status === 'skipped_has_cover') {
+      alert(t('music.matchCoverAlreadyHas', { title: targetTitle }))
+    } else {
+      alert(t('music.matchCoverFailed', {
+        title: targetTitle,
+        reason: result.message || ''
+      }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', {
+      title: targetTitle,
+      reason: error?.message || error
+    }))
+  } finally {
+    applyingCoverCandidate.value = false
+  }
+}
+
 /**
  * 全屏播放：在线匹配封面（多候选选择）
+ * - 不设相似度下限，有封面 URL 的搜索结果全部列出供预览
+ * - 无论几条都弹窗，由用户点选应用、选本地图片或取消
+ * - 无在线结果时仍打开弹窗，可仅选本地图片
  */
 const handleOnlineMatchCover = async () => {
   if (
@@ -1421,12 +1470,6 @@ const handleOnlineMatchCover = async () => {
       return
     }
 
-    if (!candidates.length) {
-      alert(t('nowPlaying.noCoverCandidates'))
-      closeCoverPick()
-      return
-    }
-
     if (hasValidCover) {
       const ok = confirm(t('nowPlaying.replaceCoverConfirm', { title: targetTitle }))
       if (!ok || currentMusic.value?.id !== targetId) {
@@ -1434,17 +1477,6 @@ const handleOnlineMatchCover = async () => {
         return
       }
       coverMatchNeedsForce.value = true
-    }
-
-    if (candidates.length === 1) {
-      await applyCoverSongId(
-        candidates[0].songId,
-        candidates[0].coverUrl,
-        targetId,
-        targetTitle,
-        coverMatchNeedsForce.value
-      )
-      return
     }
 
     coverCandidates.value = candidates

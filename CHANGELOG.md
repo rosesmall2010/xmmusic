@@ -8,8 +8,8 @@
 ## [1.2.3] - 2026-08-28
 
 ### 新增
-- **封面匹配服务（S1.1）**：主进程在线匹配专辑封面（网易云搜索同源 API；解析 `album.picUrl` / `al.picUrl`，缺失时经 `/song/detail` 补图）；自动匹配相似度 ≥75，候选列表 ≥35；下载原图不缩放但拒绝超时/非图片/超过 15MB；缓存写入 `userData/covers/{hash}_cover_{timestamp}.*`；有效封面判定为路径非空且文件存在；MP3 先写 ID3 APIC 成功再更新数据库，失败不改库；非 MP3 仅更新库并标记 `fileNotUpdated`；IPC：`match-cover` / `list-cover-candidates` / `apply-cover-candidate`，成功后推送 `cover-matched` 与列表刷新。批量 `matchBatch` 已预留供后续 Story。
-- **单曲匹配封面 UI（S1.2）**：列表右键「匹配/重新匹配封面」走自动匹配（≥75，有封面需确认）；全屏播放控制栏与歌词区右键提供「在线匹配封面」，弹出 `CoverMatchSelectModal` 候选（≥35，缩略图预览），选中后 `apply-cover-candidate`；成功刷新列表与播放栏封面，非 MP3 提示仅更新应用内封面。
+- **封面匹配服务（S1.1）**：主进程在线匹配专辑封面（网易云搜索同源 API；解析 `album.picUrl` / `al.picUrl`，缺失时经 `/song/detail` 补图）；自动匹配相似度 ≥75；手动候选列表不设相似度下限（有封面 URL 即展示）；下载原图不缩放但拒绝超时/非图片/超过 15MB；缓存写入 `userData/covers/{hash}_cover_{timestamp}.*`；有效封面判定为路径非空且文件存在；MP3 先写 ID3 APIC 成功再更新数据库，失败不改库；非 MP3 仅更新库并标记 `fileNotUpdated`；IPC：`match-cover` / `list-cover-candidates` / `apply-cover-candidate`，成功后推送 `cover-matched` 与列表刷新。批量 `matchBatch` 已预留供后续 Story。
+- **单曲匹配封面 UI（S1.2）**：列表右键「匹配/重新匹配封面」走自动匹配（≥75，有封面需确认）；全屏播放控制栏与歌词区右键提供「在线匹配封面」，弹出 `CoverMatchSelectModal` 候选（不设相似度下限，缩略图预览；无论几条都由用户点选或取消），选中后 `apply-cover-candidate`；成功刷新列表与播放栏封面，非 MP3 提示仅更新应用内封面。
 - **批量匹配封面（S1.3）**：本地音乐工具栏「批量匹配封面」；仅处理无有效封面歌曲；进度条可取消、离开页面再回仍可见（`coverMatch` store）；汇总区分写入文件 / 仅更新库；与批量歌词互斥。
 - **拼音/声母搜索（S2.1）**：`all_music` 预计算 `search_pinyin` / `search_initials` 列（方案 A）+ 存量回填；`searchMusic` FTS 分流（纯字母走拼音旁路，汉字走 `music_fts`），结果合并去重；修复 FTS 表名 `music_fts`；含特殊字符 query 转义防抛错。
 - **顶栏搜索接入（S2.2）**：顶栏 placeholder 提示支持拼音/声母；`SearchView` / 搜索建议自动受益。
@@ -30,6 +30,8 @@
 - 注释审核补全：封面 store 状态同步、IPC 歌词/封面互斥、批量枚举两阶段与 cancel 保留、搜索合并策略、快捷键 Media* 迁移与录制流程等关键路径补充中文注释
 - 拼音回填：迁移启动时检测空列记录即续跑回填，避免首次升级中断后重启不再补全
 - 批量封面匹配：结束后逐条推送 `cover-matched`，App 订阅并同步播放栏/队列当前曲封面
+- 全屏手动匹配封面：取消候选 ≥35 相似度门槛，搜索结果中有封面 URL 的全部列出；无论几条都弹窗预览，由用户选择或取消（不再对唯一候选自动写入）
+- 全屏封面选择弹窗支持「选择本地图片」：复制到 covers 缓存后按 MP3/非 MP3 规则写入；无在线结果时仍可打开弹窗仅选本地图；BMP 等魔数未识别格式经 nativeImage 转 JPEG 后写入，与选图对话框可选格式对齐
 
 ## [1.2.2] - 2026-08-24
 

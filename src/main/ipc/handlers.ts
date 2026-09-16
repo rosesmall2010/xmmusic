@@ -1476,7 +1476,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return coverMatchService.hasValidCover(music)
   })
 
-  /** 列出封面候选（≥35，供全屏手动选择） */
+  /** 列出封面候选（不设相似度下限，供全屏手动预览选择） */
   ipcMain.handle('list-cover-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
     assertCoverMatchIdle()
@@ -1507,6 +1507,34 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
           db,
           music,
           songId,
+          options || {}
+        )
+        if (result.status === 'matched' && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('music-list-refresh')
+          mainWindow.webContents.send('cover-matched', {
+            musicId: result.musicId,
+            coverPath: result.coverPath,
+            fileNotUpdated: result.fileNotUpdated === true
+          })
+        }
+        return result
+      })
+    }
+  )
+
+  /** 应用用户选择的本地图片为封面 */
+  ipcMain.handle(
+    'apply-local-cover',
+    async (_, musicId: number, localPath: string, options?: { force?: boolean }) => {
+      if (!db) throw new Error('数据库未初始化')
+      return withCoverMatchLock(async () => {
+        coverMatchService.resetCancel()
+        const music = db.getMusicById(musicId)
+        if (!music) throw new Error('音乐不存在')
+        const result: CoverMatchResult = await coverMatchService.applyLocalFile(
+          db,
+          music,
+          localPath,
           options || {}
         )
         if (result.status === 'matched' && !mainWindow.isDestroyed()) {

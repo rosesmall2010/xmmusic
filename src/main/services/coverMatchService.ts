@@ -2,7 +2,7 @@
  * 在线封面匹配：搜索网易云 → 取专辑封面 → 写入缓存 / MP3 ID3 → 更新数据库
  * 仅在主进程使用。图源与歌词同源 SEARCH_APIS，但自行解析 picUrl（歌词服务未映射）。
  */
-import { existsSync, mkdirSync, unlinkSync, accessSync, constants } from 'fs'
+import { existsSync, mkdirSync, unlinkSync, accessSync, constants, readFileSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, normalize } from 'path'
 import { randomUUID } from 'crypto'
@@ -31,7 +31,6 @@ const SEARCH_PATH_PICK = '/search?limit=8&type=1&keywords='
 const SONG_DETAIL_PATH = '/song/detail?ids='
 
 const SIMILARITY_THRESHOLD = 75
-const PICK_LIST_MIN_SIMILARITY = 35
 const REQUEST_TIMEOUT_MS = 12000
 const DOWNLOAD_TIMEOUT_MS = 20000
 /** 单张封面下载上限 15MB（不缩放，但拒绝超大文件） */
@@ -143,6 +142,20 @@ const ensureId3FriendlyImage = (buf: Buffer, kind: ImageKind): { buf: Buffer; ki
   const img = nativeImage.createFromBuffer(buf)
   if (img.isEmpty()) {
     throw new Error('WebP 封面解析失败')
+  }
+  return { buf: Buffer.from(img.toJPEG(90)), kind: 'jpeg' }
+}
+
+/**
+ * 本地封面规范化：已知类型走 ensureId3Friendly；
+ * 魔数未识别（如 BMP）用 nativeImage 兜底转 JPEG，与 select-image-file 可选格式对齐
+ */
+const normalizeLocalCoverImage = (buf: Buffer): { buf: Buffer; kind: ImageKind } => {
+  const kind = detectImageKind(buf)
+  if (kind) return ensureId3FriendlyImage(buf, kind)
+  const img = nativeImage.createFromBuffer(buf)
+  if (img.isEmpty()) {
+    throw new Error('不是有效的图片文件')
   }
   return { buf: Buffer.from(img.toJPEG(90)), kind: 'jpeg' }
 }
@@ -470,7 +483,10 @@ export default class CoverMatchService {
     }
   }
 
-  /** 搜索候选（含封面 URL 尽力补全），按相似度降序 */
+  /**
+   * 搜索候选（含封面 URL 尽力补全），按相似度降序
+   * 手动挑选不设相似度下限：有封面 URL 即入列，由用户预览后决定用或取消
+   */
   async searchCandidates(music: MusicItem): Promise<CoverMatchCandidate[]> {
     const keyword = this.buildKeyword(music)
     if (!keyword) return []
@@ -480,7 +496,6 @@ export default class CoverMatchService {
 
     for (const song of songs) {
       const similarity = similarPercent(localName, `${song.artists} - ${song.name}`)
-      if (similarity < PICK_LIST_MIN_SIMILARITY) continue
       let coverUrl = song.coverUrl
       if (!coverUrl) {
         try {
@@ -540,6 +555,76 @@ export default class CoverMatchService {
     }
 
     return this.applyCoverFile(db, music, cachePath, { message: '匹配成功' })
+  }
+
+  /**
+   * 应用用户选择的本地图片为封面（复制到 covers 缓存后再写 ID3/库）
+   * 校验：存在、可读、≤15MB；JPEG/PNG/GIF/WebP 按魔数识别，BMP 等用 nativeImage 转 JPEG
+   */
+  async applyLocalFile(
+    db: MusicDatabase,
+    music: MusicItem,
+    localPath: string,
+    options: { force?: boolean } = {}
+  ): Promise<CoverMatchResult> {
+    const title = music.title || music.fileName
+    if (!music.filePath || !existsSync(music.filePath)) {
+      return { musicId: music.id, title, status: 'failed', message: '音乐文件不存在' }
+    }
+
+    if (!options.force && this.hasValidCover(music)) {
+      return {
+        musicId: music.id,
+        title,
+        status: 'skipped_has_cover',
+        coverPath: music.coverPath || undefined,
+        message: '已有封面'
+      }
+    }
+
+    const src = (localPath || '').trim()
+    if (!src || !existsSync(src)) {
+      return { musicId: music.id, title, status: 'failed', message: '本地图片不存在' }
+    }
+
+    let buf: Buffer
+    try {
+      buf = readFileSync(src)
+    } catch (e: any) {
+      return { musicId: music.id, title, status: 'failed', message: e?.message || '读取本地图片失败' }
+    }
+
+    if (buf.length === 0) {
+      return { musicId: music.id, title, status: 'failed', message: '本地图片为空' }
+    }
+    if (buf.length > MAX_COVER_BYTES) {
+      return {
+        musicId: music.id,
+        title,
+        status: 'failed',
+        message: `封面过大(${Math.round(buf.length / 1024 / 1024)}MB)，超过 15MB 限制`
+      }
+    }
+
+    let kind: ImageKind
+    try {
+      const normalized = normalizeLocalCoverImage(buf)
+      buf = Buffer.from(normalized.buf)
+      kind = normalized.kind
+    } catch (e: any) {
+      return { musicId: music.id, title, status: 'failed', message: e?.message || '图片转换失败' }
+    }
+
+    const ext = extForKind(kind)
+    const hash = (music.fileHash || `id${music.id}`).replace(/[^a-zA-Z0-9]/g, '')
+    const cachePath = join(this.getCoversDir(), `${hash}_cover_${randomUUID()}${ext}`)
+    try {
+      await writeFile(cachePath, buf)
+    } catch (e: any) {
+      return { musicId: music.id, title, status: 'failed', message: e?.message || '写入封面缓存失败' }
+    }
+
+    return this.applyCoverFile(db, music, cachePath, { message: '已应用本地封面' })
   }
 
   /** 自动匹配单曲封面 */

@@ -5,14 +5,17 @@
       <p class="hint">{{ $t('nowPlaying.selectCoverHint', { title: musicTitle }) }}</p>
 
       <div class="candidate-list">
+        <p v-if="candidates.length === 0" class="empty-hint">
+          {{ $t('nowPlaying.noOnlineCoverCandidates') }}
+        </p>
         <button
           v-for="item in candidates"
           :key="item.songId"
           type="button"
           class="candidate-item"
-          :class="{ selected: selectedId === item.songId }"
+          :class="{ selected: selectedId === item.songId && !localPath }"
           :disabled="applying"
-          @click="selectedId = item.songId"
+          @click="selectOnline(item.songId)"
           @dblclick="confirmSelect"
         >
           <img
@@ -35,28 +38,39 @@
         </button>
       </div>
 
-      <div class="preview-box">
+      <div class="preview-box" :class="{ 'is-local': !!localPath }">
         <img
-          v-if="selectedCoverUrl"
+          v-if="previewUrl"
           class="preview-img"
-          :src="selectedCoverUrl"
+          :src="previewUrl"
           :alt="musicTitle"
         />
         <div v-else class="preview-hint">{{ $t('nowPlaying.selectCoverPreviewHint') }}</div>
+        <span v-if="localPath" class="local-badge">{{ $t('nowPlaying.localCoverBadge') }}</span>
       </div>
 
       <div class="dialog-actions">
-        <button class="btn-secondary" type="button" :disabled="applying" @click="emitClose">
-          {{ $t('common.cancel') }}
-        </button>
         <button
-          class="btn-primary"
+          class="btn-secondary btn-local"
           type="button"
-          :disabled="applying || selectedId == null"
-          @click="confirmSelect"
+          :disabled="applying"
+          @click="pickLocalImage"
         >
-          {{ applying ? $t('nowPlaying.applyingCover') : $t('nowPlaying.useSelectedCover') }}
+          {{ $t('nowPlaying.pickLocalCover') }}
         </button>
+        <div class="actions-right">
+          <button class="btn-secondary" type="button" :disabled="applying" @click="emitClose">
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="applying || !canConfirm"
+            @click="confirmSelect"
+          >
+            {{ applying ? $t('nowPlaying.applyingCover') : $t('nowPlaying.useSelectedCover') }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -64,7 +78,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
+import { getCoverUrl } from '@/utils/media'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   show: boolean
@@ -76,11 +94,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select', payload: { songId: number; coverUrl: string }): void
+  (e: 'select-local', localPath: string): void
 }>()
 
 const selectedId = ref<number | null>(null)
+/** 用户选择的本地图片绝对路径 */
+const localPath = ref<string | null>(null)
 
-const selectedCoverUrl = computed(() => {
+const canConfirm = computed(() => localPath.value != null || selectedId.value != null)
+
+const previewUrl = computed(() => {
+  if (localPath.value) return getCoverUrl(localPath.value)
   if (selectedId.value == null) return ''
   return props.candidates.find((c) => c.songId === selectedId.value)?.coverUrl || ''
 })
@@ -88,14 +112,34 @@ const selectedCoverUrl = computed(() => {
 watch(
   () => [props.show, props.candidates] as const,
   ([show]) => {
-    if (show && props.candidates.length > 0) {
-      selectedId.value = props.candidates[0].songId
-    } else if (!show) {
+    if (show) {
+      localPath.value = null
+      selectedId.value = props.candidates.length > 0 ? props.candidates[0].songId : null
+    } else {
       selectedId.value = null
+      localPath.value = null
     }
   },
   { immediate: true }
 )
+
+const selectOnline = (songId: number) => {
+  localPath.value = null
+  selectedId.value = songId
+}
+
+const pickLocalImage = async () => {
+  if (props.applying) return
+  try {
+    const file = await window.electronAPI.selectImageFile()
+    if (!file) return
+    localPath.value = file
+    selectedId.value = null
+  } catch (error: any) {
+    console.error('选择本地封面失败:', error)
+    alert(t('nowPlaying.pickLocalCoverError') + ': ' + (error?.message || error))
+  }
+}
 
 const emitClose = () => {
   if (props.applying) return
@@ -103,7 +147,11 @@ const emitClose = () => {
 }
 
 const confirmSelect = () => {
-  if (selectedId.value == null || props.applying) return
+  if (props.applying || !canConfirm.value) return
+  if (localPath.value) {
+    emit('select-local', localPath.value)
+    return
+  }
   const item = props.candidates.find((c) => c.songId === selectedId.value)
   if (!item?.coverUrl) return
   emit('select', { songId: item.songId, coverUrl: item.coverUrl })
@@ -164,7 +212,15 @@ const onThumbError = (e: Event) => {
   padding-right: 2px;
 }
 
+.empty-hint {
+  margin: 12px 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  text-align: center;
+}
+
 .preview-box {
+  position: relative;
   flex-shrink: 0;
   height: 180px;
   display: flex;
@@ -176,6 +232,10 @@ const onThumbError = (e: Event) => {
   overflow: hidden;
 }
 
+.preview-box.is-local {
+  border-color: var(--color-primary, #1db954);
+}
+
 .preview-img {
   max-width: 100%;
   max-height: 100%;
@@ -185,6 +245,18 @@ const onThumbError = (e: Event) => {
 .preview-hint {
   color: var(--text-secondary, rgba(255, 255, 255, 0.65));
   font-size: 0.82rem;
+}
+
+.local-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--color-primary, #1db954);
+  color: #fff;
 }
 
 .candidate-item {
@@ -257,9 +329,15 @@ const onThumbError = (e: Event) => {
 
 .dialog-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 10px;
   padding-top: 4px;
+}
+
+.actions-right {
+  display: flex;
+  gap: 10px;
 }
 
 .btn-secondary,
@@ -274,6 +352,10 @@ const onThumbError = (e: Event) => {
 .btn-secondary {
   background: var(--bg-secondary, rgba(255, 255, 255, 0.08));
   color: inherit;
+}
+
+.btn-local {
+  flex-shrink: 0;
 }
 
 .btn-primary {

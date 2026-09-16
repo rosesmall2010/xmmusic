@@ -301,6 +301,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('list-cover-candidates', musicId),
   applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) =>
     ipcRenderer.invoke('apply-cover-candidate', musicId, songId, options),
+  applyLocalCover: (musicId: number, localPath: string, options?: { force?: boolean }) =>
+    ipcRenderer.invoke('apply-local-cover', musicId, localPath, options),
   getMusicWithoutCoverCount: () => ipcRenderer.invoke('get-music-without-cover-count'),
   batchMatchMissingCovers: () => ipcRenderer.invoke('batch-match-missing-covers'),
   cancelCoverMatch: () => ipcRenderer.invoke('cancel-cover-match'),
@@ -508,6 +510,7 @@ declare global {
         candidates: CoverMatchCandidate[]
       }>
       applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) => Promise<CoverMatchResult>
+      applyLocalCover: (musicId: number, localPath: string, options?: { force?: boolean }) => Promise<CoverMatchResult>
       getMusicWithoutCoverCount: () => Promise<number>
       batchMatchMissingCovers: () => Promise<CoverMatchSummary>
       cancelCoverMatch: () => Promise<boolean>

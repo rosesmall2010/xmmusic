@@ -179,6 +179,11 @@ export interface ElectronAPI {
     songId: number,
     options?: { coverUrl?: string; force?: boolean }
   ) => Promise<CoverMatchResult>
+  applyLocalCover: (
+    musicId: number,
+    localPath: string,
+    options?: { force?: boolean }
+  ) => Promise<CoverMatchResult>
   getMusicWithoutCoverCount: () => Promise<number>
   batchMatchMissingCovers: () => Promise<CoverMatchSummary>
   cancelCoverMatch: () => Promise<boolean>
