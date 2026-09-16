@@ -180,6 +180,16 @@ onMounted(async () => {
   // 初始化完成后若歌词窗已开，再推一次完整状态（初始化前可能 music 仍为空）
   if (desktopLyricsOpen) sendDesktopLyricsState()
 
+  // 封面匹配成功（单曲 / 批量）→ 同步播放栏与队列封面
+  window.electronAPI.onCoverMatched(({ musicId, coverPath }) => {
+    if (!coverPath) return
+    window.dispatchEvent(
+      new CustomEvent('music-metadata-updated', {
+        detail: { id: musicId, coverPath }
+      })
+    )
+  })
+
   // 保留 IPC 通道（托盘等）
   window.electronAPI.onShortcutAction(handleShortcutAction)
 
@@ -221,6 +231,7 @@ function handleTrayAction(action: string) {
 
 onBeforeUnmount(() => {
   if (isDesktopLyricsWindow) return
+  window.electronAPI.removeCoverMatched()
   window.electronAPI.removeShortcutAction()
   window.electronAPI.removeTrayAction()
   window.electronAPI.removeDesktopLyricsListeners()

@@ -295,15 +295,12 @@ export default class MusicDatabase {
 
       // 拼音/声母搜索预计算列（方案 A）
       const colsAfterLyrics = this.db!.prepare(`PRAGMA table_info(all_music)`).all() as Array<{ name: string }>
-      let addedPinyinCols = false
       if (colsAfterLyrics.length > 0 && !colsAfterLyrics.some((c) => c.name === 'search_pinyin')) {
         this.db!.exec(`ALTER TABLE all_music ADD COLUMN search_pinyin TEXT NOT NULL DEFAULT ''`)
-        addedPinyinCols = true
         console.log('✅ 已为 all_music 表补充 search_pinyin 列')
       }
       if (colsAfterLyrics.length > 0 && !colsAfterLyrics.some((c) => c.name === 'search_initials')) {
         this.db!.exec(`ALTER TABLE all_music ADD COLUMN search_initials TEXT NOT NULL DEFAULT ''`)
-        addedPinyinCols = true
         console.log('✅ 已为 all_music 表补充 search_initials 列')
       }
       this.db!.exec(
@@ -312,8 +309,14 @@ export default class MusicDatabase {
       this.db!.exec(
         `CREATE INDEX IF NOT EXISTS idx_all_music_search_initials ON all_music(search_initials)`
       )
-      if (addedPinyinCols) {
-        this.backfillSearchPinyinColumns()
+      // 列已存在但回填中断时仍须续跑（backfill 仅处理空列行，可幂等）
+      if (colsAfterLyrics.length > 0) {
+        const needsPinyinBackfill = this.db!.prepare(
+          `SELECT 1 AS n FROM all_music WHERE search_pinyin = '' OR search_initials = '' LIMIT 1`
+        ).get() as { n: number } | undefined
+        if (needsPinyinBackfill) {
+          this.backfillSearchPinyinColumns()
+        }
       }
 
     } catch (error: any) {
