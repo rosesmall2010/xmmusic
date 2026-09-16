@@ -12,6 +12,11 @@ import type {
 } from '@shared/types/music'
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
+import {
+  buildSearchPinyinFields,
+  classifySearchQuery,
+  escapeFtsQuery
+} from '../../shared/utils/pinyinSearch'
 
 const dbname: string = 'm4'
 const dbnameDev: string = dbname +'-dev'
@@ -288,6 +293,29 @@ export default class MusicDatabase {
         console.log('✅ 已为 all_music 表补充 lyrics_offset 列')
       }
 
+      // 拼音/声母搜索预计算列（方案 A）
+      const colsAfterLyrics = this.db!.prepare(`PRAGMA table_info(all_music)`).all() as Array<{ name: string }>
+      let addedPinyinCols = false
+      if (colsAfterLyrics.length > 0 && !colsAfterLyrics.some((c) => c.name === 'search_pinyin')) {
+        this.db!.exec(`ALTER TABLE all_music ADD COLUMN search_pinyin TEXT NOT NULL DEFAULT ''`)
+        addedPinyinCols = true
+        console.log('✅ 已为 all_music 表补充 search_pinyin 列')
+      }
+      if (colsAfterLyrics.length > 0 && !colsAfterLyrics.some((c) => c.name === 'search_initials')) {
+        this.db!.exec(`ALTER TABLE all_music ADD COLUMN search_initials TEXT NOT NULL DEFAULT ''`)
+        addedPinyinCols = true
+        console.log('✅ 已为 all_music 表补充 search_initials 列')
+      }
+      this.db!.exec(
+        `CREATE INDEX IF NOT EXISTS idx_all_music_search_pinyin ON all_music(search_pinyin)`
+      )
+      this.db!.exec(
+        `CREATE INDEX IF NOT EXISTS idx_all_music_search_initials ON all_music(search_initials)`
+      )
+      if (addedPinyinCols) {
+        this.backfillSearchPinyinColumns()
+      }
+
     } catch (error: any) {
       console.error('❌ v1.0.6 数据库迁移失败:', error)
       console.error('错误详情:', error.message)
@@ -301,6 +329,160 @@ export default class MusicDatabase {
 
   private createIndexes(): void {
     // 索引已在迁移文件中创建
+  }
+
+  /** 回填存量曲库的拼音/声母预计算列 */
+  private backfillSearchPinyinColumns(): void {
+    if (!this.db) return
+    console.log('📦 开始回填拼音搜索列…')
+    const select = this.db.prepare(
+      `SELECT id, title, artist, album, file_name
+       FROM all_music
+       WHERE search_pinyin = '' OR search_initials = ''
+       LIMIT ?`
+    )
+    const update = this.db.prepare(
+      'UPDATE all_music SET search_pinyin = ?, search_initials = ? WHERE id = ?'
+    )
+    const batch = this.db.transaction((items: Array<{ id: number; title: string; artist: string; album: string | null; file_name: string }>) => {
+      for (const row of items) {
+        const { searchPinyin, searchInitials } = buildSearchPinyinFields(
+          row.title,
+          row.artist,
+          row.album,
+          row.file_name
+        )
+        update.run(searchPinyin, searchInitials, row.id)
+      }
+    })
+    // 分批回填，避免大库一次性 UPDATE 阻塞主进程过久
+    const pageSize = 500
+    let total = 0
+    while (true) {
+      const rows = select.all(pageSize) as Array<{
+        id: number
+        title: string
+        artist: string
+        album: string | null
+        file_name: string
+      }>
+      if (rows.length === 0) break
+      batch(rows)
+      total += rows.length
+      if (rows.length < pageSize) break
+    }
+    console.log(`✅ 拼音搜索列回填完成，共 ${total} 条`)
+  }
+
+  /** 更新单条记录的拼音预计算列 */
+  private refreshSearchPinyinForMusic(id: number): void {
+    if (!this.db) return
+    const row = this.db
+      .prepare('SELECT title, artist, album, file_name FROM all_music WHERE id = ?')
+      .get(id) as { title: string; artist: string; album: string | null; file_name: string } | undefined
+    if (!row) return
+    const { searchPinyin, searchInitials } = buildSearchPinyinFields(
+      row.title,
+      row.artist,
+      row.album,
+      row.file_name
+    )
+    this.db
+      .prepare('UPDATE all_music SET search_pinyin = ?, search_initials = ? WHERE id = ?')
+      .run(searchPinyin, searchInitials, id)
+  }
+
+  /** 将搜索 SQL 行映射为 MusicItem */
+  private mapSearchResultRows(rows: any[]): MusicItem[] {
+    return rows.map((row) => {
+      const fullPath = buildPathFromMusicRecord(
+        this.db!,
+        { dir_id: row.dir_id, file_name: row.file_name },
+        process.platform
+      )
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      musicItem.favorite = row.is_favorite === 1
+      musicItem.inQueue = row.in_queue === 1
+      return musicItem as MusicItem
+    })
+  }
+
+  /** FTS5 原文搜索 */
+  private searchMusicFts(query: string, limit: number): MusicItem[] {
+    const ftsQuery = escapeFtsQuery(query)
+    if (!ftsQuery) return []
+
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
+      FROM music_fts fts
+      JOIN all_music am ON am.id = fts.rowid
+      JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
+      WHERE am.is_duplicate = 0
+        AND music_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?
+    `)
+    const rows = stmt.all(`${ftsQuery}*`, limit) as any[]
+    return this.mapSearchResultRows(rows)
+  }
+
+  /** 拼音/声母旁路搜索 */
+  private searchMusicPinyin(query: string, limit: number): MusicItem[] {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
+      WHERE am.is_duplicate = 0
+        AND (
+          am.search_pinyin LIKE ?
+          OR am.search_initials LIKE ?
+        )
+      LIMIT ?
+    `)
+    const like = `%${q}%`
+    const rows = stmt.all(like, like, limit) as any[]
+    return this.mapSearchResultRows(rows)
+  }
+
+  /** LIKE 原文回退（含 file_name） */
+  private searchMusicLike(query: string, limit: number): MusicItem[] {
+    const likeQuery = `%${query.trim()}%`
+    const stmt = this.db!.prepare(`
+      SELECT
+        am.*,
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
+      WHERE am.is_duplicate = 0
+        AND (
+          am.title LIKE ?
+          OR am.artist LIKE ?
+          OR am.album LIKE ?
+          OR am.file_name LIKE ?
+        )
+      LIMIT ?
+    `)
+    const rows = stmt.all(likeQuery, likeQuery, likeQuery, likeQuery, limit) as any[]
+    return this.mapSearchResultRows(rows)
   }
 
   close(): void {
@@ -356,6 +538,13 @@ export default class MusicDatabase {
     is_corrupted?: number
     is_duplicate?: number
   }): number {
+    const { searchPinyin, searchInitials } = buildSearchPinyinFields(
+      data.title,
+      data.artist,
+      data.album,
+      data.file_name
+    )
+
     const stmt = this.db!.prepare(`
       INSERT INTO all_music (
         dir_id, file_name, title, artist, album, year, genre,
@@ -364,8 +553,9 @@ export default class MusicDatabase {
         cover_path, lyrics_path,
         is_exists, is_playable, play_error_reason,
         play_count, last_played_at,
-        is_corrupted, is_duplicate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_corrupted, is_duplicate,
+        search_pinyin, search_initials
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const result = stmt.run(
@@ -391,7 +581,9 @@ export default class MusicDatabase {
       data.play_count || 0,
       data.last_played_at || null,
       data.is_corrupted || 0,
-      data.is_duplicate || 0
+      data.is_duplicate || 0,
+      searchPinyin,
+      searchInitials
     )
 
     const insertedId = Number(result.lastInsertRowid)
@@ -553,6 +745,14 @@ export default class MusicDatabase {
       UPDATE all_music SET ${fields.join(', ')} WHERE id = ?
     `)
     stmt.run(...values)
+
+    if (
+      updates.title !== undefined ||
+      updates.artist !== undefined ||
+      updates.album !== undefined
+    ) {
+      this.refreshSearchPinyinForMusic(id)
+    }
   }
 
   /**
@@ -941,65 +1141,110 @@ export default class MusicDatabase {
     })
   }
 
+  /**
+   * 统计无有效封面（空路径或封面文件已丢失）的歌曲数
+   */
+  getMusicWithoutCoverCount(): number {
+    const emptyStmt = this.db!.prepare(`
+      SELECT COUNT(*) as count FROM all_music
+      WHERE is_duplicate = 0
+        AND is_exists = 1
+        AND (cover_path IS NULL OR cover_path = '')
+    `)
+    let count = (emptyStmt.get() as { count: number }).count
+
+    const pageSize = 200
+    let offset = 0
+    while (true) {
+      const page = this.getMusicWithClaimedCoverPath(offset, pageSize)
+      if (page.length === 0) break
+      for (const m of page) {
+        if (m.coverPath && !existsSync(m.coverPath)) count++
+      }
+      offset += page.length
+      if (page.length < pageSize) break
+    }
+    return count
+  }
+
+  /** 分页取无封面歌曲（cover_path 为空） */
+  getMusicWithoutCover(offset: number, limit: number): MusicItem[] {
+    const stmt = this.db!.prepare(`
+      SELECT am.*
+      FROM all_music am
+      WHERE am.is_duplicate = 0
+        AND am.is_exists = 1
+        AND (am.cover_path IS NULL OR am.cover_path = '')
+      ORDER BY am.id ASC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      return musicItem as MusicItem
+    })
+  }
+
+  /** 分页取「声称有封面路径」的歌曲（筛路径失效） */
+  getMusicWithClaimedCoverPath(offset: number, limit: number): MusicItem[] {
+    const stmt = this.db!.prepare(`
+      SELECT am.*
+      FROM all_music am
+      WHERE am.is_duplicate = 0
+        AND am.is_exists = 1
+        AND am.cover_path IS NOT NULL
+        AND am.cover_path != ''
+      ORDER BY am.id ASC
+      LIMIT ? OFFSET ?
+    `)
+    const rows = stmt.all(limit, offset) as any[]
+    return rows.map(row => {
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
+      return musicItem as MusicItem
+    })
+  }
+
+  /**
+   * 统一搜索入口：按 query 分流后合并去重
+   * - pinyin：仅走预计算拼音/声母列
+   * - fts：仅走 FTS5；失败回退 LIKE
+   * - mixed：FTS → 拼音 → LIKE，按 id 去重直至 limit
+   */
   searchMusic(query: string, limit: number = 50): MusicItem[] {
-    // 如果查询为空，返回空数组
     if (!query || query.trim() === '') {
       return []
     }
 
-    try {
-      // 使用 all_music_fts 全文搜索表（v1.0.6 新架构，包含收藏和队列状态）
-      const stmt = this.db!.prepare(`
-        SELECT
-          am.*,
-          md.path as dir_path,
-          CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-          CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-        FROM all_music_fts fts
-        JOIN all_music am ON am.id = fts.rowid
-        JOIN music_dir md ON am.dir_id = md.id
-        LEFT JOIN favorites f ON am.id = f.music_id
-        LEFT JOIN play_queue pq ON am.id = pq.music_id
-        WHERE all_music_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?
-      `)
-      // 添加通配符支持模糊搜索
-      const searchQuery = `${query.trim()}*`
-      const rows = stmt.all(searchQuery, limit) as any[]
-      return rows.map(row => {
-        const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-        const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
-        musicItem.favorite = row.is_favorite === 1
-        musicItem.inQueue = row.in_queue === 1
-        return musicItem as MusicItem
-      })
-    } catch (error) {
-      console.error('搜索错误:', error)
-      // 如果 FTS5 搜索失败，使用 LIKE 作为回退
-      const stmt = this.db!.prepare(`
-        SELECT
-          am.*,
-          md.path as dir_path,
-          CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-          CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-        FROM all_music am
-        JOIN music_dir md ON am.dir_id = md.id
-        LEFT JOIN favorites f ON am.id = f.music_id
-        LEFT JOIN play_queue pq ON am.id = pq.music_id
-        WHERE am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ?
-        LIMIT ?
-      `)
-      const likeQuery = `%${query.trim()}%`
-      const rows = stmt.all(likeQuery, likeQuery, likeQuery, limit) as any[]
-      return rows.map(row => {
-        const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-        const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
-        musicItem.favorite = row.is_favorite === 1
-        musicItem.inQueue = row.in_queue === 1
-        return musicItem as MusicItem
-      })
+    const mode = classifySearchQuery(query)
+    const merged = new Map<number, MusicItem>()
+
+    const append = (items: MusicItem[]) => {
+      for (const item of items) {
+        if (!merged.has(item.id)) merged.set(item.id, item)
+        if (merged.size >= limit) break
+      }
     }
+
+    if (mode === 'fts' || mode === 'mixed') {
+      try {
+        append(this.searchMusicFts(query, limit))
+      } catch (error) {
+        console.error('FTS 搜索失败，回退 LIKE:', error)
+        append(this.searchMusicLike(query, limit))
+      }
+    }
+
+    if ((mode === 'pinyin' || mode === 'mixed') && merged.size < limit) {
+      append(this.searchMusicPinyin(query, limit))
+    }
+
+    if (mode === 'mixed' && merged.size < limit) {
+      append(this.searchMusicLike(query, limit))
+    }
+
+    return Array.from(merged.values()).slice(0, limit)
   }
 
   advancedSearch(criteria: AdvancedSearchCriteria): MusicItem[] {
@@ -2357,32 +2602,58 @@ export default class MusicDatabase {
 
   // ========== 搜索建议 ==========
 
+  /** 搜索建议：UNION 歌名/歌手/专辑命中项，拼音 query 同时查预计算列 */
   getSearchSuggestions(query: string, limit: number = 5): string[] {
     if (!this.db || !query || query.trim() === '') return []
 
     try {
-      // 从本地库（local_music + all_music）中取建议，避免旧表 music 不存在导致报错
-      const stmt = this.db.prepare(`
-        SELECT DISTINCT
-          CASE
-            WHEN am.title LIKE ? THEN am.title
-            WHEN am.artist LIKE ? THEN am.artist
-            WHEN am.album LIKE ? THEN am.album
-          END AS suggestion
-        FROM local_music lm
-        JOIN all_music am ON lm.music_id = am.id
-        WHERE am.is_duplicate = 0
-          AND (am.title LIKE ? OR am.artist LIKE ? OR am.album LIKE ?)
-        LIMIT ?
-      `)
-      const likeQuery = `%${query.trim()}%`
-      const rows = stmt.all(likeQuery, likeQuery, likeQuery, likeQuery, likeQuery, likeQuery, limit) as Array<{ suggestion: string }>
+      const q = query.trim()
+      const likeQuery = `%${q}%`
+      const pinyinQuery = `%${q.toLowerCase()}%`
+      const mode = classifySearchQuery(q)
 
-      const suggestions = rows
-        .map(row => row.suggestion)
-        .filter(s => s && s.trim() !== '')
-        .slice(0, limit)
+      const whereParts = ['am.title LIKE ?', 'am.artist LIKE ?', 'am.album LIKE ?']
+      const params: any[] = [likeQuery, likeQuery, likeQuery]
+      if (mode === 'pinyin' || mode === 'mixed') {
+        whereParts.push('am.search_pinyin LIKE ?', 'am.search_initials LIKE ?')
+        params.push(pinyinQuery, pinyinQuery)
+      }
 
+      const stmt = this.db.prepare(
+        `SELECT suggestion FROM (
+           SELECT am.title AS suggestion
+           FROM local_music lm
+           JOIN all_music am ON lm.music_id = am.id
+           WHERE am.is_duplicate = 0
+             AND (${whereParts.join(' OR ')})
+           UNION ALL
+           SELECT am.artist AS suggestion
+           FROM local_music lm
+           JOIN all_music am ON lm.music_id = am.id
+           WHERE am.is_duplicate = 0
+             AND (${whereParts.join(' OR ')})
+           UNION ALL
+           SELECT am.album AS suggestion
+           FROM local_music lm
+           JOIN all_music am ON lm.music_id = am.id
+           WHERE am.is_duplicate = 0
+             AND am.album IS NOT NULL
+             AND (${whereParts.join(' OR ')})
+         ) t
+         WHERE suggestion IS NOT NULL AND suggestion != ''
+         LIMIT ?`
+      )
+      const rows = stmt.all(...params, ...params, ...params, limit * 6) as Array<{ suggestion: string }>
+
+      const seen = new Set<string>()
+      const suggestions: string[] = []
+      for (const row of rows) {
+        const s = row.suggestion?.trim()
+        if (!s || seen.has(s)) continue
+        seen.add(s)
+        suggestions.push(s)
+        if (suggestions.length >= limit) break
+      }
       return suggestions
     } catch (error) {
       console.error('获取搜索建议失败:', error)

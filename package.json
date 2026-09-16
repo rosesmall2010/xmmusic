@@ -87,6 +87,7 @@
     "music-metadata": "^11.14.0",
     "node-id3": "^0.2.9",
     "pinia": "^4.0.2",
+    "pinyin-pro": "^3.29.4",
     "sortablejs": "^1.15.3",
     "vue-i18n": "^11.4.7",
     "vue-router": "^5.2.0",

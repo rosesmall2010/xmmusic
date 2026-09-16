@@ -20,7 +20,8 @@ import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playli
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchSummary } from '../../shared/types/lyrics'
-import type { CoverMatchResult } from '../../shared/types/coverMatch'
+import type { CoverMatchResult, CoverMatchProgress, CoverMatchSummary } from '../../shared/types/coverMatch'
+import { APP_SHORTCUT_ACTIONS } from '../../shared/utils/shortcutActions'
 
 /** 从高级搜索条件生成历史文案；仅排序/limit 等程序化查询返回 null */
 function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | null | undefined): string | null {
@@ -67,9 +68,16 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   let batchLyricsMatchActive = false
   let lyricsMatchLastProgress: LyricsMatchProgress | null = null
   let coverMatchRunning = false
+  let batchCoverMatchActive = false
+  let coverMatchLastProgress: CoverMatchProgress | null = null
 
+  /**
+   * 歌词 / 封面匹配进程内互斥锁
+   * 避免并发写 ID3、争用网络与重复弹进度；UI 层 matchingLyricsId / matchingCoverId 与之对齐
+   */
   const assertLyricsMatchIdle = () => {
     if (lyricsMatchRunning) throw new Error('歌词匹配进行中，请稍候')
+    if (coverMatchRunning) throw new Error('封面匹配进行中，请稍候')
   }
 
   const withLyricsMatchLock = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -84,6 +92,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
   const assertCoverMatchIdle = () => {
     if (coverMatchRunning) throw new Error('封面匹配进行中，请稍候')
+    if (lyricsMatchRunning) throw new Error('歌词匹配进行中，请稍候')
   }
 
   const withCoverMatchLock = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -1442,6 +1451,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   ipcMain.handle('match-cover', async (_, musicId: number, options?: { force?: boolean }) => {
     if (!db) throw new Error('数据库未初始化')
     return withCoverMatchLock(async () => {
+      // 清除可能残留的批量取消标志，避免单曲匹配被误中止
+      coverMatchService.resetCancel()
       const music = db.getMusicById(musicId)
       if (!music) throw new Error('音乐不存在')
       const result = await coverMatchService.matchOne(db, music, { force: options?.force === true })
@@ -1455,6 +1466,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       }
       return result
     })
+  })
+
+  /** 单曲是否有有效封面（路径存在且可读） */
+  ipcMain.handle('has-valid-cover', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return coverMatchService.hasValidCover(music)
   })
 
   /** 列出封面候选（≥35，供全屏手动选择） */
@@ -1480,6 +1499,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     ) => {
       if (!db) throw new Error('数据库未初始化')
       return withCoverMatchLock(async () => {
+        // 清除可能残留的批量取消标志，避免候选应用被误中止
+        coverMatchService.resetCancel()
         const music = db.getMusicById(musicId)
         if (!music) throw new Error('音乐不存在')
         const result: CoverMatchResult = await coverMatchService.applyCandidate(
@@ -1500,6 +1521,133 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       })
     }
   )
+
+  /** 统计无有效封面歌曲数 */
+  ipcMain.handle('get-music-without-cover-count', async () => {
+    if (!db) return 0
+    return db.getMusicWithoutCoverCount()
+  })
+
+  /**
+   * 批量匹配本地库全部无有效封面歌曲
+   * 进度 cover-match-progress；结束 cover-match-finished
+   */
+  ipcMain.handle('batch-match-missing-covers', async () => {
+    if (!db) throw new Error('数据库未初始化')
+    return withCoverMatchLock(async () => {
+      coverMatchService.resetCancel()
+      batchCoverMatchActive = true
+      coverMatchLastProgress = null
+
+      const sendCancelledSummary = (): CoverMatchSummary => {
+        const cancelled: CoverMatchSummary = {
+          total: 0,
+          success: 0,
+          failed: 0,
+          skipped: 0,
+          writtenToFile: 0,
+          dbOnly: 0,
+          cancelled: true,
+          results: []
+        }
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('cover-match-finished', cancelled)
+        }
+        return cancelled
+      }
+
+      try {
+        const pageSize = 100
+        const songs: MusicItem[] = []
+        const seen = new Set<number>()
+
+        // 阶段一：cover_path 为空的歌曲
+        let offset = 0
+        while (true) {
+          if (coverMatchService.isCancelled()) return sendCancelledSummary()
+          const page = db.getMusicWithoutCover(offset, pageSize)
+          if (page.length === 0) break
+          for (const m of page) {
+            if (!seen.has(m.id)) {
+              seen.add(m.id)
+              songs.push(m)
+            }
+          }
+          offset += page.length
+          if (page.length < pageSize) break
+        }
+
+        // 阶段二：库里有 cover_path 但磁盘文件已丢失
+        offset = 0
+        while (true) {
+          if (coverMatchService.isCancelled()) return sendCancelledSummary()
+          const page = db.getMusicWithClaimedCoverPath(offset, pageSize)
+          if (page.length === 0) break
+          for (const m of page) {
+            if (seen.has(m.id)) continue
+            if (m.coverPath && !existsSync(m.coverPath)) {
+              seen.add(m.id)
+              songs.push(m)
+            }
+          }
+          offset += page.length
+          if (page.length < pageSize) break
+        }
+
+        if (coverMatchService.isCancelled()) return sendCancelledSummary()
+
+        if (songs.length === 0) {
+          const empty: CoverMatchSummary = {
+            total: 0,
+            success: 0,
+            failed: 0,
+            skipped: 0,
+            writtenToFile: 0,
+            dbOnly: 0,
+            cancelled: false,
+            results: []
+          }
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('cover-match-finished', empty)
+          }
+          return empty
+        }
+
+        // 枚举阶段用户可能已 cancel；resetCancel: false 保留取消标志，避免 matchBatch 开头清掉
+        const summary = await coverMatchService.matchBatch(db, songs, {
+          force: false,
+          resetCancel: false,
+          onProgress: (progress: CoverMatchProgress) => {
+            coverMatchLastProgress = progress
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('cover-match-progress', progress)
+            }
+          }
+        })
+
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('music-list-refresh')
+          mainWindow.webContents.send('cover-match-finished', summary)
+        }
+        return summary
+      } finally {
+        batchCoverMatchActive = false
+        coverMatchLastProgress = null
+      }
+    })
+  })
+
+  ipcMain.handle('get-cover-match-state', async () => {
+    return {
+      isRunning: batchCoverMatchActive,
+      progress: coverMatchLastProgress
+    }
+  })
+
+  ipcMain.handle('cancel-cover-match', async () => {
+    coverMatchService.cancel()
+    return true
+  })
 
   ipcMain.handle('delete-music-file', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
@@ -1694,17 +1842,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
           console.log(`📤 [IPC发送] shortcut-action: next`)
           mainWindow?.webContents.send('shortcut-action', 'next')
         },
-        'toggle-window': () => {
-          console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)
-          if (mainWindow?.isVisible()) {
-            mainWindow.hide()
-            console.log(`✅ [窗口切换] 已隐藏`)
-          } else {
-            mainWindow?.show()
-            mainWindow?.focus()
-            console.log(`✅ [窗口切换] 已显示并聚焦`)
-          }
-        },
         'toggle-favorite': () => {
           console.log(`📤 [IPC发送] shortcut-action: toggle-favorite`)
           mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
@@ -1714,6 +1851,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       // 转换快捷键格式
       const parsedShortcuts: Record<string, string> = {}
       for (const [action, accelerator] of Object.entries(shortcuts)) {
+        if (!APP_SHORTCUT_ACTIONS.includes(action as any)) continue
         if (accelerator) {
           parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
         }
@@ -1785,17 +1923,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
           console.log(`📤 [IPC发送] shortcut-action: next`)
           mainWindow?.webContents.send('shortcut-action', 'next')
         },
-        'toggle-window': () => {
-          console.log(`🪟 [窗口切换] 当前状态: ${mainWindow?.isVisible() ? '可见' : '隐藏'}`)
-          if (mainWindow?.isVisible()) {
-            mainWindow.hide()
-            console.log(`✅ [窗口切换] 已隐藏`)
-          } else {
-            mainWindow?.show()
-            mainWindow?.focus()
-            console.log(`✅ [窗口切换] 已显示并聚焦`)
-          }
-        },
         'toggle-favorite': () => {
           console.log(`📤 [IPC发送] shortcut-action: toggle-favorite`)
           mainWindow?.webContents.send('shortcut-action', 'toggle-favorite')
@@ -1804,6 +1931,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
       const parsedShortcuts: Record<string, string> = {}
       for (const [action, accelerator] of Object.entries(shortcuts)) {
+        if (!APP_SHORTCUT_ACTIONS.includes(action as any)) continue
         if (accelerator) {
           parsedShortcuts[action] = shortcutManager.parseAccelerator(accelerator)
         }

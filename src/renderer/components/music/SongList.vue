@@ -194,6 +194,22 @@
         <FileText :size="16" class="icon" />
         {{ matchingLyricsId === contextMenu.music!.id ? $t('music.matchingLyrics') : $t('music.matchLyrics') }}
       </div>
+      <div
+        v-if="showLyricsMatch && contextMenu.hasValidCover === true"
+        class="menu-item"
+        @click="handleRematchCover(contextMenu.music!)"
+      >
+        <ImageIcon :size="16" class="icon" />
+        {{ matchingCoverId === contextMenu.music!.id ? $t('music.matchingCover') : $t('music.rematchCover') }}
+      </div>
+      <div
+        v-else-if="showLyricsMatch && contextMenu.hasValidCover === false"
+        class="menu-item"
+        @click="handleMatchCover(contextMenu.music!)"
+      >
+        <ImageIcon :size="16" class="icon" />
+        {{ matchingCoverId === contextMenu.music!.id ? $t('music.matchingCover') : $t('music.matchCover') }}
+      </div>
       <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
         <FolderOpen :size="16" class="icon" />
         {{ $t('music.openInExplorer') }}
@@ -247,7 +263,7 @@ import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
@@ -259,7 +275,7 @@ const props = defineProps<{
   songs: MusicItem[]
   showRemoveFromPlaylist?: boolean
   playlistId?: number  // 用于批量删除
-  /** 本地音乐页开启：匹配 / 重新匹配歌词 */
+  /** 本地音乐页开启：匹配 / 重新匹配歌词与封面 */
   showLyricsMatch?: boolean
 }>()
 
@@ -341,11 +357,15 @@ const contextMenu = reactive({
   x: 0,
   y: 0,
   music: null as MusicItem | null,
-  isFavorite: false
+  isFavorite: false,
+  /** 主进程判定：路径存在且可读 */
+  hasValidCover: false
 })
 
 /** 正在匹配歌词的歌曲 id（禁用重复点击） */
 const matchingLyricsId = ref<number | null>(null)
+/** 正在匹配封面的歌曲 id */
+const matchingCoverId = ref<number | null>(null)
 
 const hasLyrics = (music: MusicItem) => !!(music.lyricsPath && music.lyricsPath.trim())
 
@@ -543,7 +563,7 @@ const handlePlay = (music: MusicItem) => {
 
 const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   contextMenu.music = music
-  contextMenu.visible = true
+  contextMenu.hasValidCover = false
 
   // 先设置初始位置，然后在 nextTick 中调整边界
   contextMenu.x = event.clientX
@@ -554,6 +574,15 @@ const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
   } catch (e) {
     console.error('Failed to check favorite status', e)
   }
+
+  try {
+    contextMenu.hasValidCover = await window.electronAPI.hasValidCoverForMusic(music.id)
+  } catch (e) {
+    console.error('Failed to check cover status', e)
+    contextMenu.hasValidCover = false
+  }
+
+  contextMenu.visible = true
 
   // 在 nextTick 中调整菜单位置，确保不超出屏幕边界
   await nextTick()
@@ -624,7 +653,7 @@ const applyMatchResult = (music: MusicItem, result: { status: string; lyricsPath
 
 const handleMatchLyrics = async (music: MusicItem) => {
   closeContextMenu()
-  if (matchingLyricsId.value != null) return
+  if (matchingLyricsId.value != null || matchingCoverId.value != null) return
   matchingLyricsId.value = music.id
   try {
     const result = await window.electronAPI.matchLyrics(music.id, { force: false })
@@ -638,7 +667,7 @@ const handleMatchLyrics = async (music: MusicItem) => {
 
 const handleRematchLyrics = async (music: MusicItem) => {
   closeContextMenu()
-  if (matchingLyricsId.value != null) return
+  if (matchingLyricsId.value != null || matchingCoverId.value != null) return
   if (!confirm(t('music.rematchLyricsConfirm', { title: music.title }))) return
   matchingLyricsId.value = music.id
   try {
@@ -648,6 +677,63 @@ const handleRematchLyrics = async (music: MusicItem) => {
     alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
   } finally {
     matchingLyricsId.value = null
+  }
+}
+
+const applyCoverMatchResult = (
+  music: MusicItem,
+  result: { status: string; coverPath?: string; fileNotUpdated?: boolean; message?: string }
+) => {
+  if (result.status === 'matched' && result.coverPath) {
+    music.coverPath = result.coverPath
+    window.dispatchEvent(
+      new CustomEvent('music-metadata-updated', {
+        detail: { id: music.id, coverPath: result.coverPath }
+      })
+    )
+    emit('songs-updated')
+    if (result.fileNotUpdated) {
+      alert(t('music.matchCoverDbOnly', { title: music.title }))
+    } else {
+      alert(t('music.matchCoverSuccess', { title: music.title }))
+    }
+  } else if (result.status === 'skipped_has_cover') {
+    alert(t('music.matchCoverAlreadyHas', { title: music.title }))
+  } else if (result.status === 'skipped_low_similarity') {
+    alert(t('music.matchCoverLowSimilarity', { title: music.title }))
+  } else {
+    alert(t('music.matchCoverFailed', { title: music.title, reason: result.message || '' }))
+  }
+}
+
+const handleMatchCover = async (music: MusicItem) => {
+  closeContextMenu()
+  // 与主进程歌词/封面 IPC 互斥锁对齐，防止 UI 重复发起
+  if (matchingCoverId.value != null || matchingLyricsId.value != null) return
+  matchingCoverId.value = music.id
+  try {
+    const result = await window.electronAPI.matchCover(music.id, { force: false })
+    applyCoverMatchResult(music, result)
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingCoverId.value = null
+  }
+}
+
+const handleRematchCover = async (music: MusicItem) => {
+  closeContextMenu()
+  // 与主进程歌词/封面 IPC 互斥锁对齐，防止 UI 重复发起
+  if (matchingCoverId.value != null || matchingLyricsId.value != null) return
+  if (!confirm(t('music.rematchCoverConfirm', { title: music.title }))) return
+  matchingCoverId.value = music.id
+  try {
+    const result = await window.electronAPI.matchCover(music.id, { force: true })
+    applyCoverMatchResult(music, result)
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingCoverId.value = null
   }
 }
 

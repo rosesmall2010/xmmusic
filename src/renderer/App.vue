@@ -44,8 +44,9 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import PlayerBar from '@/components/layout/PlayerBar.vue'
 import PlayQueueDrawer from '@/components/layout/PlayQueueDrawer.vue'
 import { usePlayerStore } from '@/stores/player'
-import { usePlayer } from '@/composables/usePlayer'
 import { useSettingsStore } from '@/stores/settings'
+import { useAppShortcuts } from '@/composables/useAppShortcuts'
+import { useShortcutActions } from '@/composables/useShortcutActions'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,13 +61,16 @@ const theme = computed(() => {
 })
 const showQueue = ref(false)
 const playerStore = usePlayerStore()
-const player = usePlayer()
+const { handleShortcutAction } = useShortcutActions()
 
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
 
 // 桌面歌词是独立的 BrowserWindow，加载的是同一套渲染入口
 // 通过初始 hash 判断，避免在歌词窗口里执行主窗口的初始化逻辑
 const isDesktopLyricsWindow = window.location.hash.startsWith('#/desktop-lyrics')
+
+// 应用内快捷键（主窗 + 迷你；桌面歌词窗跳过）
+useAppShortcuts(handleShortcutAction, !isDesktopLyricsWindow)
 
 /** 主布局过渡：普通页保留 out-in；进出全屏播放用 instant（无空窗、无叠层透底） */
 const mainTransitionName = ref('fade')
@@ -176,8 +180,7 @@ onMounted(async () => {
   // 初始化完成后若歌词窗已开，再推一次完整状态（初始化前可能 music 仍为空）
   if (desktopLyricsOpen) sendDesktopLyricsState()
 
-  // 监听快捷键
-  console.log('🎧 [渲染进程] 注册快捷键监听器')
+  // 保留 IPC 通道（托盘等）
   window.electronAPI.onShortcutAction(handleShortcutAction)
 
   // 监听托盘操作
@@ -211,93 +214,9 @@ onMounted(async () => {
   window.addEventListener('toggle-queue', toggleQueue)
 })
 
-// 处理快捷键
-function handleShortcutAction(action: string) {
-  console.log(`🎯 [渲染进程] 收到快捷键动作: ${action} - ${new Date().toLocaleTimeString()}`)
-
-  switch (action) {
-    case 'play-pause':
-      console.log(`▶️ [播放控制] 当前状态: ${playerStore.isPlaying ? '播放中' : '暂停'}`)
-      if (playerStore.isPlaying) {
-        player.pause()
-        console.log(`✅ [播放控制] 已暂停`)
-      } else {
-        if (playerStore.currentMusic) {
-          player.resume()
-          console.log(`✅ [播放控制] 已恢复播放`)
-        } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
-          player.play(playerStore.queue[playerStore.currentQueueIndex])
-          console.log(`✅ [播放控制] 开始播放队列中的歌曲`)
-        } else {
-          console.warn(`⚠️ [播放控制] 没有可播放的音乐`)
-        }
-      }
-      break
-    case 'previous':
-      console.log(`⏮️ [上一首] 执行中...`)
-      handlePrevious()
-      console.log(`✅ [上一首] 完成`)
-      break
-    case 'next':
-      console.log(`⏭️ [下一首] 执行中...`)
-      handleNext()
-      console.log(`✅ [下一首] 完成`)
-      break
-    case 'toggle-favorite':
-      if (playerStore.currentMusic) {
-        console.log(`❤️ [收藏] 切换收藏状态: ${playerStore.currentMusic.title}`)
-        window.electronAPI.toggleFavorite(playerStore.currentMusic.id).then(() => {
-          window.dispatchEvent(new Event('favorites-updated'))
-          console.log(`✅ [收藏] 收藏状态已更新`)
-        })
-      } else {
-        console.warn(`⚠️ [收藏] 没有当前播放的音乐`)
-      }
-      break
-    default:
-      console.warn(`⚠️ [渲染进程] 未知的快捷键动作: ${action}`)
-  }
-
-  console.log(`✅ [渲染进程] 快捷键动作处理完成: ${action}`)
-}
-
 // 处理托盘操作
 function handleTrayAction(action: string) {
-  switch (action) {
-    case 'play-pause':
-      if (playerStore.isPlaying) {
-        player.pause()
-      } else {
-        if (playerStore.currentMusic) {
-          player.resume()
-        } else if (playerStore.queue.length > 0 && playerStore.currentQueueIndex >= 0) {
-          player.play(playerStore.queue[playerStore.currentQueueIndex])
-        }
-      }
-      break
-    case 'previous':
-      handlePrevious()
-      break
-    case 'next':
-      handleNext()
-      break
-  }
-}
-
-async function handlePrevious() {
-  const prev = playerStore.getPrevious()
-  if (prev) {
-    if (prev.index >= 0) playerStore.setCurrentQueueIndex(prev.index)
-    await player.play(prev.music)
-  }
-}
-
-async function handleNext() {
-  const next = playerStore.getNext()
-  if (next) {
-    if (next.index >= 0) playerStore.setCurrentQueueIndex(next.index)
-    await player.play(next.music)
-  }
+  handleShortcutAction(action)
 }
 
 onBeforeUnmount(() => {

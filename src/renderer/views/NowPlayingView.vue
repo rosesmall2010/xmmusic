@@ -263,11 +263,22 @@
           <button
             class="btn-control btn-secondary has-tip"
             @click="handleOnlineMatchLyrics"
-            :disabled="!currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate"
+            :disabled="!currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate || matchingCover || showCoverPick || applyingCoverCandidate"
           >
             <FileText :size="20" />
             <span class="btn-tooltip">
               {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+            </span>
+          </button>
+
+          <button
+            class="btn-control btn-secondary has-tip"
+            @click="handleOnlineMatchCover"
+            :disabled="!currentMusic || matchingCover || showCoverPick || applyingCoverCandidate || matchingLyrics || showLyricsPick || applyingLyricsCandidate"
+          >
+            <ImageIcon :size="20" />
+            <span class="btn-tooltip">
+              {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCoverOnline') }}
             </span>
           </button>
 
@@ -299,6 +310,14 @@
       :applying="applyingLyricsCandidate"
       @close="closeLyricsPick"
       @select="onSelectLyricsCandidate"
+    />
+    <CoverMatchSelectModal
+      :show="showCoverPick"
+      :music-title="coverMatchTargetTitle || currentMusic?.title || ''"
+      :candidates="coverCandidates"
+      :applying="applyingCoverCandidate"
+      @close="closeCoverPick"
+      @select="onSelectCoverCandidate"
     />
 
     <!-- 队列右键菜单（不含批量操作） -->
@@ -377,11 +396,19 @@
       <div class="menu-divider"></div>
       <div
         class="menu-item"
-        :class="{ disabled: !currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate }"
+        :class="{ disabled: !currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate || matchingCover || showCoverPick || applyingCoverCandidate }"
         @click="matchLyricsFromMenu"
       >
         <FileText :size="16" class="icon" />
         {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: !currentMusic || matchingCover || showCoverPick || applyingCoverCandidate || matchingLyrics || showLyricsPick || applyingLyricsCandidate }"
+        @click="matchCoverFromMenu"
+      >
+        <ImageIcon :size="16" class="icon" />
+        {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCoverOnline') }}
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="toggleLyricsTimeFromMenu">
@@ -427,14 +454,16 @@ import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
+import CoverMatchSelectModal from '@/components/music/CoverMatchSelectModal.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -589,6 +618,14 @@ const applyingLyricsCandidate = ref(false)
 /** 本次匹配锁定的曲目 id，防止切歌后把候选写到新歌 */
 const lyricsMatchTargetId = ref<number | null>(null)
 const lyricsMatchTargetTitle = ref('')
+const matchingCover = ref(false)
+const showCoverPick = ref(false)
+const coverCandidates = ref<CoverMatchCandidate[]>([])
+const applyingCoverCandidate = ref(false)
+const coverMatchTargetId = ref<number | null>(null)
+const coverMatchTargetTitle = ref('')
+/** 本次全屏匹配是否需 force（已有有效封面且用户已确认替换） */
+const coverMatchNeedsForce = ref(false)
 const volumeValue = computed<number>({
   get: () => playerStore.volume,
   set: (v) => {
@@ -877,7 +914,15 @@ const resetLyricsOffsetFromMenu = () => {
 const matchLyricsFromMenu = () => {
   closeLyricsContextMenu()
   if (!currentMusic.value || matchingLyrics.value || showLyricsPick.value || applyingLyricsCandidate.value) return
+  if (matchingCover.value || showCoverPick.value || applyingCoverCandidate.value) return
   handleOnlineMatchLyrics()
+}
+
+const matchCoverFromMenu = () => {
+  closeLyricsContextMenu()
+  if (!currentMusic.value || matchingCover.value || showCoverPick.value || applyingCoverCandidate.value) return
+  if (matchingLyrics.value || showLyricsPick.value || applyingLyricsCandidate.value) return
+  handleOnlineMatchCover()
 }
 
 const toggleLyricsTimeFromMenu = () => {
@@ -1266,6 +1311,152 @@ const handleOnlineMatchLyrics = async () => {
     closeLyricsPick()
   } finally {
     matchingLyrics.value = false
+  }
+}
+
+const closeCoverPick = () => {
+  showCoverPick.value = false
+  coverCandidates.value = []
+  coverMatchTargetId.value = null
+  coverMatchTargetTitle.value = ''
+  coverMatchNeedsForce.value = false
+}
+
+const afterCoverMatched = (targetMusicId: number, coverPath?: string) => {
+  if (!coverPath) return
+  // 经 music-metadata-updated 同步 playerStore / 列表封面
+  window.dispatchEvent(
+    new CustomEvent('music-metadata-updated', {
+      detail: { id: targetMusicId, coverPath }
+    })
+  )
+}
+
+/**
+ * 应用用户选中的封面候选
+ * - 发起前已切歌：直接放弃（用户已不再关注该曲）
+ * - 成功后：始终刷新元数据；提示弹窗仅当仍在播放目标曲时展示
+ */
+const applyCoverSongId = async (
+  songId: number,
+  coverUrl: string,
+  targetMusicId: number,
+  targetTitle: string,
+  force: boolean
+) => {
+  if (currentMusic.value?.id !== targetMusicId) {
+    closeCoverPick()
+    return
+  }
+  applyingCoverCandidate.value = true
+  try {
+    const result = await window.electronAPI.applyCoverCandidate(targetMusicId, songId, {
+      coverUrl,
+      force
+    })
+    const stillOnTarget = currentMusic.value?.id === targetMusicId
+    if (result.status === 'matched') {
+      closeCoverPick()
+      afterCoverMatched(targetMusicId, result.coverPath)
+      if (!stillOnTarget) return
+      if (result.fileNotUpdated) {
+        alert(t('music.matchCoverDbOnly', { title: targetTitle }))
+      } else {
+        alert(t('music.matchCoverSuccess', { title: targetTitle }))
+      }
+    } else if (!stillOnTarget) {
+      closeCoverPick()
+      return
+    } else if (result.status === 'skipped_has_cover') {
+      alert(t('music.matchCoverAlreadyHas', { title: targetTitle }))
+    } else {
+      alert(t('music.matchCoverFailed', {
+        title: targetTitle,
+        reason: result.message || ''
+      }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', {
+      title: targetTitle,
+      reason: error?.message || error
+    }))
+  } finally {
+    applyingCoverCandidate.value = false
+  }
+}
+
+const onSelectCoverCandidate = async (payload: { songId: number; coverUrl: string }) => {
+  const id = coverMatchTargetId.value
+  const title = coverMatchTargetTitle.value
+  if (id == null) return
+  await applyCoverSongId(payload.songId, payload.coverUrl, id, title, coverMatchNeedsForce.value)
+}
+
+/**
+ * 全屏播放：在线匹配封面（多候选选择）
+ */
+const handleOnlineMatchCover = async () => {
+  if (
+    !currentMusic.value ||
+    matchingCover.value ||
+    showCoverPick.value ||
+    applyingCoverCandidate.value ||
+    matchingLyrics.value ||
+    showLyricsPick.value ||
+    applyingLyricsCandidate.value
+  ) return
+
+  const targetId = currentMusic.value.id
+  const targetTitle = currentMusic.value.title
+  coverMatchTargetId.value = targetId
+  coverMatchTargetTitle.value = targetTitle
+  coverMatchNeedsForce.value = false
+  matchingCover.value = true
+
+  try {
+    const { hasValidCover, candidates } = await window.electronAPI.listCoverCandidates(targetId)
+
+    if (currentMusic.value?.id !== targetId) {
+      closeCoverPick()
+      return
+    }
+
+    if (!candidates.length) {
+      alert(t('nowPlaying.noCoverCandidates'))
+      closeCoverPick()
+      return
+    }
+
+    if (hasValidCover) {
+      const ok = confirm(t('nowPlaying.replaceCoverConfirm', { title: targetTitle }))
+      if (!ok || currentMusic.value?.id !== targetId) {
+        closeCoverPick()
+        return
+      }
+      coverMatchNeedsForce.value = true
+    }
+
+    if (candidates.length === 1) {
+      await applyCoverSongId(
+        candidates[0].songId,
+        candidates[0].coverUrl,
+        targetId,
+        targetTitle,
+        coverMatchNeedsForce.value
+      )
+      return
+    }
+
+    coverCandidates.value = candidates
+    showCoverPick.value = true
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', {
+      title: targetTitle,
+      reason: error?.message || error
+    }))
+    closeCoverPick()
+  } finally {
+    matchingCover.value = false
   }
 }
 

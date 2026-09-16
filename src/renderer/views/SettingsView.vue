@@ -91,6 +91,50 @@
         </div>
       </section>
 
+      <!-- 应用内快捷键 -->
+      <section class="settings-section">
+        <h2 class="section-title">{{ $t('settings.shortcuts') }}</h2>
+        <p class="section-desc shortcuts-desc">{{ $t('settings.shortcutsDesc') }}</p>
+
+        <div
+          v-for="action in shortcutActionIds"
+          :key="action"
+          class="setting-item shortcut-item"
+        >
+          <div class="setting-info">
+            <div class="setting-label">{{ $t(`settings.shortcutActions.${action}`) }}</div>
+          </div>
+          <div class="setting-control shortcut-control">
+            <button
+              type="button"
+              class="shortcut-key-btn"
+              :class="{ recording: recordingAction === action }"
+              @click="startRecordShortcut(action)"
+            >
+              {{
+                recordingAction === action
+                  ? $t('settings.shortcutPressKey')
+                  : formatShortcutDisplay(shortcuts[action] || '')
+              }}
+            </button>
+            <button
+              type="button"
+              class="btn-link"
+              :disabled="recordingAction != null"
+              @click="clearShortcut(action)"
+            >
+              {{ $t('settings.shortcutClear') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="shortcut-actions-row">
+          <button class="btn-secondary" :disabled="recordingAction != null" @click="resetShortcuts">
+            {{ $t('settings.shortcutResetDefault') }}
+          </button>
+        </div>
+      </section>
+
       <!-- 音乐目录管理 -->
       <section class="settings-section">
         <h2 class="section-title">{{ $t('settings.musicDirectories') }}</h2>
@@ -255,12 +299,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Music, Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
+import { Plus, Power, PowerOff, Edit, Trash2 } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import appIcon from '@/assets/appicon.png'
+import type { ShortcutConfig } from '@shared/types/settings'
+import {
+  APP_SHORTCUT_ACTIONS,
+  eventToAccelerator,
+  formatAcceleratorDisplay,
+  normalizeShortcutConfig
+} from '@/utils/shortcutMatch'
+import { notifyShortcutRecordingState, notifyShortcutsUpdated } from '@/composables/useAppShortcuts'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -272,8 +324,94 @@ const showAddDirDialog = ref(false)
 const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
 const newDirPath = ref('')
 
+const shortcutActionIds = APP_SHORTCUT_ACTIONS
+const shortcuts = ref<ShortcutConfig>({})
+const recordingAction = ref<string | null>(null)
+
+const formatShortcutDisplay = (acc: string) => {
+  if (!acc) return t('settings.shortcutNotSet')
+  return formatAcceleratorDisplay(acc)
+}
+
+const loadShortcutSettings = async () => {
+  const defaults = await window.electronAPI.getDefaultShortcuts()
+  try {
+    const saved = await window.electronAPI.getShortcutConfig()
+    if (saved && Object.keys(saved).length > 0) {
+      shortcuts.value = normalizeShortcutConfig(saved, defaults)
+      return
+    }
+  } catch {
+    // ignore
+  }
+  shortcuts.value = normalizeShortcutConfig({}, defaults)
+}
+
+const findConflict = (action: string, accelerator: string): string | null => {
+  for (const [other, acc] of Object.entries(shortcuts.value)) {
+    if (other === action || !acc) continue
+    if (acc === accelerator) return other
+  }
+  return null
+}
+
+const persistShortcuts = async () => {
+  await window.electronAPI.saveShortcutConfig(shortcuts.value)
+  notifyShortcutsUpdated()
+}
+
+/** 开始录制：capture 阶段监听 + 通知 App 暂停全局快捷键，避免录 Space 时误播停 */
+const startRecordShortcut = (action: string) => {
+  recordingAction.value = action
+  notifyShortcutRecordingState(true)
+}
+
+const onShortcutRecordKeydown = (event: KeyboardEvent) => {
+  if (!recordingAction.value) return
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (event.key === 'Escape') {
+    recordingAction.value = null
+    notifyShortcutRecordingState(false)
+    return
+  }
+
+  const accelerator = eventToAccelerator(event)
+  if (!accelerator) return
+
+  const action = recordingAction.value
+  const conflict = findConflict(action, accelerator)
+  if (conflict) {
+    // 冲突时保持录制态，用户可改按其他键或 Esc 退出
+    alert(t('settings.shortcutConflict', {
+      action: t(`settings.shortcutActions.${conflict}`)
+    }))
+    return
+  }
+
+  shortcuts.value = { ...shortcuts.value, [action]: accelerator }
+  recordingAction.value = null
+  notifyShortcutRecordingState(false)
+  void persistShortcuts()
+}
+
+const clearShortcut = async (action: string) => {
+  shortcuts.value = { ...shortcuts.value, [action]: '' }
+  await persistShortcuts()
+}
+
+const resetShortcuts = async () => {
+  if (!confirm(t('settings.shortcutResetConfirm'))) return
+  shortcuts.value = await window.electronAPI.getDefaultShortcuts()
+  await persistShortcuts()
+}
+
 // 加载目录列表
 onMounted(async () => {
+  await loadShortcutSettings()
+  window.addEventListener('keydown', onShortcutRecordKeydown, true)
+
   try {
     await dirStore.loadDirectories({ sortBy: 'display_order', order: 'ASC' })
   } catch (error) {
@@ -285,6 +423,11 @@ onMounted(async () => {
   } catch (error) {
     console.error('获取应用版本号失败:', error)
   }
+})
+
+onBeforeUnmount(() => {
+  notifyShortcutRecordingState(false)
+  window.removeEventListener('keydown', onShortcutRecordKeydown, true)
 })
 
 // 添加目录
@@ -940,5 +1083,50 @@ input:checked + .slider:before {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-md);
+}
+
+.shortcuts-desc {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.shortcut-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.shortcut-key-btn {
+  min-width: 160px;
+  padding: 6px 12px;
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.shortcut-key-btn.recording {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.shortcut-actions-row {
+  margin-top: var(--spacing-md);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

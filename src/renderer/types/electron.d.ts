@@ -1,5 +1,5 @@
 import type { MusicItem } from '@shared/types/music'
-import type { CoverMatchResult, CoverMatchCandidate } from '@shared/types/coverMatch'
+import type { CoverMatchResult, CoverMatchCandidate, CoverMatchProgress, CoverMatchSummary } from '@shared/types/coverMatch'
 
 export interface DesktopLyricsState {
   music: { id: number; title: string; artist: string } | null
@@ -169,6 +169,7 @@ export interface ElectronAPI {
 
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
+  hasValidCoverForMusic: (musicId: number) => Promise<boolean>
   listCoverCandidates: (musicId: number) => Promise<{
     hasValidCover: boolean
     candidates: CoverMatchCandidate[]
@@ -178,6 +179,14 @@ export interface ElectronAPI {
     songId: number,
     options?: { coverUrl?: string; force?: boolean }
   ) => Promise<CoverMatchResult>
+  getMusicWithoutCoverCount: () => Promise<number>
+  batchMatchMissingCovers: () => Promise<CoverMatchSummary>
+  cancelCoverMatch: () => Promise<boolean>
+  getCoverMatchState: () => Promise<{ isRunning: boolean; progress: CoverMatchProgress | null }>
+  onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => void
+  removeCoverMatchProgress: () => void
+  onCoverMatchFinished: (callback: (summary: CoverMatchSummary) => void) => void
+  removeCoverMatchFinished: () => void
   onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => void
   removeCoverMatched: () => void
 

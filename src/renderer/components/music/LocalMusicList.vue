@@ -6,23 +6,32 @@
         <div class="stats">{{ $t('sidebar.totalSongs', { count: totalCount }) }}</div>
       </div>
       <div class="header-actions">
-        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0 || isMatchingLyrics">
+        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0 || isMatchingBusy">
           {{ $t('settings.clearAll') }}
         </button>
         <button
           class="btn-secondary"
           @click="handleBatchMatchLyrics"
-          :disabled="totalCount === 0 || isScanning || isMatchingLyrics"
+          :disabled="totalCount === 0 || isScanning || isMatchingBusy"
+          :title="isMatchingCovers ? $t('localMusic.coverMatchBusyTip') : undefined"
         >
           {{ isMatchingLyrics ? $t('localMusic.matchingLyrics') : $t('localMusic.batchMatchLyrics') }}
         </button>
-        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0 || isMatchingLyrics">
+        <button
+          class="btn-secondary"
+          @click="handleBatchMatchCovers"
+          :disabled="totalCount === 0 || isScanning || isMatchingBusy || missingCoverCount === 0"
+          :title="batchCoverButtonTitle"
+        >
+          {{ isMatchingCovers ? $t('localMusic.matchingCovers') : $t('localMusic.batchMatchCovers') }}
+        </button>
+        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0 || isMatchingBusy">
           {{ $t('player.playAll') }}
         </button>
         <button
           class="btn-primary"
           @click="handleScan"
-          :disabled="!canScan || isScanning || isMatchingLyrics"
+          :disabled="!canScan || isScanning || isMatchingBusy"
         >
           {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
         </button>
@@ -64,6 +73,26 @@
         ></div>
       </div>
       <button class="btn-link cancel-match" @click="cancelBatchMatchLyrics">{{ $t('common.cancel') }}</button>
+    </div>
+
+    <!-- 封面批量匹配进度 -->
+    <div v-if="isMatchingCovers" class="scan-progress-bar lyrics-match-progress">
+      <div class="progress-info">
+        <span class="current-file" :title="coverMatchProgress?.currentTitle || ''">
+          {{ $t('localMusic.matchingCovers') }}: {{ coverMatchProgress?.currentTitle || $t('localMusic.coverMatchPreparing') }}
+        </span>
+        <span v-if="coverMatchProgress" class="progress-stats">
+          {{ coverMatchProgress.current }} / {{ coverMatchProgress.total }}
+          · {{ $t('localMusic.matchSuccessCount', { count: coverMatchProgress.success }) }}
+        </span>
+      </div>
+      <div class="progress-track">
+        <div
+          class="progress-fill"
+          :style="{ width: `${coverMatchProgress?.total ? (coverMatchProgress.current / coverMatchProgress.total) * 100 : 0}%` }"
+        ></div>
+      </div>
+      <button class="btn-link cancel-match" @click="cancelBatchMatchCovers">{{ $t('common.cancel') }}</button>
     </div>
 
     <div class="music-list-container">
@@ -232,6 +261,7 @@ import { usePlayer } from '@/composables/usePlayer'
 import { useEqualizer } from '@/composables/useEqualizer'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
+import { useCoverMatchStore } from '@/stores/coverMatch'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
 
@@ -240,6 +270,7 @@ const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
+const coverMatchStore = useCoverMatchStore()
 const equalizer = useEqualizer()
 const { play, pause, getAudioElement } = usePlayer()
 
@@ -287,6 +318,26 @@ const scanProgress = ref<ScanProgress | null>(null)
 /** 批量匹配无歌词（状态在 store，离开页面再回来仍可见） */
 const isMatchingLyrics = computed(() => lyricsMatchStore.isMatching)
 const lyricsMatchProgress = computed(() => lyricsMatchStore.progress)
+const isMatchingCovers = computed(() => coverMatchStore.isMatching)
+const coverMatchProgress = computed(() => coverMatchStore.progress)
+const isMatchingBusy = computed(() => isMatchingLyrics.value || isMatchingCovers.value)
+/** 无有效封面歌曲数（用于禁用批量按钮） */
+const missingCoverCount = ref(0)
+
+const batchCoverButtonTitle = computed(() => {
+  if (isMatchingLyrics.value) return t('localMusic.lyricsMatchBusyTip')
+  if (missingCoverCount.value === 0) return t('localMusic.noMissingCoversTip')
+  return undefined
+})
+
+const refreshMissingCoverCount = async () => {
+  try {
+    missingCoverCount.value = await window.electronAPI.getMusicWithoutCoverCount()
+  } catch (e) {
+    console.error('统计无封面歌曲失败:', e)
+    missingCoverCount.value = 0
+  }
+}
 
 // 目录管理对话框状态
 const showDirManageDialog = ref(false)
@@ -330,6 +381,8 @@ onMounted(async () => {
 
   // 同步批量匹配状态（离开再回来时恢复进度条）
   await lyricsMatchStore.syncFromMain()
+  await coverMatchStore.syncFromMain()
+  await refreshMissingCoverCount()
 
   // 监听扫描进度
   window.electronAPI.onScanProgress((progress) => {
@@ -390,6 +443,7 @@ onMounted(() => {
   unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', async () => {
     await musicStore.loadMusic(0, 20, true)
     startBackgroundLoading()
+    await refreshMissingCoverCount()
   })
 
   window.electronAPI.onScanProgress((progress) => {
@@ -420,7 +474,7 @@ const loadMore = async () => {
 }
 
 const handleBatchMatchLyrics = async () => {
-  if (isMatchingLyrics.value || isScanning.value) return
+  if (isMatchingBusy.value || isScanning.value) return
   try {
     const count = await window.electronAPI.getMusicWithoutLyricsCount()
     if (count <= 0) {
@@ -464,6 +518,60 @@ const handleBatchMatchLyrics = async () => {
 
 const cancelBatchMatchLyrics = async () => {
   await lyricsMatchStore.cancel()
+}
+
+const handleBatchMatchCovers = async () => {
+  if (isMatchingBusy.value || isScanning.value) return
+  try {
+    const count = await window.electronAPI.getMusicWithoutCoverCount()
+    if (count <= 0) {
+      alert(t('localMusic.noMissingCovers'))
+      return
+    }
+    if (!confirm(t('localMusic.batchMatchCoversConfirm', { count }))) return
+
+    coverMatchStore.setOptimisticProgress({
+      current: 0,
+      total: count,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      writtenToFile: 0,
+      dbOnly: 0,
+      currentTitle: ''
+    })
+
+    const summary = await coverMatchStore.startBatchMatch()
+    await musicStore.loadMusic(0, 20, true)
+    startBackgroundLoading()
+    await refreshMissingCoverCount()
+
+    if (summary.cancelled) {
+      alert(t('localMusic.coverMatchCancelled', {
+        success: summary.success,
+        writtenToFile: summary.writtenToFile,
+        dbOnly: summary.dbOnly,
+        failed: summary.failed,
+        skipped: summary.skipped
+      }))
+    } else if (summary.total === 0) {
+      alert(t('localMusic.noMissingCovers'))
+    } else {
+      alert(t('localMusic.coverMatchDone', {
+        success: summary.success,
+        writtenToFile: summary.writtenToFile,
+        dbOnly: summary.dbOnly,
+        failed: summary.failed,
+        skipped: summary.skipped
+      }))
+    }
+  } catch (error: any) {
+    alert(t('localMusic.coverMatchError') + ': ' + (error?.message || error))
+  }
+}
+
+const cancelBatchMatchCovers = async () => {
+  await coverMatchStore.cancel()
 }
 
 const handleScan = async () => {

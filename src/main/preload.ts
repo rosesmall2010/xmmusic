@@ -11,7 +11,9 @@ import type { ShortcutConfig } from '@shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type {
   CoverMatchResult,
-  CoverMatchCandidate
+  CoverMatchCandidate,
+  CoverMatchProgress,
+  CoverMatchSummary
 } from '@shared/types/coverMatch'
 import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types/statistics'
 
@@ -294,10 +296,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-cover', musicId, options),
+  hasValidCoverForMusic: (musicId: number) => ipcRenderer.invoke('has-valid-cover', musicId),
   listCoverCandidates: (musicId: number) =>
     ipcRenderer.invoke('list-cover-candidates', musicId),
   applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) =>
     ipcRenderer.invoke('apply-cover-candidate', musicId, songId, options),
+  getMusicWithoutCoverCount: () => ipcRenderer.invoke('get-music-without-cover-count'),
+  batchMatchMissingCovers: () => ipcRenderer.invoke('batch-match-missing-covers'),
+  cancelCoverMatch: () => ipcRenderer.invoke('cancel-cover-match'),
+  getCoverMatchState: () => ipcRenderer.invoke('get-cover-match-state'),
+  onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => {
+    ipcRenderer.on('cover-match-progress', (_, progress) => callback(progress))
+  },
+  removeCoverMatchProgress: () => {
+    ipcRenderer.removeAllListeners('cover-match-progress')
+  },
+  onCoverMatchFinished: (callback: (summary: CoverMatchSummary) => void) => {
+    ipcRenderer.on('cover-match-finished', (_, summary) => callback(summary))
+  },
+  removeCoverMatchFinished: () => {
+    ipcRenderer.removeAllListeners('cover-match-finished')
+  },
   onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => {
     ipcRenderer.on('cover-matched', (_, payload) => callback(payload))
   },
@@ -483,11 +502,20 @@ declare global {
       onLyricsMatchFinished: (callback: (summary: LyricsMatchSummary) => void) => void
       removeLyricsMatchFinished: () => void
       matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
+      hasValidCoverForMusic: (musicId: number) => Promise<boolean>
       listCoverCandidates: (musicId: number) => Promise<{
         hasValidCover: boolean
         candidates: CoverMatchCandidate[]
       }>
       applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) => Promise<CoverMatchResult>
+      getMusicWithoutCoverCount: () => Promise<number>
+      batchMatchMissingCovers: () => Promise<CoverMatchSummary>
+      cancelCoverMatch: () => Promise<boolean>
+      getCoverMatchState: () => Promise<{ isRunning: boolean; progress: CoverMatchProgress | null }>
+      onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => void
+      removeCoverMatchProgress: () => void
+      onCoverMatchFinished: (callback: (summary: CoverMatchSummary) => void) => void
+      removeCoverMatchFinished: () => void
       onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => void
       removeCoverMatched: () => void
       updateTrayPlayState: (isPlaying: boolean) => void

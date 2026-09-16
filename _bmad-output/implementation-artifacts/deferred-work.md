@@ -9,3 +9,10 @@
 - **批量同步主进程无并发锁**：UI 已有 `batchSyncing`，极端竞态概率低。
 - **开发模式桌面歌词 did-fail-load 无重试**：有意简化为打日志；可按需恢复有限次重试。
 - **编辑标签表单用歌手名预填专辑**：`EditTagModal.loadMusicData` 既有行为，非本次引入；与批量写库侧「专辑勿用歌手兜底」分开处理。
+
+## Deferred from: code review of S1.2-单曲匹配封面UI.md + S1.3-批量匹配封面.md (2026-09-16)
+
+- 批量进行中右键仍可点单曲匹配（仅主进程抛错）— 与歌词右键行为对齐
+- 对全部 claimed cover_path 同步 existsSync 可能堵主进程 — 性能优化后续
+- 发起页卸载后结束 alert 丢失 — 与歌词批量同模式
+- `list-cover-candidates` 未进 lock — 与歌词候选同模式

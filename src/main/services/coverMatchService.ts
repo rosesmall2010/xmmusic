@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, unlinkSync, accessSync, constants } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, normalize } from 'path'
+import { randomUUID } from 'crypto'
 import { app, net, nativeImage } from 'electron'
 import type { MusicItem } from '../../shared/types/music'
 import type {
@@ -156,13 +157,28 @@ export default class CoverMatchService {
   private apiIndex = 0
   private cancelled = false
   private metadataEditor = new MetadataEditor()
+  /** 下载进行中注册的取消回调（cancel() 时触发中断正在进行的网络请求） */
+  private cancelListeners = new Set<() => void>()
 
   cancel() {
     this.cancelled = true
+    for (const fn of this.cancelListeners) {
+      try {
+        fn()
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   resetCancel() {
     this.cancelled = false
+    // 下载回调在下一次 downloadCoverToCache 生命周期自行清理；此处不主动清，避免误放新请求
+  }
+
+  /** 批量枚举阶段是否已请求取消 */
+  isCancelled() {
+    return this.cancelled
   }
 
   /** 库路径非空且磁盘可读 */
@@ -239,6 +255,7 @@ export default class CoverMatchService {
     }
     // 全部镜像都返回空列表（无异常）→ 视为无搜索结果；有异常则抛出
     if (lastErr) throw lastErr instanceof Error ? lastErr : new Error('搜索 API 全部失败')
+    console.warn(`[coverMatch] 搜索「${keyword}」全部镜像无结果`)
     return []
   }
 
@@ -300,31 +317,66 @@ export default class CoverMatchService {
     return coversDir
   }
 
-  /** 下载封面到 userData/covers；WebP 转为 JPEG 以便写入 ID3；文件名带时间戳破缓存 */
+  /** 下载封面到 userData/covers；WebP 转为 JPEG 以便写入 ID3；文件名带随机串避免撞名 */
   private async downloadCoverToCache(coverUrl: string, music: MusicItem): Promise<string> {
-    const res = await net.fetch(coverUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.3)',
-        Accept: 'image/*,*/*'
-      },
-      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
-    })
-    if (!res.ok) throw new Error(`下载封面 HTTP ${res.status}`)
+    // 取消中断：优先用控制器 + 手动超时定时器（AbortSignal.timeout 无法与外部取消信号合并）
+    const abortCtrl = new AbortController()
+    let settled = false
+    const timeout = setTimeout(() => {
+      if (!settled) abortCtrl.abort(new Error('下载封面超时'))
+    }, DOWNLOAD_TIMEOUT_MS)
+    const abortFromCancel = () => {
+      if (!settled) abortCtrl.abort()
+    }
+    const cleanup = () => {
+      settled = true
+      clearTimeout(timeout)
+      this.cancelListeners.delete(abortFromCancel)
+    }
+
+    this.cancelListeners.add(abortFromCancel)
+
+    let res: Awaited<ReturnType<typeof net.fetch>>
+    try {
+      res = await net.fetch(coverUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.3)',
+          Accept: 'image/*,*/*'
+        },
+        signal: abortCtrl.signal
+      })
+    } catch (e) {
+      cleanup()
+      throw e
+    }
+    if (!res.ok) {
+      cleanup()
+      throw new Error(`下载封面 HTTP ${res.status}`)
+    }
 
     const contentType = res.headers.get('content-type')
     if (contentType && !isImageContentType(contentType)) {
       if (!contentType.toLowerCase().includes('octet-stream')) {
+        cleanup()
         throw new Error(`非图片类型: ${contentType}`)
       }
     }
 
     const contentLength = Number(res.headers.get('content-length') || 0)
     if (contentLength > MAX_COVER_BYTES) {
+      cleanup()
       throw new Error(`封面过大(${Math.round(contentLength / 1024 / 1024)}MB)，超过 15MB 限制`)
     }
 
-    let buf = Buffer.from(await res.arrayBuffer())
+    let buf: Buffer
+    try {
+      buf = Buffer.from(await res.arrayBuffer())
+    } catch (e) {
+      cleanup()
+      throw e
+    }
+    cleanup()
     if (buf.length === 0) throw new Error('封面数据为空')
     if (buf.length > MAX_COVER_BYTES) {
       throw new Error(`封面过大(${Math.round(buf.length / 1024 / 1024)}MB)，超过 15MB 限制`)
@@ -343,7 +395,7 @@ export default class CoverMatchService {
 
     const ext = extForKind(kind)
     const hash = (music.fileHash || `id${music.id}`).replace(/[^a-zA-Z0-9]/g, '')
-    const coverPath = join(this.getCoversDir(), `${hash}_cover_${Date.now()}${ext}`)
+    const coverPath = join(this.getCoversDir(), `${hash}_cover_${randomUUID()}${ext}`)
     await writeFile(coverPath, buf)
     return coverPath
   }
@@ -392,8 +444,8 @@ export default class CoverMatchService {
           message: e?.message || '写入 MP3 封面失败'
         }
       }
-      this.tryRemoveOldCover(music.coverPath, coversDir)
       db.updateAllMusic(music.id, { cover_path: cachePath })
+      this.tryRemoveOldCover(music.coverPath, coversDir)
       return {
         musicId: music.id,
         title,
@@ -405,8 +457,8 @@ export default class CoverMatchService {
       }
     }
 
-    this.tryRemoveOldCover(music.coverPath, coversDir)
     db.updateAllMusic(music.id, { cover_path: cachePath })
+    this.tryRemoveOldCover(music.coverPath, coversDir)
     return {
       musicId: music.id,
       title,
@@ -602,9 +654,13 @@ export default class CoverMatchService {
     options: {
       force?: boolean
       onProgress?: (progress: CoverMatchProgress) => void
+      /** 为 false 时保留调用方已设置的取消标志（批量枚举阶段取消） */
+      resetCancel?: boolean
     } = {}
   ): Promise<CoverMatchSummary> {
-    this.resetCancel()
+    if (options.resetCancel !== false) {
+      this.resetCancel()
+    }
     const force = options.force === true
     const total = songs.length
     let success = 0
@@ -667,20 +723,18 @@ export default class CoverMatchService {
       }
     })
 
-    try {
-      await Promise.all(workers)
-      return {
-        total,
-        success,
-        failed,
-        skipped,
-        writtenToFile,
-        dbOnly,
-        cancelled: this.cancelled,
-        results: results.filter((r): r is CoverMatchResult => !!r)
-      }
-    } finally {
-      this.resetCancel()
+    await Promise.all(workers)
+    // 取消标志生命周期由调用方管理：handler 入口 resetCancel，结束不清，
+    // 避免「批量已取消 → 下一个单曲匹配被残留标志误中止」的尾部竞态
+    return {
+      total,
+      success,
+      failed,
+      skipped,
+      writtenToFile,
+      dbOnly,
+      cancelled: this.cancelled,
+      results: results.filter((r): r is CoverMatchResult => !!r)
     }
   }
 }
