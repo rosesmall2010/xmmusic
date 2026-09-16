@@ -109,14 +109,22 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
     progress.value = p
   }
 
+  /** 右键/全屏手动匹配进行中（含确认框与候选弹窗），用于禁用批量按钮 */
+  const manualMatchUiBusy = ref(false)
+  function setManualMatchUiBusy(busy: boolean) {
+    manualMatchUiBusy.value = busy
+  }
+
   return {
     isMatching,
     progress,
     lastSummary,
+    manualMatchUiBusy,
     ensureListeners,
     syncFromMain,
     startBatchMatch,
     cancel,
-    setOptimisticProgress
+    setOptimisticProgress,
+    setManualMatchUiBusy
   }
 })

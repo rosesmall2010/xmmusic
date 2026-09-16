@@ -27,10 +27,8 @@ const SEARCH_PATH = '/search?limit=3&type=1&keywords='
 /** 交互选择时多返回几条，方便用户挑选 */
 const SEARCH_PATH_PICK = '/search?limit=8&type=1&keywords='
 const LRC_API = 'https://music.163.com/api/song/media?id='
-/** 与参考脚本一致：低于此相似度跳过（自动匹配） */
-const SIMILARITY_THRESHOLD = 75
-/** 选择对话框展示的最低相似度（仍列出，供人工挑选） */
-const PICK_LIST_MIN_SIMILARITY = 35
+/** 自动/批量匹配：低于此相似度跳过 */
+const SIMILARITY_THRESHOLD = 50
 const REQUEST_TIMEOUT_MS = 12000
 const REQUEST_GAP_MS = 120
 /** 批量匹配同时进行的任务数 */
@@ -202,7 +200,8 @@ export default class LyricsMatchService {
   }
 
   /**
-   * 搜索候选列表（按相似度降序），供全屏播放手动挑选
+   * 搜索候选列表（按相似度降序），供手动挑选
+   * 不设相似度下限：全部结果入列，由用户预览后决定用或取消
    */
   async searchCandidates(music: MusicItem): Promise<LyricsMatchCandidate[]> {
     const keyword = this.buildKeyword(music)
@@ -216,9 +215,7 @@ export default class LyricsMatchService {
       album: song.album,
       similarity: similarPercent(localName, `${song.artists} - ${song.name}`)
     }))
-    return list
-      .filter((c) => c.similarity >= PICK_LIST_MIN_SIMILARITY)
-      .sort((a, b) => b.similarity - a.similarity)
+    return list.sort((a, b) => b.similarity - a.similarity)
   }
 
   /**
@@ -226,6 +223,29 @@ export default class LyricsMatchService {
    */
   async previewLyric(songId: number): Promise<{ lyric: string | null; instrumental: boolean }> {
     return this.fetchLyric(songId)
+  }
+
+  /**
+   * 仅关联同目录已有 .lrc，绝不发起在线搜索/下载
+   * 供手动匹配「无在线候选」回退，避免误调 matchOne 静默写盘
+   */
+  async linkLocalLyrics(db: MusicDatabase, music: MusicItem): Promise<LyricsMatchResult> {
+    const title = music.title || music.fileName
+    if (!music.filePath || !existsSync(music.filePath)) {
+      return { musicId: music.id, title, status: 'failed', message: '音乐文件不存在' }
+    }
+    const local = this.lyricsService.findLyricsFile(music.filePath)
+    if (!local) {
+      return { musicId: music.id, title, status: 'failed', message: '未找到本地歌词' }
+    }
+    db.updateAllMusic(music.id, { lyrics_path: local })
+    return {
+      musicId: music.id,
+      title,
+      status: 'linked_local',
+      lyricsPath: local,
+      message: '已关联本地歌词'
+    }
   }
 
   /**
@@ -466,8 +486,17 @@ export default class LyricsMatchService {
         force,
         shouldAbort: () => this.cancelled
       })
-      // 取消后：丢弃进行中任务的回调，不计入统计/结果
-      if (this.cancelled) return
+      // 取消后：进行中任务若已成功写入仍计入，避免摘要低于磁盘实际
+      if (this.cancelled) {
+        if (result.status === 'matched' || result.status === 'linked_local') {
+          results[index] = result
+          bump(result.status)
+          completed++
+          lastDoneTitle = music.title || music.fileName
+          emitProgress(result.status)
+        }
+        return
+      }
       results[index] = result
       bump(result.status)
       completed++

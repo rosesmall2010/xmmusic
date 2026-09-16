@@ -166,6 +166,14 @@ export interface ElectronAPI {
   parseLyricsFile: (filePath: string) => Promise<any>
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
   updateMusicLyricsOffset: (musicId: number, offsetMs: number) => Promise<void>
+  matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<any>
+  linkLocalLyrics: (musicId: number) => Promise<any>
+  searchLyricsCandidates: (musicId: number) => Promise<{
+    hasExistingLyrics: boolean
+    candidates: any[]
+  }>
+  previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
+  applyLyricsCandidate: (musicId: number, songId: number) => Promise<any>
 
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>

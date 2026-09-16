@@ -13,7 +13,13 @@
           class="btn-secondary"
           @click="handleBatchMatchLyrics"
           :disabled="totalCount === 0 || isScanning || isMatchingBusy"
-          :title="isMatchingCovers ? $t('localMusic.coverMatchBusyTip') : undefined"
+          :title="
+            lyricsMatchStore.manualMatchUiBusy
+              ? $t('localMusic.manualMatchBusyTip')
+              : isMatchingCovers
+                ? $t('localMusic.coverMatchBusyTip')
+                : undefined
+          "
         >
           {{ isMatchingLyrics ? $t('localMusic.matchingLyrics') : $t('localMusic.batchMatchLyrics') }}
         </button>
@@ -64,6 +70,9 @@
         <span class="progress-stats">
           {{ lyricsMatchProgress.current }} / {{ lyricsMatchProgress.total }}
           · {{ $t('localMusic.matchSuccessCount', { count: lyricsMatchProgress.success }) }}
+          <template v-if="lyricsMatchProgress.total >= 3">
+            · {{ $t('localMusic.matchConcurrencyHint') }}
+          </template>
         </span>
       </div>
       <div class="progress-track">
@@ -84,6 +93,9 @@
         <span v-if="coverMatchProgress" class="progress-stats">
           {{ coverMatchProgress.current }} / {{ coverMatchProgress.total }}
           · {{ $t('localMusic.matchSuccessCount', { count: coverMatchProgress.success }) }}
+          <template v-if="coverMatchProgress.total >= 3">
+            · {{ $t('localMusic.matchConcurrencyHint') }}
+          </template>
         </span>
       </div>
       <div class="progress-track">
@@ -320,11 +332,14 @@ const isMatchingLyrics = computed(() => lyricsMatchStore.isMatching)
 const lyricsMatchProgress = computed(() => lyricsMatchStore.progress)
 const isMatchingCovers = computed(() => coverMatchStore.isMatching)
 const coverMatchProgress = computed(() => coverMatchStore.progress)
-const isMatchingBusy = computed(() => isMatchingLyrics.value || isMatchingCovers.value)
+const isMatchingBusy = computed(
+  () => isMatchingLyrics.value || isMatchingCovers.value || lyricsMatchStore.manualMatchUiBusy
+)
 /** 无有效封面歌曲数（用于禁用批量按钮） */
 const missingCoverCount = ref(0)
 
 const batchCoverButtonTitle = computed(() => {
+  if (lyricsMatchStore.manualMatchUiBusy) return t('localMusic.manualMatchBusyTip')
   if (isMatchingLyrics.value) return t('localMusic.lyricsMatchBusyTip')
   if (missingCoverCount.value === 0) return t('localMusic.noMissingCoversTip')
   return undefined

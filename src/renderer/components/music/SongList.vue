@@ -255,6 +255,44 @@
       :music="detailsMusic"
       @close="showDetailsDialog = false"
     />
+    <LyricsMatchSelectModal
+      :show="showLyricsPick"
+      :music-title="lyricsPickTarget?.title || ''"
+      :candidates="lyricsCandidates"
+      :applying="applyingLyricsCandidate"
+      @close="closeLyricsPick"
+      @select="onSelectLyricsCandidate"
+    />
+    <CoverMatchSelectModal
+      :show="showCoverPick"
+      :music-title="coverPickTarget?.title || ''"
+      :candidates="coverCandidates"
+      :applying="applyingCoverCandidate"
+      @close="closeCoverPick"
+      @select="onSelectCoverCandidate"
+      @select-local="onSelectLocalCover"
+    />
+
+    <!-- 右键匹配：拉取候选期间全屏遮罩（Teleport 盖住工具栏，避免误点批量） -->
+    <Teleport to="body">
+      <div
+        v-if="isFetchingMatchCandidates"
+        class="match-fetch-overlay"
+        @click.stop
+        @contextmenu.prevent
+      >
+        <div class="match-fetch-card">
+          <Loader2 :size="22" class="spin" />
+          <div class="match-fetch-text">
+            <div class="match-fetch-title">{{ fetchMatchHint }}</div>
+            <div v-if="fetchMatchSongTitle" class="match-fetch-sub">{{ fetchMatchSongTitle }}</div>
+          </div>
+          <button type="button" class="match-fetch-cancel" @click="cancelFetchMatchCandidates">
+            {{ $t('common.cancel') }}
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -262,13 +300,18 @@
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
+import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2 } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
+import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
+import CoverMatchSelectModal from '@/components/music/CoverMatchSelectModal.vue'
 import type { MusicItem } from '@shared/types/music'
+import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 import { useElementSize } from '@vueuse/core'
 
 const props = defineProps<{
@@ -288,6 +331,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const playerStore = usePlayerStore()
+const lyricsMatchStore = useLyricsMatchStore()
 const currentMusic = computed(() => playerStore.currentMusic)
 
 // Virtual Scrolling
@@ -362,13 +406,78 @@ const contextMenu = reactive({
   hasValidCover: false
 })
 
-/** 正在匹配歌词的歌曲 id（禁用重复点击） */
+/** 正在匹配歌词的歌曲 id（互斥占位，含确认框期间） */
 const matchingLyricsId = ref<number | null>(null)
-/** 正在匹配封面的歌曲 id */
+/** 正在匹配封面的歌曲 id（互斥占位，含确认框期间） */
 const matchingCoverId = ref<number | null>(null)
+
+/** 右键匹配：候选选择弹窗（与全屏播放一致，可预览后挑选） */
+const showLyricsPick = ref(false)
+const lyricsCandidates = ref<LyricsMatchCandidate[]>([])
+const lyricsPickTarget = ref<MusicItem | null>(null)
+const applyingLyricsCandidate = ref(false)
+
+const showCoverPick = ref(false)
+const coverCandidates = ref<CoverMatchCandidate[]>([])
+const coverPickTarget = ref<MusicItem | null>(null)
+const coverPickNeedsForce = ref(false)
+const applyingCoverCandidate = ref(false)
+
+/** 仅在实际拉网搜索时显示遮罩（confirm/alert 前会清掉） */
+const fetchMatchKind = ref<'lyrics' | 'cover' | null>(null)
+/** 取消/新开流程递增；finally 清占位必须绑此令牌，避免同曲重试被旧请求清锁 */
+let fetchMatchToken = 0
+
+const isMatchFlowBusy = () =>
+  matchingLyricsId.value != null ||
+  matchingCoverId.value != null ||
+  showLyricsPick.value ||
+  showCoverPick.value ||
+  applyingLyricsCandidate.value ||
+  applyingCoverCandidate.value
+
+const syncManualMatchUiBusy = () => {
+  lyricsMatchStore.setManualMatchUiBusy(isMatchFlowBusy())
+}
+
+/** 右键点匹配后、候选弹窗出现前：正在拉搜索结果 */
+const isFetchingMatchCandidates = computed(() => fetchMatchKind.value != null)
+const fetchMatchHint = computed(() =>
+  fetchMatchKind.value === 'lyrics'
+    ? t('music.fetchingLyricsCandidates')
+    : t('music.fetchingCoverCandidates')
+)
+const fetchMatchSongTitle = computed(
+  () => lyricsPickTarget.value?.title || coverPickTarget.value?.title || ''
+)
+
+const cancelFetchMatchCandidates = () => {
+  fetchMatchToken++
+  fetchMatchKind.value = null
+  matchingLyricsId.value = null
+  matchingCoverId.value = null
+  lyricsPickTarget.value = null
+  coverPickTarget.value = null
+  coverPickNeedsForce.value = false
+  syncManualMatchUiBusy()
+}
 
 const hasLyrics = (music: MusicItem) => !!(music.lyricsPath && music.lyricsPath.trim())
 
+const closeLyricsPick = () => {
+  showLyricsPick.value = false
+  lyricsCandidates.value = []
+  lyricsPickTarget.value = null
+  syncManualMatchUiBusy()
+}
+
+const closeCoverPick = () => {
+  showCoverPick.value = false
+  coverCandidates.value = []
+  coverPickTarget.value = null
+  coverPickNeedsForce.value = false
+  syncManualMatchUiBusy()
+}
 // 批量选择状态
 const selectionMode = ref(false)
 const selectedSongs = ref<Set<string>>(new Set())
@@ -642,41 +751,119 @@ const applyMatchResult = (music: MusicItem, result: { status: string; lyricsPath
     alert(t('music.matchLyricsSuccess', { title: music.title }))
   } else if (result.status === 'skipped_instrumental') {
     alert(t('music.matchLyricsInstrumental', { title: music.title }))
-  } else if (result.status === 'skipped_low_similarity') {
-    alert(t('music.matchLyricsLowSimilarity', { title: music.title }))
-  } else if (result.status === 'skipped_has_lyrics') {
-    alert(t('music.matchLyricsAlreadyHas', { title: music.title }))
   } else {
     alert(t('music.matchLyricsFailed', { title: music.title, reason: result.message || '' }))
   }
 }
 
-const handleMatchLyrics = async (music: MusicItem) => {
+/** 右键：打开歌词候选列表（可预览挑选，不因相似度过低直接关闭） */
+const openLyricsPickForMusic = async (
+  music: MusicItem,
+  options?: { alreadyConfirmedReplace?: boolean; alreadyClaimed?: boolean }
+) => {
   closeContextMenu()
-  if (matchingLyricsId.value != null || matchingCoverId.value != null) return
+  if (!options?.alreadyClaimed && isMatchFlowBusy()) return
+
+  const token = ++fetchMatchToken
   matchingLyricsId.value = music.id
+  lyricsPickTarget.value = music
+  fetchMatchKind.value = 'lyrics'
+  syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.matchLyrics(music.id, { force: false })
-    applyMatchResult(music, result)
+    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(music.id)
+    if (token !== fetchMatchToken) return
+
+    // 结束拉取遮罩后再弹 confirm/alert，避免遮罩盖住原生对话框
+    fetchMatchKind.value = null
+
+    // 无在线候选：仅 linkLocal（绝不调 matchOne）；重新匹配跳过本地关联
+    if (!candidates.length) {
+      if (!options?.alreadyConfirmedReplace) {
+        try {
+          const localResult = await window.electronAPI.linkLocalLyrics(music.id)
+          if (token !== fetchMatchToken) return
+          if (localResult.status === 'linked_local') {
+            applyMatchResult(music, localResult)
+            closeLyricsPick()
+            return
+          }
+        } catch {
+          // 本地关联失败则继续提示无候选
+        }
+      }
+      if (token !== fetchMatchToken) return
+      alert(t('nowPlaying.noLyricsCandidates'))
+      closeLyricsPick()
+      return
+    }
+
+    // 与全屏对齐：已有歌词（含同目录 sidecar）时先确认再弹窗，避免静默覆盖
+    if (hasExistingLyrics && !options?.alreadyConfirmedReplace) {
+      const ok = confirm(t('nowPlaying.replaceLyricsConfirm', { title: music.title }))
+      if (!ok || token !== fetchMatchToken) {
+        closeLyricsPick()
+        return
+      }
+    }
+
+    if (token !== fetchMatchToken) return
+    lyricsCandidates.value = candidates
+    showLyricsPick.value = true
   } catch (error: any) {
+    if (token !== fetchMatchToken) return
+    fetchMatchKind.value = null
     alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
+    closeLyricsPick()
   } finally {
-    matchingLyricsId.value = null
+    // 必须绑 token：同曲取消后再开时，旧 finally 不得清掉新 claim
+    if (token === fetchMatchToken) {
+      fetchMatchKind.value = null
+      matchingLyricsId.value = null
+      syncManualMatchUiBusy()
+    }
   }
+}
+
+const handleMatchLyrics = async (music: MusicItem) => {
+  await openLyricsPickForMusic(music)
 }
 
 const handleRematchLyrics = async (music: MusicItem) => {
   closeContextMenu()
-  if (matchingLyricsId.value != null || matchingCoverId.value != null) return
-  if (!confirm(t('music.rematchLyricsConfirm', { title: music.title }))) return
+  if (isMatchFlowBusy()) return
+  // 确认前先占位互斥，避免同时对多首歌点重新匹配
   matchingLyricsId.value = music.id
+  lyricsPickTarget.value = music
+  syncManualMatchUiBusy()
+  if (!confirm(t('music.rematchLyricsConfirm', { title: music.title }))) {
+    matchingLyricsId.value = null
+    lyricsPickTarget.value = null
+    syncManualMatchUiBusy()
+    return
+  }
+  await openLyricsPickForMusic(music, { alreadyConfirmedReplace: true, alreadyClaimed: true })
+}
+
+const onSelectLyricsCandidate = async (songId: number) => {
+  const music = lyricsPickTarget.value
+  if (!music) return
+  applyingLyricsCandidate.value = true
+  syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.matchLyrics(music.id, { force: true })
-    applyMatchResult(music, result)
+    const result = await window.electronAPI.applyLyricsCandidate(music.id, songId)
+    if (result.status === 'matched') {
+      closeLyricsPick()
+      applyMatchResult(music, result)
+    } else if (result.status === 'skipped_instrumental') {
+      alert(t('music.matchLyricsInstrumental', { title: music.title }))
+    } else {
+      alert(t('music.matchLyricsFailed', { title: music.title, reason: result.message || '' }))
+    }
   } catch (error: any) {
     alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
   } finally {
-    matchingLyricsId.value = null
+    applyingLyricsCandidate.value = false
+    syncManualMatchUiBusy()
   }
 }
 
@@ -699,41 +886,114 @@ const applyCoverMatchResult = (
     }
   } else if (result.status === 'skipped_has_cover') {
     alert(t('music.matchCoverAlreadyHas', { title: music.title }))
-  } else if (result.status === 'skipped_low_similarity') {
-    alert(t('music.matchCoverLowSimilarity', { title: music.title }))
   } else {
     alert(t('music.matchCoverFailed', { title: music.title, reason: result.message || '' }))
   }
 }
 
-const handleMatchCover = async (music: MusicItem) => {
+/** 右键：打开封面候选列表（可预览 / 选本地图，不因相似度过低直接关闭） */
+const openCoverPickForMusic = async (
+  music: MusicItem,
+  force: boolean,
+  options?: { alreadyClaimed?: boolean }
+) => {
   closeContextMenu()
-  // 与主进程歌词/封面 IPC 互斥锁对齐，防止 UI 重复发起
-  if (matchingCoverId.value != null || matchingLyricsId.value != null) return
+  if (!options?.alreadyClaimed && isMatchFlowBusy()) return
+
+  const token = ++fetchMatchToken
   matchingCoverId.value = music.id
+  coverPickTarget.value = music
+  coverPickNeedsForce.value = force
+  fetchMatchKind.value = 'cover'
+  syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.matchCover(music.id, { force: false })
-    applyCoverMatchResult(music, result)
+    const { candidates } = await window.electronAPI.listCoverCandidates(music.id)
+    if (token !== fetchMatchToken) return
+
+    fetchMatchKind.value = null
+    coverCandidates.value = candidates
+    showCoverPick.value = true
   } catch (error: any) {
+    if (token !== fetchMatchToken) return
+    fetchMatchKind.value = null
     alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
+    closeCoverPick()
   } finally {
-    matchingCoverId.value = null
+    if (token === fetchMatchToken) {
+      fetchMatchKind.value = null
+      matchingCoverId.value = null
+      syncManualMatchUiBusy()
+    }
   }
+}
+
+const handleMatchCover = async (music: MusicItem) => {
+  await openCoverPickForMusic(music, false)
 }
 
 const handleRematchCover = async (music: MusicItem) => {
   closeContextMenu()
-  // 与主进程歌词/封面 IPC 互斥锁对齐，防止 UI 重复发起
-  if (matchingCoverId.value != null || matchingLyricsId.value != null) return
-  if (!confirm(t('music.rematchCoverConfirm', { title: music.title }))) return
+  if (isMatchFlowBusy()) return
   matchingCoverId.value = music.id
+  coverPickTarget.value = music
+  syncManualMatchUiBusy()
+  if (!confirm(t('music.rematchCoverConfirm', { title: music.title }))) {
+    matchingCoverId.value = null
+    coverPickTarget.value = null
+    syncManualMatchUiBusy()
+    return
+  }
+  await openCoverPickForMusic(music, true, { alreadyClaimed: true })
+}
+
+const onSelectCoverCandidate = async (payload: { songId: number; coverUrl: string }) => {
+  const music = coverPickTarget.value
+  if (!music) return
+  applyingCoverCandidate.value = true
+  syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.matchCover(music.id, { force: true })
-    applyCoverMatchResult(music, result)
+    const result = await window.electronAPI.applyCoverCandidate(music.id, payload.songId, {
+      coverUrl: payload.coverUrl,
+      force: coverPickNeedsForce.value
+    })
+    if (result.status === 'matched') {
+      closeCoverPick()
+      applyCoverMatchResult(music, result)
+    } else if (result.status === 'skipped_has_cover') {
+      alert(t('music.matchCoverAlreadyHas', { title: music.title }))
+    } else {
+      alert(t('music.matchCoverFailed', { title: music.title, reason: result.message || '' }))
+    }
   } catch (error: any) {
     alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
   } finally {
-    matchingCoverId.value = null
+    applyingCoverCandidate.value = false
+    syncManualMatchUiBusy()
+  }
+}
+
+const onSelectLocalCover = async (localPath: string) => {
+  const music = coverPickTarget.value
+  if (!music) return
+  applyingCoverCandidate.value = true
+  syncManualMatchUiBusy()
+  try {
+    const result = await window.electronAPI.applyLocalCover(music.id, localPath, {
+      force: coverPickNeedsForce.value
+    })
+    if (result.status === 'matched') {
+      closeCoverPick()
+      applyCoverMatchResult(music, result)
+    } else if (result.status === 'skipped_has_cover') {
+      alert(t('music.matchCoverAlreadyHas', { title: music.title }))
+    } else {
+      alert(t('music.matchCoverFailed', { title: music.title, reason: result.message || '' }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    applyingCoverCandidate.value = false
+    syncManualMatchUiBusy()
   }
 }
 
@@ -1321,5 +1581,76 @@ defineExpose({ scrollToIndex })
 
 .action-btn.active:hover {
   color: var(--color-primary-light);
+}
+
+/* 右键匹配拉取候选：Teleport 到 body，盖住工具栏 */
+.match-fetch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.match-fetch-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-radius: 12px;
+  background: var(--bg-primary, #1e1e1e);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  max-width: min(480px, 92%);
+}
+
+.match-fetch-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.match-fetch-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.match-fetch-sub {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-fetch-cancel {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  background: transparent;
+  color: var(--text-primary, #fff);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.match-fetch-cancel:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.spin {
+  flex-shrink: 0;
+  animation: match-spin 0.9s linear infinite;
+  color: var(--color-primary, #1db954);
+}
+
+@keyframes match-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

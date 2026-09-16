@@ -1319,16 +1319,27 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     })
   })
 
-  /** 搜索在线歌词候选（供全屏播放手动选择） */
+  /** 仅关联同目录 .lrc（无在线搜索） */
+  ipcMain.handle('link-local-lyrics', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    return withLyricsMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return lyricsMatchService.linkLocalLyrics(db, music)
+    })
+  })
+
+  /** 搜索在线歌词候选（供手动选择；持锁避免与批量/单曲 apply 并发抢服务） */
   ipcMain.handle('search-lyrics-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
-    assertLyricsMatchIdle()
-    const music = db.getMusicById(musicId)
-    if (!music) throw new Error('音乐不存在')
-    return {
-      hasExistingLyrics: lyricsMatchService.hasExistingLyrics(music),
-      candidates: await lyricsMatchService.searchCandidates(music)
-    }
+    return withLyricsMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return {
+        hasExistingLyrics: lyricsMatchService.hasExistingLyrics(music),
+        candidates: await lyricsMatchService.searchCandidates(music)
+      }
+    })
   })
 
   /** 预览候选歌词文本（供选择对话框展示，不写文件/不写库） */
@@ -1447,7 +1458,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return true
   })
 
-  /** 单曲自动匹配封面（≥75） */
+  /** 单曲自动匹配封面（≥50；列表右键已改走候选弹窗） */
   ipcMain.handle('match-cover', async (_, musicId: number, options?: { force?: boolean }) => {
     if (!db) throw new Error('数据库未初始化')
     return withCoverMatchLock(async () => {
@@ -1476,16 +1487,17 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return coverMatchService.hasValidCover(music)
   })
 
-  /** 列出封面候选（不设相似度下限，供全屏手动预览选择） */
+  /** 列出封面候选（不设相似度下限；持锁避免与批量/单曲 apply 并发抢服务） */
   ipcMain.handle('list-cover-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
-    assertCoverMatchIdle()
-    const music = db.getMusicById(musicId)
-    if (!music) throw new Error('音乐不存在')
-    return {
-      hasValidCover: coverMatchService.hasValidCover(music),
-      candidates: await coverMatchService.searchCandidates(music)
-    }
+    return withCoverMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return {
+        hasValidCover: coverMatchService.hasValidCover(music),
+        candidates: await coverMatchService.searchCandidates(music)
+      }
+    })
   })
 
   /** 应用用户选中的封面候选 */

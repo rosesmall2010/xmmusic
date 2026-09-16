@@ -8,9 +8,9 @@
 ## [1.2.3] - 2026-08-28
 
 ### 新增
-- **封面匹配服务（S1.1）**：主进程在线匹配专辑封面（网易云搜索同源 API；解析 `album.picUrl` / `al.picUrl`，缺失时经 `/song/detail` 补图）；自动匹配相似度 ≥75；手动候选列表不设相似度下限（有封面 URL 即展示）；下载原图不缩放但拒绝超时/非图片/超过 15MB；缓存写入 `userData/covers/{hash}_cover_{timestamp}.*`；有效封面判定为路径非空且文件存在；MP3 先写 ID3 APIC 成功再更新数据库，失败不改库；非 MP3 仅更新库并标记 `fileNotUpdated`；IPC：`match-cover` / `list-cover-candidates` / `apply-cover-candidate`，成功后推送 `cover-matched` 与列表刷新。批量 `matchBatch` 已预留供后续 Story。
-- **单曲匹配封面 UI（S1.2）**：列表右键「匹配/重新匹配封面」走自动匹配（≥75，有封面需确认）；全屏播放控制栏与歌词区右键提供「在线匹配封面」，弹出 `CoverMatchSelectModal` 候选（不设相似度下限，缩略图预览；无论几条都由用户点选或取消），选中后 `apply-cover-candidate`；成功刷新列表与播放栏封面，非 MP3 提示仅更新应用内封面。
-- **批量匹配封面（S1.3）**：本地音乐工具栏「批量匹配封面」；仅处理无有效封面歌曲；进度条可取消、离开页面再回仍可见（`coverMatch` store）；汇总区分写入文件 / 仅更新库；与批量歌词互斥。
+- **封面匹配服务（S1.1）**：主进程在线匹配专辑封面（网易云搜索同源 API；解析 `album.picUrl` / `al.picUrl`，缺失时经 `/song/detail` 补图）；自动/批量匹配相似度 ≥50；手动候选列表不设相似度下限（有封面 URL 即展示）；下载原图不缩放但拒绝超时/非图片/超过 15MB；缓存写入 `userData/covers/{hash}_cover_{timestamp}.*`；有效封面判定为路径非空且文件存在；MP3 先写 ID3 APIC 成功再更新数据库，失败不改库；非 MP3 仅更新库并标记 `fileNotUpdated`；IPC：`match-cover` / `list-cover-candidates` / `apply-cover-candidate`，成功后推送 `cover-matched` 与列表刷新。批量 `matchBatch` 已预留供后续 Story。
+- **单曲匹配封面 UI（S1.2）**：列表右键「匹配/重新匹配封面」与全屏播放均弹出 `CoverMatchSelectModal` 候选（不设相似度下限，缩略图预览；可另选本地图片；由用户点选或取消），选中后 `apply-cover-candidate` / `apply-local-cover`；成功刷新列表与播放栏封面，非 MP3 提示仅更新应用内封面。
+- **批量匹配封面（S1.3）**：本地音乐工具栏「批量匹配封面」；仅处理无有效封面歌曲；自动相似度 ≥50；进度条可取消、离开页面再回仍可见（`coverMatch` store）；汇总区分写入文件 / 仅更新库；与批量歌词互斥。
 - **拼音/声母搜索（S2.1）**：`all_music` 预计算 `search_pinyin` / `search_initials` 列（方案 A）+ 存量回填；`searchMusic` FTS 分流（纯字母走拼音旁路，汉字走 `music_fts`），结果合并去重；修复 FTS 表名 `music_fts`；含特殊字符 query 转义防抛错。
 - **顶栏搜索接入（S2.2）**：顶栏 placeholder 提示支持拼音/声母；`SearchView` / 搜索建议自动受益。
 - **应用内快捷键（S3.1）**：主窗 + 迷你 `keydown` 监听（不注册 globalShortcut）；默认 Space 播停、Ctrl/Cmd+方向键切歌、Shift+方向键音量、Shift+F 收藏；输入框聚焦时 Space/字母不触发。
@@ -32,6 +32,10 @@
 - 批量封面匹配：结束后逐条推送 `cover-matched`，App 订阅并同步播放栏/队列当前曲封面
 - 全屏手动匹配封面：取消候选 ≥35 相似度门槛，搜索结果中有封面 URL 的全部列出；无论几条都弹窗预览，由用户选择或取消（不再对唯一候选自动写入）
 - 全屏封面选择弹窗支持「选择本地图片」：复制到 covers 缓存后按 MP3/非 MP3 规则写入；无在线结果时仍可打开弹窗仅选本地图；BMP 等魔数未识别格式经 nativeImage 转 JPEG 后写入，与选图对话框可选格式对齐
+- 列表右键「匹配/重新匹配歌词、封面」改为弹出候选列表（歌词可预览、封面可预览/选本地图），不再因相似度过低直接跳过；歌词手动候选亦取消 ≥35 门槛；全屏匹配歌词无论几条都弹窗挑选
+- 右键匹配歌词：打开弹窗前若已有歌词（含同目录 sidecar）先确认替换；无在线候选时尝试关联本地 `.lrc`
+- 批量/自动匹配封面与歌词相似度门槛由 ≥75 调整为 ≥50
+- 右键/全屏匹配歌词与封面：拉取候选期间显示可取消的加载遮罩与曲名；`confirm`/`alert` 前收起遮罩；重新匹配确认前互斥占位；候选搜索 IPC 持锁；无在线歌词候选仅 `link-local-lyrics` 关联同目录 `.lrc`（不调 `matchOne`）；手动匹配期间禁用批量按钮；`finally` 清占位绑定 token；批量取消后仍计入已成功写入的任务；进度条仅在总数 ≥3 时显示「并发 3 路」
 
 ## [1.2.2] - 2026-08-24
 

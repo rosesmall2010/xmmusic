@@ -321,6 +321,27 @@
       @select-local="onSelectLocalCover"
     />
 
+    <!-- 全屏匹配：搜索候选期间的明确加载提示 -->
+    <div
+      v-if="fetchMatchKind"
+      class="match-fetch-overlay"
+      @click.stop
+      @contextmenu.prevent
+    >
+      <div class="match-fetch-card">
+        <Loader2 :size="22" class="spin" />
+        <div class="match-fetch-text">
+          <div class="match-fetch-title">
+            {{ fetchMatchKind === 'lyrics' ? $t('music.fetchingLyricsCandidates') : $t('music.fetchingCoverCandidates') }}
+          </div>
+          <div v-if="currentMusic?.title" class="match-fetch-sub">{{ currentMusic.title }}</div>
+        </div>
+        <button type="button" class="match-fetch-cancel" @click="cancelFetchMatchCandidates">
+          {{ $t('common.cancel') }}
+        </button>
+      </div>
+    </div>
+
     <!-- 队列右键菜单（不含批量操作） -->
     <div
       v-if="queueContextMenu.visible && queueContextMenu.music"
@@ -443,6 +464,7 @@ import { useI18n } from 'vue-i18n'
 import { useElementSize } from '@vueuse/core'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore, isDiscEffect } from '@/stores/settings'
+import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AudioEqualizerBackground from '@/components/effects/AudioEqualizerBackground.vue'
@@ -455,7 +477,7 @@ import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon, Loader2 } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -470,6 +492,7 @@ const router = useRouter()
 const { t } = useI18n()
 const playerStore = usePlayerStore()
 const settingsStore = useSettingsStore()
+const lyricsMatchStore = useLyricsMatchStore()
 const { play, pause, resume, seek, setVolume, getAudioElement } = usePlayer()
 const equalizer = useEqualizer()
 
@@ -627,6 +650,34 @@ const coverMatchTargetId = ref<number | null>(null)
 const coverMatchTargetTitle = ref('')
 /** 本次全屏匹配是否需 force（已有有效封面且用户已确认替换） */
 const coverMatchNeedsForce = ref(false)
+/** 仅拉网阶段显示遮罩；confirm/alert 前清掉 */
+const fetchMatchKind = ref<'lyrics' | 'cover' | null>(null)
+let fetchMatchToken = 0
+
+const isNpMatchFlowBusy = () =>
+  matchingLyrics.value ||
+  matchingCover.value ||
+  showLyricsPick.value ||
+  showCoverPick.value ||
+  applyingLyricsCandidate.value ||
+  applyingCoverCandidate.value
+
+const syncManualMatchUiBusy = () => {
+  lyricsMatchStore.setManualMatchUiBusy(isNpMatchFlowBusy())
+}
+
+const cancelFetchMatchCandidates = () => {
+  fetchMatchToken++
+  fetchMatchKind.value = null
+  matchingLyrics.value = false
+  matchingCover.value = false
+  lyricsMatchTargetId.value = null
+  lyricsMatchTargetTitle.value = ''
+  coverMatchTargetId.value = null
+  coverMatchTargetTitle.value = ''
+  coverMatchNeedsForce.value = false
+  syncManualMatchUiBusy()
+}
 const volumeValue = computed<number>({
   get: () => playerStore.volume,
   set: (v) => {
@@ -1213,6 +1264,7 @@ const closeLyricsPick = () => {
   lyricsCandidates.value = []
   lyricsMatchTargetId.value = null
   lyricsMatchTargetTitle.value = ''
+  syncManualMatchUiBusy()
 }
 
 const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTitle: string) => {
@@ -1222,6 +1274,7 @@ const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTi
     return
   }
   applyingLyricsCandidate.value = true
+  syncManualMatchUiBusy()
   try {
     const result = await window.electronAPI.applyLyricsCandidate(targetMusicId, songId)
     if (currentMusic.value?.id !== targetMusicId) {
@@ -1246,6 +1299,7 @@ const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTi
     }))
   } finally {
     applyingLyricsCandidate.value = false
+    syncManualMatchUiBusy()
   }
 }
 
@@ -1259,24 +1313,36 @@ const onSelectLyricsCandidate = async (songId: number) => {
 /**
  * 全屏播放控制栏：在线匹配歌词
  * - 已有歌词先确认是否替换
- * - 多条候选弹出选择对话框；仅一条则直接应用
+ * - 不设相似度下限；无论几条都弹窗预览，由用户点选或取消
  */
 const handleOnlineMatchLyrics = async () => {
   if (
     !currentMusic.value ||
     matchingLyrics.value ||
+    matchingCover.value ||
     showLyricsPick.value ||
-    applyingLyricsCandidate.value
+    showCoverPick.value ||
+    applyingLyricsCandidate.value ||
+    applyingCoverCandidate.value
   ) return
+
+  closeQueueContextMenu()
+  closeLyricsContextMenu()
 
   const targetId = currentMusic.value.id
   const targetTitle = currentMusic.value.title
+  const token = ++fetchMatchToken
   lyricsMatchTargetId.value = targetId
   lyricsMatchTargetTitle.value = targetTitle
   matchingLyrics.value = true
+  fetchMatchKind.value = 'lyrics'
+  syncManualMatchUiBusy()
 
   try {
     const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(targetId)
+    if (token !== fetchMatchToken) return
+
+    fetchMatchKind.value = null
 
     // 搜索返回后若已切歌，放弃本次结果
     if (currentMusic.value?.id !== targetId) {
@@ -1285,33 +1351,48 @@ const handleOnlineMatchLyrics = async () => {
     }
 
     if (!candidates.length) {
+      try {
+        const localResult = await window.electronAPI.linkLocalLyrics(targetId)
+        if (token !== fetchMatchToken) return
+        if (localResult.status === 'linked_local') {
+          await afterLyricsMatched(targetId, localResult.lyricsPath)
+          closeLyricsPick()
+          return
+        }
+      } catch {
+        // 本地关联失败则继续提示无候选
+      }
+      if (token !== fetchMatchToken) return
       alert(t('nowPlaying.noLyricsCandidates'))
+      closeLyricsPick()
       return
     }
 
     if (hasExistingLyrics) {
       const ok = confirm(t('nowPlaying.replaceLyricsConfirm', { title: targetTitle }))
-      if (!ok || currentMusic.value?.id !== targetId) {
+      if (!ok || token !== fetchMatchToken || currentMusic.value?.id !== targetId) {
         closeLyricsPick()
         return
       }
     }
 
-    if (candidates.length === 1) {
-      await applyLyricsSongId(candidates[0].songId, targetId, targetTitle)
-      return
-    }
-
+    if (token !== fetchMatchToken) return
     lyricsCandidates.value = candidates
     showLyricsPick.value = true
   } catch (error: any) {
+    if (token !== fetchMatchToken) return
+    fetchMatchKind.value = null
     alert(t('music.matchLyricsFailed', {
       title: targetTitle,
       reason: error?.message || error
     }))
     closeLyricsPick()
   } finally {
-    matchingLyrics.value = false
+    if (token === fetchMatchToken) {
+      fetchMatchKind.value = null
+      matchingLyrics.value = false
+      syncManualMatchUiBusy()
+    }
   }
 }
 
@@ -1321,6 +1402,7 @@ const closeCoverPick = () => {
   coverMatchTargetId.value = null
   coverMatchTargetTitle.value = ''
   coverMatchNeedsForce.value = false
+  syncManualMatchUiBusy()
 }
 
 const afterCoverMatched = (targetMusicId: number, coverPath?: string) => {
@@ -1350,6 +1432,7 @@ const applyCoverSongId = async (
     return
   }
   applyingCoverCandidate.value = true
+  syncManualMatchUiBusy()
   try {
     const result = await window.electronAPI.applyCoverCandidate(targetMusicId, songId, {
       coverUrl,
@@ -1403,6 +1486,7 @@ const onSelectLocalCover = async (localPath: string) => {
     return
   }
   applyingCoverCandidate.value = true
+  syncManualMatchUiBusy()
   try {
     const result = await window.electronAPI.applyLocalCover(targetMusicId, localPath, {
       force: coverMatchNeedsForce.value
@@ -1435,6 +1519,7 @@ const onSelectLocalCover = async (localPath: string) => {
     }))
   } finally {
     applyingCoverCandidate.value = false
+    syncManualMatchUiBusy()
   }
 }
 
@@ -1455,15 +1540,24 @@ const handleOnlineMatchCover = async () => {
     applyingLyricsCandidate.value
   ) return
 
+  closeQueueContextMenu()
+  closeLyricsContextMenu()
+
   const targetId = currentMusic.value.id
   const targetTitle = currentMusic.value.title
+  const token = ++fetchMatchToken
   coverMatchTargetId.value = targetId
   coverMatchTargetTitle.value = targetTitle
   coverMatchNeedsForce.value = false
   matchingCover.value = true
+  fetchMatchKind.value = 'cover'
+  syncManualMatchUiBusy()
 
   try {
     const { hasValidCover, candidates } = await window.electronAPI.listCoverCandidates(targetId)
+    if (token !== fetchMatchToken) return
+
+    fetchMatchKind.value = null
 
     if (currentMusic.value?.id !== targetId) {
       closeCoverPick()
@@ -1472,23 +1566,30 @@ const handleOnlineMatchCover = async () => {
 
     if (hasValidCover) {
       const ok = confirm(t('nowPlaying.replaceCoverConfirm', { title: targetTitle }))
-      if (!ok || currentMusic.value?.id !== targetId) {
+      if (!ok || token !== fetchMatchToken || currentMusic.value?.id !== targetId) {
         closeCoverPick()
         return
       }
       coverMatchNeedsForce.value = true
     }
 
+    if (token !== fetchMatchToken) return
     coverCandidates.value = candidates
     showCoverPick.value = true
   } catch (error: any) {
+    if (token !== fetchMatchToken) return
+    fetchMatchKind.value = null
     alert(t('music.matchCoverFailed', {
       title: targetTitle,
       reason: error?.message || error
     }))
     closeCoverPick()
   } finally {
-    matchingCover.value = false
+    if (token === fetchMatchToken) {
+      fetchMatchKind.value = null
+      matchingCover.value = false
+      syncManualMatchUiBusy()
+    }
   }
 }
 
@@ -2744,6 +2845,76 @@ watch(
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+.match-fetch-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+.match-fetch-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-radius: 12px;
+  background: var(--bg-primary, #1e1e1e);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  max-width: min(480px, 92%);
+  color: #fff;
+}
+
+.match-fetch-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.match-fetch-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.match-fetch-sub {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-fetch-cancel {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.match-fetch-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.spin {
+  flex-shrink: 0;
+  animation: match-spin 0.9s linear infinite;
+  color: var(--color-primary, #1db954);
+}
+
+@keyframes match-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

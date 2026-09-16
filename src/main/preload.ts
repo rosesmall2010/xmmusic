@@ -271,6 +271,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-music-lyrics-offset', musicId, offsetMs),
   matchLyrics: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-lyrics', musicId, options),
+  linkLocalLyrics: (musicId: number) => ipcRenderer.invoke('link-local-lyrics', musicId),
   searchLyricsCandidates: (musicId: number) =>
     ipcRenderer.invoke('search-lyrics-candidates', musicId),
   previewLyricsCandidate: (songId: number) =>
@@ -489,6 +490,7 @@ declare global {
       parseLyricsFile: (filePath: string) => Promise<LyricsData>
       updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
       matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<LyricsMatchResult>
+      linkLocalLyrics: (musicId: number) => Promise<LyricsMatchResult>
       searchLyricsCandidates: (musicId: number) => Promise<{
         hasExistingLyrics: boolean
         candidates: LyricsMatchCandidate[]

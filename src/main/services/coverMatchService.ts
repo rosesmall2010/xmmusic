@@ -30,7 +30,7 @@ const SEARCH_PATH_PICK = '/search?limit=8&type=1&keywords='
 /** 歌曲详情（补封面） */
 const SONG_DETAIL_PATH = '/song/detail?ids='
 
-const SIMILARITY_THRESHOLD = 75
+const SIMILARITY_THRESHOLD = 50
 const REQUEST_TIMEOUT_MS = 12000
 const DOWNLOAD_TIMEOUT_MS = 20000
 /** 单张封面下载上限 15MB（不缩放，但拒绝超大文件） */
@@ -732,7 +732,10 @@ export default class CoverMatchService {
     })
   }
 
-  /** 批量匹配（供 S1.3）；预留取消与进度 */
+  /**
+   * 批量匹配（供 S1.3）
+   * 与歌词批量一致：最多 BATCH_CONCURRENCY(=3) 路并发，每 worker 领下一首前间隔 REQUEST_GAP_MS
+   */
   async matchBatch(
     db: MusicDatabase,
     songs: MusicItem[],
@@ -788,7 +791,17 @@ export default class CoverMatchService {
         force,
         shouldAbort: () => this.cancelled
       })
-      if (this.cancelled) return
+      // 取消后：进行中任务若已成功写入仍计入，避免摘要低于磁盘实际
+      if (this.cancelled) {
+        if (result.status === 'matched') {
+          results[index] = result
+          bump(result)
+          completed++
+          lastDoneTitle = music.title || music.fileName
+          emitProgress(result.status)
+        }
+        return
+      }
       results[index] = result
       bump(result)
       completed++
