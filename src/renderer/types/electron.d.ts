@@ -1,4 +1,5 @@
 import type { MusicItem } from '@shared/types/music'
+import type { CoverMatchResult, CoverMatchCandidate } from '@shared/types/coverMatch'
 
 export interface DesktopLyricsState {
   music: { id: number; title: string; artist: string } | null
@@ -165,6 +166,20 @@ export interface ElectronAPI {
   parseLyricsFile: (filePath: string) => Promise<any>
   updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
   updateMusicLyricsOffset: (musicId: number, offsetMs: number) => Promise<void>
+
+  // 封面匹配（S1.1）
+  matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
+  listCoverCandidates: (musicId: number) => Promise<{
+    hasValidCover: boolean
+    candidates: CoverMatchCandidate[]
+  }>
+  applyCoverCandidate: (
+    musicId: number,
+    songId: number,
+    options?: { coverUrl?: string; force?: boolean }
+  ) => Promise<CoverMatchResult>
+  onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => void
+  removeCoverMatched: () => void
 
   // 系统托盘
   updateTrayPlayState: (isPlaying: boolean) => void

@@ -9,6 +9,10 @@ import type {
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary, LyricsMatchCandidate } from '@shared/types/lyrics'
+import type {
+  CoverMatchResult,
+  CoverMatchCandidate
+} from '@shared/types/coverMatch'
 import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types/statistics'
 
 // 暴露安全的 API 给渲染进程
@@ -287,6 +291,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeLyricsMatchFinished: () => {
     ipcRenderer.removeAllListeners('lyrics-match-finished')
   },
+  // 封面匹配（S1.1）
+  matchCover: (musicId: number, options?: { force?: boolean }) =>
+    ipcRenderer.invoke('match-cover', musicId, options),
+  listCoverCandidates: (musicId: number) =>
+    ipcRenderer.invoke('list-cover-candidates', musicId),
+  applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) =>
+    ipcRenderer.invoke('apply-cover-candidate', musicId, songId, options),
+  onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => {
+    ipcRenderer.on('cover-matched', (_, payload) => callback(payload))
+  },
+  removeCoverMatched: () => {
+    ipcRenderer.removeAllListeners('cover-matched')
+  },
   // 系统托盘功能
   updateTrayPlayState: (isPlaying: boolean) => ipcRenderer.send('update-tray-play-state', isPlaying),
   updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => ipcRenderer.send('update-tray-current-music', music),
@@ -465,6 +482,14 @@ declare global {
       removeLyricsMatchProgress: () => void
       onLyricsMatchFinished: (callback: (summary: LyricsMatchSummary) => void) => void
       removeLyricsMatchFinished: () => void
+      matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
+      listCoverCandidates: (musicId: number) => Promise<{
+        hasValidCover: boolean
+        candidates: CoverMatchCandidate[]
+      }>
+      applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) => Promise<CoverMatchResult>
+      onCoverMatched: (callback: (payload: { musicId: number; coverPath?: string; fileNotUpdated: boolean }) => void) => void
+      removeCoverMatched: () => void
       updateTrayPlayState: (isPlaying: boolean) => void
       updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => void
       onTrayAction: (callback: (action: string) => void) => void

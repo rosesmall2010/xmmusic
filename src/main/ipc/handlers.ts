@@ -9,6 +9,7 @@ import FileMonitor from '../services/fileMonitor'
 import ShortcutManager from '../services/shortcutManager'
 import LyricsService from '../services/lyricsService'
 import LyricsMatchService from '../services/lyricsMatchService'
+import CoverMatchService from '../services/coverMatchService'
 import TrayService from '../services/trayService'
 import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
@@ -19,6 +20,7 @@ import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playli
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchSummary } from '../../shared/types/lyrics'
+import type { CoverMatchResult } from '../../shared/types/coverMatch'
 
 /** 从高级搜索条件生成历史文案；仅排序/limit 等程序化查询返回 null */
 function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | null | undefined): string | null {
@@ -58,11 +60,13 @@ function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | nul
 export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
   const lyricsService = new LyricsService()
   const lyricsMatchService = new LyricsMatchService()
+  const coverMatchService = new CoverMatchService()
   const metadataEditor = new MetadataEditor()
   let lyricsMatchRunning = false
   /** 仅批量任务置位，供离开再回来恢复进度条 */
   let batchLyricsMatchActive = false
   let lyricsMatchLastProgress: LyricsMatchProgress | null = null
+  let coverMatchRunning = false
 
   const assertLyricsMatchIdle = () => {
     if (lyricsMatchRunning) throw new Error('歌词匹配进行中，请稍候')
@@ -75,6 +79,20 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       return await fn()
     } finally {
       lyricsMatchRunning = false
+    }
+  }
+
+  const assertCoverMatchIdle = () => {
+    if (coverMatchRunning) throw new Error('封面匹配进行中，请稍候')
+  }
+
+  const withCoverMatchLock = async <T>(fn: () => Promise<T>): Promise<T> => {
+    assertCoverMatchIdle()
+    coverMatchRunning = true
+    try {
+      return await fn()
+    } finally {
+      coverMatchRunning = false
     }
   }
   // 窗口控制（不依赖数据库）
@@ -1419,6 +1437,69 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     lyricsMatchService.cancel()
     return true
   })
+
+  /** 单曲自动匹配封面（≥75） */
+  ipcMain.handle('match-cover', async (_, musicId: number, options?: { force?: boolean }) => {
+    if (!db) throw new Error('数据库未初始化')
+    return withCoverMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      const result = await coverMatchService.matchOne(db, music, { force: options?.force === true })
+      if (result.status === 'matched' && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('music-list-refresh')
+        mainWindow.webContents.send('cover-matched', {
+          musicId: result.musicId,
+          coverPath: result.coverPath,
+          fileNotUpdated: result.fileNotUpdated === true
+        })
+      }
+      return result
+    })
+  })
+
+  /** 列出封面候选（≥35，供全屏手动选择） */
+  ipcMain.handle('list-cover-candidates', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    assertCoverMatchIdle()
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return {
+      hasValidCover: coverMatchService.hasValidCover(music),
+      candidates: await coverMatchService.searchCandidates(music)
+    }
+  })
+
+  /** 应用用户选中的封面候选 */
+  ipcMain.handle(
+    'apply-cover-candidate',
+    async (
+      _,
+      musicId: number,
+      songId: number,
+      options?: { coverUrl?: string; force?: boolean }
+    ) => {
+      if (!db) throw new Error('数据库未初始化')
+      return withCoverMatchLock(async () => {
+        const music = db.getMusicById(musicId)
+        if (!music) throw new Error('音乐不存在')
+        const result: CoverMatchResult = await coverMatchService.applyCandidate(
+          db,
+          music,
+          songId,
+          options || {}
+        )
+        if (result.status === 'matched' && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('music-list-refresh')
+          mainWindow.webContents.send('cover-matched', {
+            musicId: result.musicId,
+            coverPath: result.coverPath,
+            fileNotUpdated: result.fileNotUpdated === true
+          })
+        }
+        return result
+      })
+    }
+  )
 
   ipcMain.handle('delete-music-file', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
