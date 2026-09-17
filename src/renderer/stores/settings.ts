@@ -170,7 +170,7 @@ export const useSettingsStore = defineStore('settings', () => {
     return nowPlayingEffectEnabled.value
   }
 
-  // Helper to apply theme
+  // 主题类打在挂载点 #app 与 <html> 上，避免双 #app 与 Teleport 丢变量
   function applyTheme(t: Theme) {
     const appElement = document.getElementById('app')
     if (!appElement) {
@@ -179,15 +179,12 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     const isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    const themeClass = isDark ? 'dark' : 'light'
+    const targets = [appElement, document.documentElement]
 
-    // 移除所有主题类
-    appElement.classList.remove('light', 'dark')
-
-    // 添加对应的主题类
-    if (isDark) {
-      appElement.classList.add('dark')
-    } else {
-      appElement.classList.add('light')
+    for (const el of targets) {
+      el.classList.remove('light', 'dark')
+      el.classList.add(themeClass)
     }
   }
 

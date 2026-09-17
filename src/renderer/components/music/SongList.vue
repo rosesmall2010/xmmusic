@@ -273,8 +273,8 @@
       @select-local="onSelectLocalCover"
     />
 
-    <!-- 右键匹配：拉取候选期间全屏遮罩（Teleport 盖住工具栏，避免误点批量） -->
-    <Teleport to="body">
+    <!-- 右键匹配：拉取候选期间遮罩（挂到 #app，才能继承浅色/深色主题变量） -->
+    <Teleport to="#app">
       <div
         v-if="isFetchingMatchCandidates"
         class="match-fetch-overlay"
@@ -436,8 +436,14 @@ const isMatchFlowBusy = () =>
   applyingLyricsCandidate.value ||
   applyingCoverCandidate.value
 
+/** 本组件对 manualMatchUiBusy 的持有代际，卸载/finally 只释放自己的 claim */
+let manualMatchBusyOwner = 0
+
 const syncManualMatchUiBusy = () => {
-  lyricsMatchStore.setManualMatchUiBusy(isMatchFlowBusy())
+  manualMatchBusyOwner = lyricsMatchStore.syncManualMatchUiBusy(
+    manualMatchBusyOwner,
+    isMatchFlowBusy()
+  )
 }
 
 /** 右键点匹配后、候选弹窗出现前：正在拉搜索结果 */
@@ -1194,6 +1200,17 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.removeEventListener('favorites-updated', handleFavoritesUpdated)
+  // 离开列表页时清掉手动匹配 busy，避免本地音乐批量按钮卡住
+  fetchMatchToken++
+  fetchMatchKind.value = null
+  matchingLyricsId.value = null
+  matchingCoverId.value = null
+  showLyricsPick.value = false
+  showCoverPick.value = false
+  applyingLyricsCandidate.value = false
+  applyingCoverCandidate.value = false
+  lyricsMatchStore.releaseManualMatchUiBusy(manualMatchBusyOwner)
+  manualMatchBusyOwner = 0
 })
 
 // 监听播放队列变化：只关心成员集合（filePath 是否在队列里）。
@@ -1583,7 +1600,7 @@ defineExpose({ scrollToIndex })
   color: var(--color-primary-light);
 }
 
-/* 右键匹配拉取候选：Teleport 到 body，盖住工具栏 */
+/* 右键匹配拉取候选：Teleport 到 #app，使用主题变量保证浅色/深色对比度 */
 .match-fetch-overlay {
   position: fixed;
   inset: 0;
@@ -1591,7 +1608,7 @@ defineExpose({ scrollToIndex })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
 }
 
@@ -1601,9 +1618,11 @@ defineExpose({ scrollToIndex })
   gap: 12px;
   padding: 16px 22px;
   border-radius: 12px;
-  background: var(--bg-primary, #1e1e1e);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  /* 成对 fallback：主题类缺失时仍保持浅底深字，避免白底白字/黑底黑字 */
+  background: var(--bg-elevated, #ffffff);
+  color: var(--text-primary, #1f1f1f);
+  border: 1px solid var(--border-color, #e0e0e0);
+  box-shadow: var(--shadow-lg);
   max-width: min(480px, 92%);
 }
 
@@ -1615,13 +1634,13 @@ defineExpose({ scrollToIndex })
 .match-fetch-title {
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-primary, #fff);
+  color: var(--text-primary, #1f1f1f);
 }
 
 .match-fetch-sub {
   margin-top: 4px;
   font-size: 0.82rem;
-  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  color: var(--text-secondary, #666666);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1631,21 +1650,21 @@ defineExpose({ scrollToIndex })
   flex-shrink: 0;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--border-color, #e0e0e0);
   background: transparent;
-  color: var(--text-primary, #fff);
+  color: var(--text-primary, #1f1f1f);
   cursor: pointer;
   font-size: 0.85rem;
 }
 
 .match-fetch-cancel:hover {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  background: var(--hover-bg, #e9ecef);
 }
 
 .spin {
   flex-shrink: 0;
   animation: match-spin 0.9s linear infinite;
-  color: var(--color-primary, #1db954);
+  color: var(--color-primary, #31c27c);
 }
 
 @keyframes match-spin {

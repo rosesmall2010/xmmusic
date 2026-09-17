@@ -1,5 +1,5 @@
 <template>
-  <div id="app" :class="theme">
+  <div class="app-root" :class="theme">
     <template v-if="!isBlankLayout">
       <AppHeader />
       <div class="app-body">

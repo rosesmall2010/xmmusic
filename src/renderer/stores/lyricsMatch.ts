@@ -109,10 +109,36 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
     progress.value = p
   }
 
-  /** 右键/全屏手动匹配进行中（含确认框与候选弹窗），用于禁用批量按钮 */
+  /**
+   * 右键/全屏手动匹配进行中（含确认框与候选弹窗），用于禁用批量按钮。
+   * 用 generation 持有：仅当前持有者可释放，避免 A 页 finally/卸载误清 B 页的 busy。
+   */
   const manualMatchUiBusy = ref(false)
-  function setManualMatchUiBusy(busy: boolean) {
-    manualMatchUiBusy.value = busy
+  let manualMatchBusyOwner = 0
+  let manualMatchBusyGen = 0
+
+  /** 按本地是否 busy 同步；返回本组件应持有的 owner（0=未持有） */
+  function syncManualMatchUiBusy(owner: number, busy: boolean): number {
+    if (busy) {
+      if (owner !== 0 && owner === manualMatchBusyOwner) {
+        manualMatchUiBusy.value = true
+        return owner
+      }
+      manualMatchBusyGen += 1
+      manualMatchBusyOwner = manualMatchBusyGen
+      manualMatchUiBusy.value = true
+      return manualMatchBusyOwner
+    }
+    if (owner !== 0 && owner === manualMatchBusyOwner) {
+      manualMatchBusyOwner = 0
+      manualMatchUiBusy.value = false
+    }
+    return 0
+  }
+
+  /** 仅释放自己的 claim（卸载时用） */
+  function releaseManualMatchUiBusy(owner: number) {
+    syncManualMatchUiBusy(owner, false)
   }
 
   return {
@@ -125,6 +151,7 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
     startBatchMatch,
     cancel,
     setOptimisticProgress,
-    setManualMatchUiBusy
+    syncManualMatchUiBusy,
+    releaseManualMatchUiBusy
   }
 })

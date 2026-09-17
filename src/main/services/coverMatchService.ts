@@ -4,7 +4,7 @@
  */
 import { existsSync, mkdirSync, unlinkSync, accessSync, constants, readFileSync } from 'fs'
 import { writeFile } from 'fs/promises'
-import { join, normalize } from 'path'
+import { join, normalize, basename } from 'path'
 import { randomUUID } from 'crypto'
 import { app, net, nativeImage } from 'electron'
 import type { MusicItem } from '../../shared/types/music'
@@ -17,6 +17,7 @@ import type {
 } from '../../shared/types/coverMatch'
 import type MusicDatabase from '../database/db'
 import MetadataEditor from './metadataEditor'
+import { parseFilenameForTags } from '../../shared/utils/parseFilename'
 
 const SEARCH_APIS = [
   'https://music-api.0m2.cn',
@@ -30,7 +31,10 @@ const SEARCH_PATH_PICK = '/search?limit=8&type=1&keywords='
 /** 歌曲详情（补封面） */
 const SONG_DETAIL_PATH = '/song/detail?ids='
 
-const SIMILARITY_THRESHOLD = 50
+/** 歌名搜索自动写入门槛；批量与自动亦用此值 */
+const TITLE_SIMILARITY_THRESHOLD = 50
+/** 批量/自动：歌名不足时改搜歌手的写入门槛 */
+const ARTIST_AUTO_SIMILARITY_THRESHOLD = 50
 const REQUEST_TIMEOUT_MS = 12000
 const DOWNLOAD_TIMEOUT_MS = 20000
 /** 单张封面下载上限 15MB（不缩放，但拒绝超大文件） */
@@ -206,27 +210,126 @@ export default class CoverMatchService {
     }
   }
 
-  buildKeyword(music: MusicItem): string {
-    const title = (music.title || '').trim()
-    const artist = (music.artist || '').trim()
-    const unknownTitle = !title || title === '未知标题' || title === 'Unknown'
-    const unknownArtist =
-      !artist || artist === '未知艺术家' || artist === 'Unknown Artist' || artist === '未知歌手'
-    if (!unknownTitle && !unknownArtist) return `${artist} ${title}`
-    if (!unknownTitle) return title
-    const base = (music.fileName || music.filePath || '').replace(/\.[^.]+$/, '')
-    return base || title || artist || ''
+  private isUnknownTitle(title: string): boolean {
+    const t = title.trim()
+    return !t || t === '未知标题' || t === 'Unknown'
   }
 
-  buildLocalName(music: MusicItem): string {
+  private isUnknownArtist(artist: string): boolean {
+    const a = artist.trim()
+    return !a || a === '未知艺术家' || a === 'Unknown Artist' || a === '未知歌手'
+  }
+
+  /** 有效歌名关键词；无效则 null */
+  private titleKeyword(music: MusicItem): string | null {
     const title = (music.title || '').trim()
+    if (this.isUnknownTitle(title)) return null
+    return title
+  }
+
+  /** 有效歌手关键词；无效则 null */
+  private artistKeyword(music: MusicItem): string | null {
     const artist = (music.artist || '').trim()
-    const unknownTitle = !title || title === '未知标题' || title === 'Unknown'
-    const unknownArtist =
-      !artist || artist === '未知艺术家' || artist === 'Unknown Artist' || artist === '未知歌手'
-    if (!unknownTitle && !unknownArtist) return `${artist} - ${title}`
-    if (!unknownTitle) return title
-    return (music.fileName || music.filePath || '').replace(/\.[^.]+$/, '')
+    if (this.isUnknownArtist(artist)) return null
+    return artist
+  }
+
+  /** 两关键词是否实质相同（已搜过则跳过） */
+  private sameKeyword(a: string | null | undefined, b: string | null | undefined): boolean {
+    if (!a || !b) return false
+    return a.trim().toLowerCase() === b.trim().toLowerCase()
+  }
+
+  /**
+   * 从文件名推测歌名/歌手（复用 parseFilenameForTags，不带当前标签以免被旧值污染）
+   */
+  private inferredKeywordsFromFile(music: MusicItem): {
+    title: string | null
+    artist: string | null
+  } {
+    const raw = (music.fileName || music.filePath || '').trim()
+    if (!raw) return { title: null, artist: null }
+    const fileName = basename(raw)
+    if (!fileName) return { title: null, artist: null }
+    const parsed = parseFilenameForTags(fileName)
+    const title = parsed.title.trim()
+    const artist = parsed.artist.trim()
+    return {
+      title: title && !this.isUnknownTitle(title) ? title : null,
+      artist: artist && !this.isUnknownArtist(artist) ? artist : null
+    }
+  }
+
+  /**
+   * 相对已用标签词，得到「文件名推测」中仍需再搜的歌名/歌手
+   * （与标签相同则跳过，避免重复请求）
+   */
+  private extraInferredKeywords(
+    music: MusicItem,
+    usedTitle: string | null,
+    usedArtist: string | null
+  ): { title: string | null; artist: string | null } {
+    const inferred = this.inferredKeywordsFromFile(music)
+    return {
+      title:
+        inferred.title && !this.sameKeyword(inferred.title, usedTitle) ? inferred.title : null,
+      artist:
+        inferred.artist && !this.sameKeyword(inferred.artist, usedArtist)
+          ? inferred.artist
+          : null
+    }
+  }
+
+  /** 歌名阶段：本地歌名 vs 远端曲名 */
+  private scoreByTitle(localTitle: string, song: SearchSong): number {
+    return similarPercent(localTitle, song.name || '')
+  }
+
+  /** 歌手阶段：本地歌手 vs 远端艺人 */
+  private scoreByArtist(localArtist: string, song: SearchSong): number {
+    return similarPercent(localArtist, song.artists || '')
+  }
+
+  private pickBestByScore(
+    songs: SearchSong[],
+    scoreFn: (song: SearchSong) => number
+  ): { song: SearchSong; similarity: number } | null {
+    let best: { song: SearchSong; similarity: number } | null = null
+    for (const song of songs) {
+      const similarity = scoreFn(song)
+      if (!best || similarity > best.similarity) best = { song, similarity }
+    }
+    return best
+  }
+
+  /** 为搜索结果补封面 URL 并生成候选（无封面的跳过） */
+  private async songsToCandidates(
+    songs: SearchSong[],
+    scoreFn: (song: SearchSong) => number
+  ): Promise<CoverMatchCandidate[]> {
+    const list: CoverMatchCandidate[] = []
+    for (const song of songs) {
+      const similarity = scoreFn(song)
+      let coverUrl = song.coverUrl
+      if (!coverUrl) {
+        try {
+          coverUrl = await this.fetchCoverUrlBySongId(song.id)
+        } catch {
+          coverUrl = undefined
+        }
+        await sleep(REQUEST_GAP_MS)
+      }
+      if (!coverUrl) continue
+      list.push({
+        songId: song.id,
+        name: song.name,
+        artists: song.artists,
+        album: song.album,
+        similarity,
+        coverUrl
+      })
+    }
+    return list
   }
 
   private async searchSongs(keyword: string, pickMode = false): Promise<SearchSong[]> {
@@ -270,19 +373,6 @@ export default class CoverMatchService {
     if (lastErr) throw lastErr instanceof Error ? lastErr : new Error('搜索 API 全部失败')
     console.warn(`[coverMatch] 搜索「${keyword}」全部镜像无结果`)
     return []
-  }
-
-  private pickBestSong(
-    localName: string,
-    songs: SearchSong[]
-  ): { song: SearchSong; similarity: number } | null {
-    let best: { song: SearchSong; similarity: number } | null = null
-    for (const song of songs) {
-      const remote = `${song.artists} - ${song.name}`
-      const score = similarPercent(localName, remote)
-      if (!best || score > best.similarity) best = { song, similarity: score }
-    }
-    return best
   }
 
   /** 通过歌曲详情接口补全封面 URL */
@@ -485,39 +575,61 @@ export default class CoverMatchService {
 
   /**
    * 搜索候选（含封面 URL 尽力补全），按相似度降序
-   * 手动挑选不设相似度下限：有封面 URL 即入列，由用户预览后决定用或取消
+   * 手动：标签歌名+歌手双搜，再叠加文件名推测出的差异歌名/歌手；合并去重、不设下限
+   * 各轮搜索失败互不影响，保留已合并结果；全失败则返回空列表（UI 仍可开本地选图）
    */
   async searchCandidates(music: MusicItem): Promise<CoverMatchCandidate[]> {
-    const keyword = this.buildKeyword(music)
-    if (!keyword) return []
-    const songs = await this.searchSongs(keyword, true)
-    const localName = this.buildLocalName(music)
-    const list: CoverMatchCandidate[] = []
+    const titleKw = this.titleKeyword(music)
+    const artistKw = this.artistKeyword(music)
+    const extra = this.extraInferredKeywords(music, titleKw, artistKw)
+    const byId = new Map<number, CoverMatchCandidate>()
+    let searchedOnce = false
+    let lastError: unknown
 
-    for (const song of songs) {
-      const similarity = similarPercent(localName, `${song.artists} - ${song.name}`)
-      let coverUrl = song.coverUrl
-      if (!coverUrl) {
-        try {
-          coverUrl = await this.fetchCoverUrlBySongId(song.id)
-        } catch {
-          coverUrl = undefined
+    const mergeIn = (list: CoverMatchCandidate[]) => {
+      for (const c of list) {
+        const prev = byId.get(c.songId)
+        if (!prev || c.similarity > prev.similarity) {
+          byId.set(c.songId, c)
         }
-        await sleep(REQUEST_GAP_MS)
       }
-      // 无封面地址的候选不进入列表，避免 UI 裂图后再点选失败
-      if (!coverUrl) continue
-      list.push({
-        songId: song.id,
-        name: song.name,
-        artists: song.artists,
-        album: song.album,
-        similarity,
-        coverUrl
-      })
     }
 
-    return list.sort((a, b) => b.similarity - a.similarity)
+    const runTitle = async (kw: string) => {
+      if (searchedOnce) await sleep(REQUEST_GAP_MS)
+      searchedOnce = true
+      try {
+        const songs = await this.searchSongs(kw, true)
+        mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByTitle(kw, s)))
+      } catch (e) {
+        lastError = e
+        console.warn(`[coverMatch] 手动候选歌名搜索失败「${kw}」`, e)
+      }
+    }
+
+    const runArtist = async (kw: string) => {
+      if (searchedOnce) await sleep(REQUEST_GAP_MS)
+      searchedOnce = true
+      try {
+        const songs = await this.searchSongs(kw, true)
+        mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByArtist(kw, s)))
+      } catch (e) {
+        lastError = e
+        console.warn(`[coverMatch] 手动候选歌手搜索失败「${kw}」`, e)
+      }
+    }
+
+    if (titleKw) await runTitle(titleKw)
+    if (artistKw) await runArtist(artistKw)
+    if (extra.title) await runTitle(extra.title)
+    if (extra.artist) await runArtist(extra.artist)
+
+    const list = Array.from(byId.values()).sort((a, b) => b.similarity - a.similarity)
+    // 全轮失败且无候选：返回空列表，不抛错，便于 UI 仍弹出本地选图
+    if (list.length === 0 && lastError) {
+      console.warn('[coverMatch] 手动候选各轮均失败，返回空列表', lastError)
+    }
+    return list
   }
 
   /** 按用户选定的 songId 应用封面；已有有效封面时需 force */
@@ -659,33 +771,96 @@ export default class CoverMatchService {
       }
     }
 
-    const keyword = this.buildKeyword(music)
-    if (!keyword) {
+    const titleKw = this.titleKeyword(music)
+    const artistKw = this.artistKeyword(music)
+    const extra = this.extraInferredKeywords(music, titleKw, artistKw)
+    if (!titleKw && !artistKw && !extra.title && !extra.artist) {
       return { musicId: music.id, title, status: 'failed', message: '无法构造搜索关键词' }
     }
 
-    let songs: SearchSong[]
-    try {
-      songs = await this.searchSongs(keyword)
-    } catch (e: any) {
-      return { musicId: music.id, title, status: 'failed', message: e?.message || '搜索失败' }
+    const pickState: {
+      best: { song: SearchSong; similarity: number } | null
+      nearMissSimilarity: number
+      lastSearchError: string | undefined
+      didSearch: boolean
+    } = {
+      best: null,
+      nearMissSimilarity: 0,
+      lastSearchError: undefined,
+      didSearch: false
     }
 
-    if (isAborted()) return cancelledResult()
-
-    if (songs.length === 0) {
-      return { musicId: music.id, title, status: 'failed', message: '未找到搜索结果' }
+    const tryTitle = async (kw: string): Promise<boolean> => {
+      if (pickState.didSearch) await sleep(REQUEST_GAP_MS)
+      try {
+        const songs = await this.searchSongs(kw)
+        pickState.didSearch = true
+        pickState.lastSearchError = undefined
+        if (isAborted()) return true
+        const pick = this.pickBestByScore(songs, (s) => this.scoreByTitle(kw, s))
+        if (pick) {
+          pickState.nearMissSimilarity = Math.max(pickState.nearMissSimilarity, pick.similarity)
+          if (pick.similarity >= TITLE_SIMILARITY_THRESHOLD) {
+            pickState.best = pick
+          }
+        }
+      } catch (e: any) {
+        pickState.didSearch = true
+        pickState.lastSearchError = e?.message || '搜索失败'
+      }
+      return isAborted()
     }
 
-    const localName = this.buildLocalName(music)
-    const best = this.pickBestSong(localName, songs)
-    if (!best || best.similarity < SIMILARITY_THRESHOLD) {
+    const tryArtist = async (kw: string): Promise<boolean> => {
+      if (pickState.didSearch) await sleep(REQUEST_GAP_MS)
+      try {
+        const songs = await this.searchSongs(kw)
+        pickState.didSearch = true
+        pickState.lastSearchError = undefined
+        if (isAborted()) return true
+        const pick = this.pickBestByScore(songs, (s) => this.scoreByArtist(kw, s))
+        if (pick) {
+          pickState.nearMissSimilarity = Math.max(pickState.nearMissSimilarity, pick.similarity)
+          if (pick.similarity >= ARTIST_AUTO_SIMILARITY_THRESHOLD) {
+            pickState.best = pick
+          }
+        }
+      } catch (e: any) {
+        pickState.didSearch = true
+        pickState.lastSearchError = e?.message || '搜索失败'
+      }
+      return isAborted()
+    }
+
+    // 1) 标签歌名 ≥50
+    if (titleKw) {
+      if (await tryTitle(titleKw)) return cancelledResult()
+    }
+
+    // 2) 标签歌手 ≥50
+    if (!pickState.best && artistKw) {
+      if (await tryArtist(artistKw)) return cancelledResult()
+    }
+
+    // 3) 仍未命中：文件名推测歌名/歌手再搜（与标签相同则跳过）
+    if (!pickState.best && extra.title) {
+      if (await tryTitle(extra.title)) return cancelledResult()
+    }
+    if (!pickState.best && extra.artist) {
+      if (await tryArtist(extra.artist)) return cancelledResult()
+    }
+
+    const best = pickState.best
+    if (!best) {
+      if (pickState.nearMissSimilarity === 0 && pickState.lastSearchError) {
+        return { musicId: music.id, title, status: 'failed', message: pickState.lastSearchError }
+      }
       return {
         musicId: music.id,
         title,
         status: 'skipped_low_similarity',
-        similarity: best?.similarity ?? 0,
-        message: `匹配度过低(${best?.similarity ?? 0}%)`
+        similarity: pickState.nearMissSimilarity,
+        message: `匹配度过低(${pickState.nearMissSimilarity}%)`
       }
     }
 

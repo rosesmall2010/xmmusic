@@ -662,8 +662,14 @@ const isNpMatchFlowBusy = () =>
   applyingLyricsCandidate.value ||
   applyingCoverCandidate.value
 
+/** 本组件对 manualMatchUiBusy 的持有代际，卸载/finally 只释放自己的 claim */
+let manualMatchBusyOwner = 0
+
 const syncManualMatchUiBusy = () => {
-  lyricsMatchStore.setManualMatchUiBusy(isNpMatchFlowBusy())
+  manualMatchBusyOwner = lyricsMatchStore.syncManualMatchUiBusy(
+    manualMatchBusyOwner,
+    isNpMatchFlowBusy()
+  )
 }
 
 const cancelFetchMatchCandidates = () => {
@@ -1466,6 +1472,7 @@ const applyCoverSongId = async (
     }))
   } finally {
     applyingCoverCandidate.value = false
+    syncManualMatchUiBusy()
   }
 }
 
@@ -1801,6 +1808,17 @@ onUnmounted(() => {
   if (!equalizer.enabled.value && equalizer.isCaptured()) {
     window.dispatchEvent(new CustomEvent('xmmusic:restore-native-audio'))
   }
+  // 离开时清掉手动匹配 busy，避免本地音乐批量按钮永久禁用
+  fetchMatchToken++
+  fetchMatchKind.value = null
+  matchingLyrics.value = false
+  matchingCover.value = false
+  showLyricsPick.value = false
+  showCoverPick.value = false
+  applyingLyricsCandidate.value = false
+  applyingCoverCandidate.value = false
+  lyricsMatchStore.releaseManualMatchUiBusy(manualMatchBusyOwner)
+  manualMatchBusyOwner = 0
 })
 
 // 监听播放进度更新歌词
@@ -2855,7 +2873,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
 }
 
@@ -2865,11 +2883,12 @@ watch(
   gap: 12px;
   padding: 16px 22px;
   border-radius: 12px;
-  background: var(--bg-primary, #1e1e1e);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  /* 成对 fallback：主题类缺失时仍保持浅底深字，避免白底白字 */
+  background: var(--bg-elevated, #ffffff);
+  color: var(--text-primary, #1f1f1f);
+  border: 1px solid var(--border-color, #e0e0e0);
+  box-shadow: var(--shadow-lg);
   max-width: min(480px, 92%);
-  color: #fff;
 }
 
 .match-fetch-text {
@@ -2880,12 +2899,13 @@ watch(
 .match-fetch-title {
   font-size: 0.95rem;
   font-weight: 600;
+  color: var(--text-primary, #1f1f1f);
 }
 
 .match-fetch-sub {
   margin-top: 4px;
   font-size: 0.82rem;
-  opacity: 0.7;
+  color: var(--text-secondary, #666666);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2895,21 +2915,21 @@ watch(
   flex-shrink: 0;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-color, #e0e0e0);
   background: transparent;
-  color: #fff;
+  color: var(--text-primary, #1f1f1f);
   cursor: pointer;
   font-size: 0.85rem;
 }
 
 .match-fetch-cancel:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg, #e9ecef);
 }
 
 .spin {
   flex-shrink: 0;
   animation: match-spin 0.9s linear infinite;
-  color: var(--color-primary, #1db954);
+  color: var(--color-primary, #31c27c);
 }
 
 @keyframes match-spin {
