@@ -92,12 +92,6 @@ export interface ID3Backup {
   createdAt: string
 }
 
-export interface DuplicateGroup {
-  fileHash: string
-  count: number
-  files: MusicItem[]
-}
-
 export interface ScanProgress {
   current: number
   total: number
@@ -147,38 +141,4 @@ export interface AdvancedSearchCriteria {
   sortBy?: 'addedAt' | 'title' | 'duration' | 'playCount'
   sortOrder?: 'asc' | 'desc'
   limit?: number
-}
-
-export interface PlaylistExportSong {
-  title: string
-  artist: string
-  album: string | null
-  duration: number
-  filePath: string
-  fileName: string
-  fileHash: string
-}
-
-export interface PlaylistExportData {
-  version: number
-  exportedAt: string
-  playlist: {
-    name: string
-    description: string | null
-    coverPath: string | null
-    songCount: number
-    totalDuration: number
-  }
-  songs: PlaylistExportSong[]
-}
-
-export interface PlaylistImportResult {
-  playlistId: number
-  added: number
-  missing: Array<{
-    title: string
-    artist?: string
-    filePath?: string
-    fileHash?: string
-  }>
 }

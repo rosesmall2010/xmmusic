@@ -4,8 +4,7 @@ import type {
   ScanProgress,
   ScanResult,
   ScanState,
-  AdvancedSearchCriteria,
-  PlaylistImportResult
+  AdvancedSearchCriteria
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
 import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary, LyricsMatchCandidate } from '@shared/types/lyrics'
@@ -15,7 +14,6 @@ import type {
   CoverMatchProgress,
   CoverMatchSummary
 } from '@shared/types/coverMatch'
-import type { PlayStatistics, TopPlayedSong, PlayTrendData } from '@shared/types/statistics'
 
 // 暴露安全的 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -108,9 +106,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('get-playlist-songs-paginated', playlistId, offset, limit),
   getPlaylistSongsCount: (playlistId: number) =>
     ipcRenderer.invoke('get-playlist-songs-count', playlistId),
-  exportPlaylistJSON: (playlistId: number) =>
-    ipcRenderer.invoke('export-playlist-json', playlistId),
-  importPlaylistJSON: () => ipcRenderer.invoke('import-playlist-json'),
 
   // 收藏
   getFavorites: () => ipcRenderer.invoke('get-favorites'),
@@ -119,7 +114,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFavoritesCount: () => ipcRenderer.invoke('get-favorites-count'),
 
   // 播放历史
-  getPlayHistory: () => ipcRenderer.invoke('get-play-history'),
   getRecentPlays: (limit?: number) => ipcRenderer.invoke('get-recent-plays', limit),
   clearPlayHistory: () => ipcRenderer.invoke('clear-play-history'),
 
@@ -174,16 +168,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) =>
     ipcRenderer.invoke('fix-id3-tags-batch', filePaths, sourceEncoding, fields),
 
-  // 重复音乐检测
-  getDuplicateGroups: () => ipcRenderer.invoke('get-duplicate-groups'),
+  // 删除磁盘文件并同步库
   deleteMusicFile: (musicId: number) => ipcRenderer.invoke('delete-music-file', musicId),
-  getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) =>
-    ipcRenderer.invoke('get-similar-music', musicId, limit, minSimilarity),
-  clearAllMusic: () => ipcRenderer.invoke('clear-all-music'),
-
-  // Excel导出
-  exportMusicToExcel: (musicIds: number[], options?: any) =>
-    ipcRenderer.invoke('export-music-to-excel', musicIds, options),
 
   // 更新音乐播放状态
   updateMusicPlayStatus: (musicId: number, isPlayable: boolean, errorReason?: string) =>
@@ -207,14 +193,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   offExportMusicProgress: (handler: any) => {
     ipcRenderer.removeListener('export-music-progress', handler)
   },
-
-  // 文件监控
-  startFileMonitor: (directoryPath: string, options?: any) =>
-    ipcRenderer.invoke('start-file-monitor', directoryPath, options),
-  stopFileMonitor: (directoryPath: string) =>
-    ipcRenderer.invoke('stop-file-monitor', directoryPath),
-  stopAllFileMonitors: () =>
-    ipcRenderer.invoke('stop-all-file-monitors'),
 
   // 快捷键管理
   getShortcutConfig: () => ipcRenderer.invoke('get-shortcut-config'),
@@ -253,9 +231,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => {
     const handler = (_: any, progress: any) => callback(_, progress)
     ipcRenderer.on('batch-add-progress', handler)
+    return handler
   },
-  offBatchAddProgress: (callback: any) => {
-    ipcRenderer.removeListener('batch-add-progress', callback)
+  offBatchAddProgress: (handler: any) => {
+    ipcRenderer.removeListener('batch-add-progress', handler)
   },
   onShortcutAction: (callback: (action: string) => void) => {
     ipcRenderer.on('shortcut-action', (_, action) => callback(action))
@@ -336,11 +315,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeTrayAction: () => {
     ipcRenderer.removeAllListeners('tray-action')
   },
-  // 播放统计功能
-  getOverallStatistics: () => ipcRenderer.invoke('get-overall-statistics'),
-  getTopPlayedSongs: (limit?: number) => ipcRenderer.invoke('get-top-played-songs', limit),
-  getPlayTrend: (days?: number) => ipcRenderer.invoke('get-play-trend', days),
-  getArtistStatistics: (limit?: number) => ipcRenderer.invoke('get-artist-statistics', limit),
   // 元数据编辑功能
   updateMusicMetadata: (musicId: number, updates: any) => ipcRenderer.invoke('update-music-metadata', musicId, updates),
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => ipcRenderer.invoke('batch-update-music-metadata', musicIds, updates),
@@ -414,12 +388,9 @@ declare global {
       getPlaylistSongs: (playlistId: number) => Promise<MusicItem[]>
       getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) => Promise<MusicItem[]>
       getPlaylistSongsCount: (playlistId: number) => Promise<number>
-      exportPlaylistJSON: (playlistId: number) => Promise<string | null>
-      importPlaylistJSON: () => Promise<PlaylistImportResult | null>
       getFavorites: () => Promise<MusicItem[]>
       getFavoritesPaginated: (offset: number, limit: number) => Promise<MusicItem[]>
       getFavoritesCount: () => Promise<number>
-      getPlayHistory: () => Promise<MusicItem[]>
       clearPlayHistory: () => Promise<void>
       clearLocalMusic: () => Promise<void>
       cleanupMissingLocalMusic: () => Promise<{
@@ -460,10 +431,7 @@ declare global {
       detectID3Encoding: (filePath: string) => Promise<any[]>
       fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) => Promise<any>
       fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>
-      getDuplicateGroups: () => Promise<any[]>
       deleteMusicFile: (musicId: number) => Promise<boolean>
-      getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) => Promise<Array<MusicItem & { similarity?: number }>>
-      exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
       exportMusicFiles: (musicIds: number[], options?: any) => Promise<any>
       onExportMusicProgress: (callback: (progress: {
         current: number
@@ -474,9 +442,6 @@ declare global {
         skipped: number
       }) => void) => any
       offExportMusicProgress: (handler: any) => void
-      startFileMonitor: (directoryPath: string, options?: any) => Promise<boolean>
-      stopFileMonitor: (directoryPath: string) => Promise<boolean>
-      stopAllFileMonitors: () => Promise<boolean>
       getShortcutConfig: () => Promise<ShortcutConfig>
       saveShortcutConfig: (shortcuts: ShortcutConfig) => Promise<void>
       getDefaultShortcuts: () => Promise<ShortcutConfig>
@@ -543,10 +508,6 @@ declare global {
       updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => void
       onTrayAction: (callback: (action: string) => void) => void
       removeTrayAction: () => void
-      getOverallStatistics: () => Promise<PlayStatistics>
-      getTopPlayedSongs: (limit?: number) => Promise<TopPlayedSong[]>
-      getPlayTrend: (days?: number) => Promise<PlayTrendData[]>
-      getArtistStatistics: (limit?: number) => Promise<Array<{ artist: string; playCount: number; songCount: number }>>
       updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
       batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<{ success: number; failed: number; errors: Array<{ file: string; error: string }> }>
       syncMusicMetadataToDb: (musicId: number, updates: any) => Promise<MusicItem>

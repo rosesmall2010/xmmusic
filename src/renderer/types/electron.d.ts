@@ -74,16 +74,14 @@ export interface ElectronAPI {
   getPlaylistSongsPaginated: (playlistId: number, offset: number, limit: number) => Promise<any[]>
   getPlaylistSongsCount: (playlistId: number) => Promise<number>
   clearPlaylist: (playlistId: number) => Promise<void>
-  exportPlaylistJSON: (playlistId: number) => Promise<string | null>
-  importPlaylistJSON: () => Promise<any>
 
   // 收藏
   getFavorites: () => Promise<any[]>
 
   // 播放历史
-  getPlayHistory: () => Promise<any[]>
   getRecentPlays: (limit?: number) => Promise<any[]>
   clearPlayHistory: () => Promise<void>
+  clearLocalMusic: () => Promise<void>
   /** 清理本地音乐中磁盘文件已不存在的曲库记录（并同步歌单/收藏/队列等） */
   cleanupMissingLocalMusic: () => Promise<{
     checked: number
@@ -100,6 +98,9 @@ export interface ElectronAPI {
     skippedUnreachable: number
     skippedInaccessible: number
   }>
+  getExistingMusicIds: (ids: number[]) => Promise<number[]>
+  openInFileExplorer: (filePath: string) => Promise<void>
+  updateMusicPlayStatus: (musicId: number, isPlayable: boolean, errorReason?: string) => Promise<void>
 
   // 音乐目录
   getMusicDirectories: () => Promise<any[]>
@@ -120,14 +121,10 @@ export interface ElectronAPI {
   fixID3Tags: (filePath: string, sourceEncoding: string, fields?: any) => Promise<any>
   fixID3TagsBatch: (filePaths: string[], sourceEncoding: string, fields?: any) => Promise<any>
 
-  // 重复音乐检测
-  getDuplicateGroups: () => Promise<any[]>
+  // 删除磁盘文件并同步库
   deleteMusicFile: (musicId: number) => Promise<boolean>
-  getSimilarMusic: (musicId: number, limit?: number, minSimilarity?: number) => Promise<any[]>
-  clearAllMusic: () => Promise<boolean>
 
-  // Excel导出
-  exportMusicToExcel: (musicIds: number[], options?: any) => Promise<string | null>
+  // 导出音乐文件
   exportMusicFiles: (musicIds: number[], options?: any) => Promise<any>
   onExportMusicProgress: (callback: (progress: {
     current: number
@@ -138,11 +135,6 @@ export interface ElectronAPI {
     skipped: number
   }) => void) => any
   offExportMusicProgress: (handler: any) => void
-
-  // 文件监控
-  startFileMonitor: (directoryPath: string, options?: any) => Promise<boolean>
-  stopFileMonitor: (directoryPath: string) => Promise<boolean>
-  stopAllFileMonitors: () => Promise<boolean>
 
   // 快捷键管理
   getShortcutConfig: () => Promise<any>
@@ -166,8 +158,8 @@ export interface ElectronAPI {
   removeScanStateChanged: () => void
   onID3FixProgress: (callback: (progress: { current: number; total: number }) => void) => void
   removeID3FixProgress: () => void
-  onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => void
-  offBatchAddProgress: (callback: any) => void
+  onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => any
+  offBatchAddProgress: (handler: any) => void
   onShortcutAction: (callback: (action: string) => void) => void
   removeShortcutAction: () => void
 
@@ -224,12 +216,6 @@ export interface ElectronAPI {
   updateTrayCurrentMusic: (music: { title: string; artist: string } | null) => void
   onTrayAction: (callback: (action: string) => void) => void
   removeTrayAction: () => void
-
-  // 统计
-  getOverallStatistics: () => Promise<any>
-  getTopPlayedSongs: (limit?: number) => Promise<any[]>
-  getPlayTrend: (days?: number) => Promise<any[]>
-  getArtistStatistics: (limit?: number) => Promise<any[]>
 
   // 元数据
   updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>

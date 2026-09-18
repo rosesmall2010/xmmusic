@@ -12,6 +12,7 @@
 
 ### 变更
 - **封面匹配搜索策略**：批量/自动先搜标签歌名 ≥50，不足再搜标签歌手 ≥50；仍未命中则用文件名推测歌名/歌手（与已搜相同则跳过）再试，仍无 ≥50 则放弃；手动分别搜标签歌名与歌手，并叠加文件名推测差异词，合并去重、不设相似度下限，按相似度降序供挑选
+- **下线未落地能力**：Excel 导出、文件监控、播放统计 API、歌单 JSON 导入导出、相似歌/重复组（含 exceljs/chokidar 等依赖）；**保留** EditTagModal / MetadataEditDialog 与全部播放特效、Howler 兜底
 
 ### 修复
 - 匹配拉取遮罩：挂到 `#app` 以继承主题变量；卡片用 `--bg-elevated` / `--text-primary` 等成对变量，修复浅色下白底白字、Teleport 到 `body` 时主题对不上
@@ -20,6 +21,11 @@
 - 手动封面候选：各轮搜索失败互不影响，保留已合并结果；全失败返回空列表仍可打开本地选图
 - 全屏匹配封面应用完成后未同步 `manualMatchUiBusy`，导致回到本地音乐批量按钮一直禁用；离开匹配页时强制清 busy
 - 手动匹配 busy 改为 generation 持有：`finally`/卸载只释放自己的 claim，避免误清另一页的 busy
+- 播放切歌：用世代号覆盖加载，避免 `isPlaybackInProgress` 静默丢请求；Howler 兜底补超时/`onplayerror`；扩展名空值兜底
+- 批量加入歌单：`offBatchAddProgress` 与 on 的 handler 对齐，修复监听泄漏
+- `clearMediaFiles` 清歌词时误用封面目录路径
+- 旧 `updateMusic`/`updateMusicByPath` 改为委托 `all_music`；删文件走 `deleteAllMusic` 并校验扫描目录
+- `local-file` 协议路径白名单；`read-file`/`write-file` 限制在 userData；扫描目录 `ORDER BY` 白名单
 
 ## [1.2.3] - 2026-08-28
 

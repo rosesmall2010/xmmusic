@@ -7,7 +7,6 @@ import { createHash } from 'crypto'
 import type {
   MusicItem,
   Playlist,
-  DuplicateGroup,
   AdvancedSearchCriteria
 } from '@shared/types/music'
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
@@ -1008,227 +1007,28 @@ export default class MusicDatabase {
     }
   }
 
-  // ========== 音乐操作（旧版，保留兼容，后续将废弃） ==========
+  // ========== 兼容包装：委托到 all_music ==========
 
-  insertMusic(music: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'>): number {
-    const stmt = this.db!.prepare(`
-      INSERT INTO music (
-        title, artist, album, year, genre,
-        file_path, file_name, file_size, file_hash, file_extension,
-        duration, bitrate, sample_rate, channels,
-        cover_path, lyrics_path, play_count, favorite,
-        is_corrupted, is_duplicate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    const result = stmt.run(
-      music.title,
-      music.artist,
-      music.album,
-      music.year,
-      music.genre,
-      music.filePath,
-      music.fileName,
-      music.fileSize,
-      music.fileHash,
-      music.fileExtension,
-      music.duration,
-      music.bitrate,
-      music.sampleRate,
-      music.channels,
-      music.coverPath,
-      music.lyricsPath,
-      music.playCount || 0,
-      music.favorite ? 1 : 0,
-      music.isCorrupted ? 1 : 0,
-      music.isDuplicate ? 1 : 0
-    )
-
-    // 同步添加到 local_music 表
-    try {
-      this.addToLocalMusic(music.filePath)
-    } catch (error) {
-      console.warn('添加到本地音乐列表失败:', error)
-    }
-
-    return Number(result.lastInsertRowid)
-  }
-
-  insertMusicBatch(musicList: Omit<MusicItem, 'id' | 'addedAt' | 'updatedAt'>[]): void {
-    const insert = this.db!.prepare(`
-      INSERT INTO music (
-        title, artist, album, year, genre,
-        file_path, file_name, file_size, file_hash, file_extension,
-        duration, bitrate, sample_rate, channels,
-        cover_path, lyrics_path, play_count, favorite,
-        is_corrupted, is_duplicate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    const insertMany = this.db!.transaction((items: typeof musicList) => {
-      for (const item of items) {
-        insert.run(
-          item.title,
-          item.artist,
-          item.album,
-          item.year,
-          item.genre,
-          item.filePath,
-          item.fileName,
-          item.fileSize,
-          item.fileHash,
-          item.fileExtension,
-          item.duration,
-          item.bitrate,
-          item.sampleRate,
-          item.channels,
-          item.coverPath,
-          item.lyricsPath,
-          item.playCount || 0,
-          item.favorite ? 1 : 0,
-          item.isCorrupted ? 1 : 0,
-          item.isDuplicate ? 1 : 0
-        )
-      }
-    })
-
-    insertMany(musicList)
-  }
-
+  /** 按 id 更新曲目元数据（委托 updateAllMusic） */
   updateMusic(id: number, updates: Partial<MusicItem>): void {
-    const fields: string[] = []
-    const values: any[] = []
-
-    if (updates.title !== undefined) {
-      fields.push('title = ?')
-      values.push(updates.title)
-    }
-    if (updates.artist !== undefined) {
-      fields.push('artist = ?')
-      values.push(updates.artist)
-    }
-    if (updates.album !== undefined) {
-      fields.push('album = ?')
-      values.push(updates.album)
-    }
-    if (updates.year !== undefined) {
-      fields.push('year = ?')
-      values.push(updates.year)
-    }
-    if (updates.genre !== undefined) {
-      fields.push('genre = ?')
-      values.push(updates.genre)
-    }
-    if (updates.coverPath !== undefined) {
-      fields.push('cover_path = ?')
-      values.push(updates.coverPath)
-    }
-    if (updates.lyricsPath !== undefined) {
-      fields.push('lyrics_path = ?')
-      values.push(updates.lyricsPath)
-    }
-    if (updates.favorite !== undefined) {
-      fields.push('favorite = ?')
-      values.push(updates.favorite ? 1 : 0)
-    }
-    if (updates.playCount !== undefined) {
-      fields.push('play_count = ?')
-      values.push(updates.playCount)
-    }
-    if (updates.lastPlayedAt !== undefined) {
-      fields.push('last_played_at = ?')
-      values.push(updates.lastPlayedAt)
-    }
-
-    if (fields.length === 0) return
-
-    fields.push('updated_at = CURRENT_TIMESTAMP')
-    values.push(id)
-
-    const stmt = this.db!.prepare(`
-      UPDATE music SET ${fields.join(', ')} WHERE id = ?
-    `)
-    stmt.run(...values)
-  }
-
-  updateMusicByPath(filePath: string, updates: Partial<MusicItem>): void {
-    const fields: string[] = []
-    const values: any[] = []
-
-    if (updates.title !== undefined) {
-      fields.push('title = ?')
-      values.push(updates.title)
-    }
-    if (updates.artist !== undefined) {
-      fields.push('artist = ?')
-      values.push(updates.artist)
-    }
-    if (updates.album !== undefined) {
-      fields.push('album = ?')
-      values.push(updates.album)
-    }
-    if (updates.year !== undefined) {
-      fields.push('year = ?')
-      values.push(updates.year)
-    }
-    if (updates.genre !== undefined) {
-      fields.push('genre = ?')
-      values.push(updates.genre)
-    }
-    if (updates.coverPath !== undefined) {
-      fields.push('cover_path = ?')
-      values.push(updates.coverPath)
-    }
-    if (updates.lyricsPath !== undefined) {
-      fields.push('lyrics_path = ?')
-      values.push(updates.lyricsPath)
-    }
-    if (updates.favorite !== undefined) {
-      fields.push('favorite = ?')
-      values.push(updates.favorite ? 1 : 0)
-    }
-    if (updates.playCount !== undefined) {
-      fields.push('play_count = ?')
-      values.push(updates.playCount)
-    }
-    if (updates.lastPlayedAt !== undefined) {
-      fields.push('last_played_at = ?')
-      values.push(updates.lastPlayedAt)
-    }
-
-    if (fields.length === 0) return
-
-    fields.push('updated_at = CURRENT_TIMESTAMP')
-    values.push(filePath)
-
-    const stmt = this.db!.prepare(`
-      UPDATE music SET ${fields.join(', ')} WHERE file_path = ?
-    `)
-    stmt.run(...values)
-  }
-
-  deleteMusic(id: number): void {
-    const stmt = this.db!.prepare('DELETE FROM music WHERE id = ?')
-    stmt.run(id)
-  }
-
-  deleteMusicByPath(filePath: string): void {
-    const stmt = this.db!.prepare('DELETE FROM music WHERE file_path = ?')
-    stmt.run(filePath)
-  }
-
-  clearAllMusic(): void {
-    // 使用事务确保原子性
-    const transaction = this.db!.transaction(() => {
-      // 1. 清空全文搜索索引
-      this.db!.prepare('DELETE FROM music_fts').run()
-      // 2. 清空本地音乐表
-      this.db!.prepare('DELETE FROM music').run()
-
-      // 重置自增ID（可选，但推荐）
-      this.db!.prepare("DELETE FROM sqlite_sequence WHERE name='music'").run()
+    this.updateAllMusic(id, {
+      title: updates.title,
+      artist: updates.artist,
+      album: updates.album,
+      year: updates.year,
+      genre: updates.genre,
+      cover_path: updates.coverPath,
+      lyrics_path: updates.lyricsPath,
+      play_count: updates.playCount,
+      last_played_at: updates.lastPlayedAt
     })
-    transaction()
+  }
+
+  /** 按路径更新曲目元数据 */
+  updateMusicByPath(filePath: string, updates: Partial<MusicItem>): void {
+    const music = this.getAllMusicByPath(filePath)
+    if (!music) return
+    this.updateMusic(music.id, updates)
   }
 
   /**
@@ -1578,86 +1378,6 @@ export default class MusicDatabase {
     })
   }
 
-  getSimilarMusic(musicId: number, limit: number = 20, minSimilarity: number = 0.5): Array<MusicItem & { similarity: number }> {
-    const target = this.getAllMusicById(musicId)
-    if (!target) {
-      return []
-    }
-
-    // 计算相似度的权重
-    const artistWeight = 0.4
-    const albumWeight = 0.2
-    const genreWeight = 0.2
-    const yearWeight = 0.1
-    const durationWeight = 0.1
-
-    // 构建相似度计算SQL - 使用子查询来过滤 similarity（v1.0.6 使用 all_music 表）
-    const stmt = this.db!.prepare(`
-      SELECT * FROM (
-        SELECT
-          am.*,
-          md.path as dir_path,
-          (
-            (CASE WHEN am.artist = ? THEN ${artistWeight} ELSE 0 END) +
-            (CASE WHEN am.album = ? THEN ${albumWeight} ELSE 0 END) +
-            (CASE WHEN am.genre = ? THEN ${genreWeight} ELSE 0 END) +
-            (CASE
-              WHEN am.year IS NOT NULL AND ? IS NOT NULL THEN
-                ${yearWeight} * (1.0 - ABS(am.year - ?) / 50.0)
-              ELSE 0
-            END) +
-            (CASE
-              WHEN am.duration > 0 AND ? > 0 THEN
-                ${durationWeight} * (1.0 - ABS(am.duration - ?) / 600.0)
-              ELSE 0
-            END)
-          ) AS similarity
-        FROM all_music am
-        JOIN music_dir md ON am.dir_id = md.id
-        WHERE am.id != ?
-          AND am.is_duplicate = 0
-          AND (
-            am.artist = ? OR
-            am.album = ? OR
-            am.genre = ? OR
-            (am.year IS NOT NULL AND ? IS NOT NULL AND ABS(am.year - ?) <= 5) OR
-            (am.duration > 0 AND ? > 0 AND ABS(am.duration - ?) <= 60)
-          )
-      )
-      WHERE similarity >= ?
-      ORDER BY similarity DESC, play_count DESC
-      LIMIT ?
-    `)
-
-    const rows = stmt.all(
-      target.artist || '',
-      target.album || '',
-      target.genre || '',
-      target.year,
-      target.year,
-      target.duration || 0,
-      target.duration || 0,
-      target.id,
-      target.artist || '',
-      target.album || '',
-      target.genre || '',
-      target.year,
-      target.year,
-      target.duration || 0,
-      target.duration || 0,
-      minSimilarity,
-      limit
-    ) as any[]
-
-    return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
-      return {
-        ...this.mapAllMusicRowToMusicItem(row, fullPath),
-      similarity: Math.min(1.0, Math.max(0, row.similarity || 0))
-      }
-    })
-  }
-
   // ========== 播放列表操作 ==========
 
   createPlaylist(name: string, description?: string): number {
@@ -1815,29 +1535,6 @@ export default class MusicDatabase {
       WHERE id = ?
     `)
     stmt.run(playlistId, playlistId, playlistId)
-  }
-
-  // ========== 去重操作 ==========
-
-  getDuplicateGroups(): DuplicateGroup[] {
-    const stmt = this.db!.prepare(`
-      SELECT file_hash, COUNT(*) as count
-      FROM music
-      GROUP BY file_hash
-      HAVING COUNT(*) > 1
-    `)
-    const rows = stmt.all() as Array<{ file_hash: string; count: number }>
-
-    return rows.map(row => ({
-      fileHash: row.file_hash,
-      count: row.count,
-      files: this.getMusicByHash(row.file_hash)
-    }))
-  }
-
-  markAsDuplicate(musicId: number, isDuplicate: boolean): void {
-    const stmt = this.db!.prepare('UPDATE music SET is_duplicate = ? WHERE id = ?')
-    stmt.run(isDuplicate ? 1 : 0, musicId)
   }
 
   // ========== 列表表操作（v1.0.6 新架构，基于 music_id） ==========
@@ -2528,8 +2225,11 @@ export default class MusicDatabase {
       params.push(options.enabled ? 1 : 0)
     }
 
-    const sortBy = options?.sortBy || 'display_order'
-    const order = options?.order || 'ASC'
+    const sortAllow = new Set(['display_order', 'created_at', 'path'])
+    const orderAllow = new Set(['ASC', 'DESC'])
+    const sortBy = options?.sortBy && sortAllow.has(options.sortBy) ? options.sortBy : 'display_order'
+    const orderRaw = (options?.order || 'ASC').toUpperCase()
+    const order = orderAllow.has(orderRaw) ? orderRaw : 'ASC'
     sql += ` ORDER BY ${sortBy} ${order}`
 
     return this.db!.prepare(sql).all(...params) as Array<{ id: number; path: string; display_order: number; enabled: number; created_at: string; updated_at: string }>
@@ -2945,124 +2645,6 @@ export default class MusicDatabase {
     }
   }
 
-  // ========== 播放统计 ==========
-
-  getOverallStatistics(): {
-    totalPlays: number
-    totalDuration: number
-    totalSongs: number
-    averagePlaysPerSong: number
-    averageDuration: number
-  } {
-    // 总播放次数
-    const totalPlaysStmt = this.db!.prepare('SELECT SUM(play_count) as total FROM music')
-    const totalPlaysResult = totalPlaysStmt.get() as { total: number | null }
-    const totalPlays = totalPlaysResult.total || 0
-
-    // 总歌曲数
-    const totalSongsStmt = this.db!.prepare('SELECT COUNT(*) as count FROM music WHERE is_duplicate = 0')
-    const totalSongsResult = totalSongsStmt.get() as { count: number }
-    const totalSongs = totalSongsResult.count || 0
-
-    // 总播放时长（基于播放次数和歌曲时长）
-    const durationStmt = this.db!.prepare(`
-      SELECT SUM(play_count * duration) as total_duration
-      FROM music
-      WHERE is_duplicate = 0 AND duration > 0 AND play_count > 0
-    `)
-    const durationResult = durationStmt.get() as { total_duration: number | null }
-    const totalDuration = durationResult.total_duration || 0
-
-    // 平均播放次数
-    const averagePlaysPerSong = totalSongs > 0 ? totalPlays / totalSongs : 0
-
-    // 平均播放时长（基于总播放次数）
-    const averageDuration = totalPlays > 0 ? totalDuration / totalPlays : 0
-
-    return {
-      totalPlays,
-      totalDuration,
-      totalSongs,
-      averagePlaysPerSong: Math.round(averagePlaysPerSong * 100) / 100,
-      averageDuration: Math.round(averageDuration)
-    }
-  }
-
-  getTopPlayedSongs(limit: number = 20): Array<MusicItem & { playCount: number; lastPlayedAt: string | null }> {
-    const stmt = this.db!.prepare(`
-      SELECT m.*
-      FROM music m
-      WHERE m.is_duplicate = 0 AND m.play_count > 0
-      ORDER BY m.play_count DESC, m.last_played_at DESC
-      LIMIT ?
-    `)
-    const rows = stmt.all(limit) as any[]
-    return rows.map(row => ({
-      ...this.mapRowToMusicItem(row),
-      playCount: row.play_count || 0,
-      lastPlayedAt: row.last_played_at
-    }))
-  }
-
-  getPlayTrend(days: number = 30): Array<{ date: string; count: number; duration: number }> {
-    const stmt = this.db!.prepare(`
-      SELECT
-        DATE(played_at) as date,
-        COUNT(*) as count
-      FROM play_history
-      WHERE played_at >= datetime('now', '-' || ? || ' days')
-      GROUP BY DATE(played_at)
-      ORDER BY date ASC
-    `)
-    const rows = stmt.all(days) as Array<{ date: string; count: number }>
-
-    // 获取每天的播放时长（基于播放历史）
-    const durationStmt = this.db!.prepare(`
-      SELECT
-        DATE(ph.played_at) as date,
-        SUM(COALESCE(m.duration, 0)) as duration
-      FROM play_history ph
-      JOIN music m ON ph.file_path = m.file_path
-      WHERE ph.played_at >= datetime('now', '-' || ? || ' days')
-        AND m.duration > 0
-      GROUP BY DATE(ph.played_at)
-      ORDER BY date ASC
-    `)
-    const durationRows = durationStmt.all(days) as Array<{ date: string; duration: number }>
-
-    // 合并数据
-    const durationMap = new Map<string, number>()
-    durationRows.forEach(row => {
-      durationMap.set(row.date, row.duration || 0)
-    })
-
-    return rows.map(row => ({
-      date: row.date,
-      count: row.count,
-      duration: durationMap.get(row.date) || 0
-    }))
-  }
-
-  getArtistStatistics(limit: number = 20): Array<{ artist: string; playCount: number; songCount: number }> {
-    const stmt = this.db!.prepare(`
-      SELECT
-        artist,
-        SUM(play_count) as play_count,
-        COUNT(*) as song_count
-      FROM music
-      WHERE is_duplicate = 0 AND artist IS NOT NULL AND artist != ''
-      GROUP BY artist
-      ORDER BY play_count DESC
-      LIMIT ?
-    `)
-    const rows = stmt.all(limit) as Array<{ artist: string; play_count: number; song_count: number }>
-    return rows.map(row => ({
-      artist: row.artist,
-      playCount: row.play_count || 0,
-      songCount: row.song_count || 0
-    }))
-  }
-
   /**
    * 检查数据库版本
    * 如果版本不匹配，清空并重建数据库
@@ -3207,7 +2789,7 @@ export default class MusicDatabase {
         const files = readdirSync(lyricsDir)
         for (const file of files) {
           try {
-            unlinkSync(join(coversDir, file))
+            unlinkSync(join(lyricsDir, file))
           } catch (error) {
             console.warn(`   删除歌词文件失败: ${file}`, error)
           }

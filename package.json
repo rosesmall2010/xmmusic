@@ -77,10 +77,6 @@
     "@tanstack/vue-virtual": "^3.13.12",
     "@vueuse/core": "^14.3.0",
     "better-sqlite3": "^12.11.1",
-    "chokidar": "^5.0.0",
-    "colorthief": "^3.4.0",
-    "exceljs": "^4.4.0",
-    "fuse.js": "^7.5.0",
     "howler": "^2.2.4",
     "iconv-lite": "^0.7.3",
     "lucide-vue-next": "^1.0.0",
@@ -88,7 +84,6 @@
     "node-id3": "^0.2.9",
     "pinia": "^4.0.2",
     "pinyin-pro": "^3.29.4",
-    "sortablejs": "^1.15.3",
     "vue-i18n": "^11.4.7",
     "vue-router": "^5.2.0",
     "vuedraggable": "^4.1.0"

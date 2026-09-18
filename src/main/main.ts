@@ -1,10 +1,9 @@
 import { app, BrowserWindow, protocol, nativeImage } from 'electron'
-import { join } from 'path'
+import { join, resolve, normalize, sep } from 'path'
 import { existsSync, statSync, createReadStream } from 'fs'
 import { Readable } from 'stream'
 import MusicDatabase from './database/db'
 import { setupIPC } from './ipc/handlers'
-import FileMonitor from './services/fileMonitor'
 import ShortcutManager from './services/shortcutManager'
 import TrayService from './services/trayService'
 
@@ -65,7 +64,6 @@ if (app.isPackaged) {
 
 let mainWindow: BrowserWindow | null = null
 let db: MusicDatabase | null = null
-let fileMonitor: FileMonitor | null = null
 let shortcutManager: ShortcutManager | null = null
 let trayService: TrayService | null = null
 let isMainWindowReady = false // 跟踪主窗口是否就绪
@@ -116,6 +114,33 @@ function getLocalFileContentType(filePath: string): string {
     bmp: 'image/bmp'
   }
   return map[ext] || 'application/octet-stream'
+}
+
+/** 路径是否落在允许根目录下（Windows 忽略大小写） */
+function isUnderRoot(filePath: string, root: string): boolean {
+  const normFile = normalize(resolve(filePath))
+  const normRoot = normalize(resolve(root))
+  const fileCmp = process.platform === 'win32' ? normFile.toLowerCase() : normFile
+  const rootCmp = process.platform === 'win32' ? normRoot.toLowerCase() : normRoot
+  return fileCmp === rootCmp || fileCmp.startsWith(rootCmp.endsWith(sep) ? rootCmp : rootCmp + sep)
+}
+
+/**
+ * local-file 协议白名单：userData（封面/歌词缓存）、扫描目录、或曲库已登记的文件路径。
+ */
+function isLocalFilePathAllowed(filePath: string): boolean {
+  try {
+    if (isUnderRoot(filePath, app.getPath('userData'))) return true
+    if (db) {
+      for (const dir of db.getAllLocalMusicDirs()) {
+        if (dir.path && isUnderRoot(filePath, dir.path)) return true
+      }
+      if (db.getMusicByPath(filePath)) return true
+    }
+  } catch (error) {
+    console.warn('校验 local-file 路径失败:', error)
+  }
+  return false
 }
 
 export function isMainWindowLoaded(): boolean {
@@ -451,6 +476,11 @@ app.whenReady().then(async () => {
         filePath = filePath.replace(/\//g, '\\')
       }
 
+      if (!isLocalFilePathAllowed(filePath)) {
+        console.error('❌ local-file 路径不在白名单内:', filePath)
+        return new Response('Forbidden', { status: 403 })
+      }
+
       if (!existsSync(filePath)) {
         console.error('❌ 文件不存在:', filePath)
         return new Response('Not Found', { status: 404 })
@@ -589,15 +619,9 @@ app.whenReady().then(async () => {
     console.log('✅ 快捷键管理器已初始化')
   }
 
-  // 初始化文件监控
-  if (db) {
-    fileMonitor = new FileMonitor(db)
-    console.log('✅ 文件监控服务已初始化')
-  }
-
   // 设置 IPC（数据库已初始化完成）
   if (mainWindow) {
-    setupIPC(db, mainWindow, fileMonitor, shortcutManager, trayService)
+    setupIPC(db, mainWindow, shortcutManager, trayService)
 
     // 加载并注册快捷键
     if (shortcutManager) {
@@ -627,15 +651,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
-  // 停止文件监控
-  if (fileMonitor) {
-    try {
-      fileMonitor.stopAll()
-    } catch (error) {
-      console.error('停止文件监控时出错:', error)
-    }
-  }
-
   if (db) {
     try {
       db.close()

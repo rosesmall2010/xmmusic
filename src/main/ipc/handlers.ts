@@ -1,11 +1,10 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { resolve, normalize, sep } from 'path'
 import MusicDatabase, { calculateFilePathMD5 } from '../database/db'
 import FileScanner from '../services/fileScanner'
 import ID3Fixer from '../services/id3Fixer'
-import ExcelExporter from '../services/excelExporter'
 import FileExporter from '../services/fileExporter'
-import FileMonitor from '../services/fileMonitor'
 import ShortcutManager from '../services/shortcutManager'
 import LyricsService from '../services/lyricsService'
 import LyricsMatchService from '../services/lyricsMatchService'
@@ -58,7 +57,7 @@ function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | nul
   return parts.length > 0 ? parts.join(' ') : null
 }
 
-export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fileMonitor: FileMonitor | null = null, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
+export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, shortcutManager: ShortcutManager | null = null, trayService: TrayService | null = null) {
   const lyricsService = new LyricsService()
   const lyricsMatchService = new LyricsMatchService()
   const coverMatchService = new CoverMatchService()
@@ -298,12 +297,24 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return result.canceled || !result.filePaths?.length ? null : result.filePaths[0]
   })
 
-  // 文件读写（用于快捷键配置导入/导出）
+  /** 仅允许读写 userData 下文件（快捷键配置等），禁止任意路径 */
+  const assertUnderUserData = (filePath: string) => {
+    const resolved = normalize(resolve(filePath))
+    const root = normalize(resolve(app.getPath('userData')))
+    const fileCmp = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+    const rootCmp = process.platform === 'win32' ? root.toLowerCase() : root
+    if (fileCmp !== rootCmp && !fileCmp.startsWith(rootCmp.endsWith(sep) ? rootCmp : rootCmp + sep)) {
+      throw new Error('仅允许访问应用数据目录内的文件')
+    }
+  }
+
   ipcMain.handle('read-file', async (_, filePath: string, encoding: string = 'utf-8') => {
+    assertUnderUserData(filePath)
     return readFileSync(filePath, encoding as BufferEncoding)
   })
 
   ipcMain.handle('write-file', async (_, filePath: string, content: string, encoding: string = 'utf-8') => {
+    assertUnderUserData(filePath)
     writeFileSync(filePath, content, encoding as BufferEncoding)
   })
 
@@ -605,11 +616,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
   })
 
-  ipcMain.handle('get-similar-music', async (_, musicId: number, limit?: number, minSimilarity?: number) => {
-    if (!db) return []
-    return db.getSimilarMusic(musicId, limit || 20, minSimilarity || 0.5)
-  })
-
   // 播放列表
   ipcMain.handle('create-playlist', async (_, name: string, description?: string) => {
     if (!db) throw new Error('数据库未初始化')
@@ -785,155 +791,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     return db.getPlaylistSongsCount(playlistId)
   })
 
-  ipcMain.handle('export-playlist-json', async (_, playlistId: number) => {
-    if (!db) throw new Error('数据库未初始化')
-    const playlist = db.getPlaylistById(playlistId)
-    if (!playlist) {
-      throw new Error('歌单不存在')
-    }
-
-    const songs = db.getPlaylistSongs(playlistId)
-    const payload = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      playlist,
-      songs: songs.map(song => ({
-        title: song.title,
-        artist: song.artist,
-        album: song.album,
-        duration: song.duration,
-        filePath: song.filePath,
-        fileName: song.fileName,
-        fileHash: song.fileHash
-      }))
-    }
-
-    const saveResult = await dialog.showSaveDialog(mainWindow, {
-      title: '导出歌单 (JSON)',
-      defaultPath: `${playlist.name}.json`,
-      filters: [{ name: 'JSON 文件', extensions: ['json'] }]
-    })
-
-    if (saveResult.canceled || !saveResult.filePath) {
-      return null
-    }
-
-    writeFileSync(saveResult.filePath, JSON.stringify(payload, null, 2), 'utf-8')
-    return saveResult.filePath
-  })
-
-  ipcMain.handle('import-playlist-json', async () => {
-    if (!db) throw new Error('数据库未初始化')
-
-    const openResult = await dialog.showOpenDialog(mainWindow, {
-      title: '导入歌单 (JSON)',
-      properties: ['openFile'],
-      filters: [{ name: 'JSON 文件', extensions: ['json'] }]
-    })
-
-    if (openResult.canceled || openResult.filePaths.length === 0) {
-      return null
-    }
-
-    const filePath = openResult.filePaths[0]
-    const raw = readFileSync(filePath, 'utf-8')
-
-    let data: any
-    try {
-      data = JSON.parse(raw)
-    } catch (error) {
-      throw new Error('JSON 文件格式错误')
-    }
-
-    const sourcePlaylist = data.playlist || {}
-    const playlistName = sourcePlaylist.name
-      ? `${sourcePlaylist.name} (导入于${new Date().toLocaleDateString()})`
-      : `导入歌单_${Date.now()}`
-
-    const playlistId = db.createPlaylist(playlistName, sourcePlaylist.description)
-    let added = 0
-    const missing: Array<{ title: string; artist?: string; filePath?: string; fileHash?: string }> = []
-
-    for (const song of data.songs || []) {
-      let music: MusicItem | null = null
-
-      // 1. 优先通过 fileHash 匹配（最准确）
-      if (song.fileHash) {
-        const matches = db.getMusicByHash(song.fileHash)
-        music = matches.length > 0 ? matches[0] : null
-      }
-
-      // 2. 通过 filePath 匹配
-      if (!music && song.filePath) {
-        music = db.getMusicByPath(song.filePath)
-      }
-
-      // 3. 通过标题和艺术家模糊匹配（改进的自动匹配）
-      if (!music && song.title && song.artist) {
-        // 使用高级搜索来匹配标题和艺术家
-        const results = db.advancedSearch({
-          keyword: song.title.trim(),
-          artist: song.artist.trim(),
-          limit: 10
-        })
-        if (results.length > 0) {
-          // 找到最匹配的（标题和艺术家都匹配）
-          const match = results.find(m =>
-            m.title.toLowerCase().includes(song.title.trim().toLowerCase()) &&
-            m.artist.toLowerCase().includes(song.artist.trim().toLowerCase())
-          )
-          if (match) {
-            music = match
-          } else {
-            music = results[0]
-          }
-        }
-      }
-
-      // 4. 仅通过标题匹配（如果艺术家不匹配）
-      if (!music && song.title) {
-        const results = db.searchMusic(song.title.trim(), 5)
-        if (results.length > 0) {
-          music = results[0]
-        }
-      }
-
-      if (music) {
-        // 使用新的基于 music_id 的方法
-        db.addToPlaylistByMusicId(playlistId, music.id)
-        added += 1
-      } else if (song.filePath) {
-        // 尝试通过 filePath 查找 music_id
-        const musicByPath = db.getAllMusicByPath(song.filePath)
-        if (musicByPath) {
-          db.addToPlaylistByMusicId(playlistId, musicByPath.id)
-        added += 1
-      } else {
-          // 如果找不到，记录为缺失
-          missing.push({
-            title: song.title,
-            artist: song.artist,
-            filePath: song.filePath,
-            fileHash: song.fileHash
-          })
-        }
-      } else {
-        missing.push({
-          title: song.title,
-          artist: song.artist,
-          filePath: song.filePath,
-          fileHash: song.fileHash
-        })
-      }
-    }
-
-    return {
-      playlistId,
-      added,
-      missing
-    }
-  })
-
   // 收藏（v1.0.6 使用 music_id）
   ipcMain.handle('toggle-favorite', async (_, musicId: number) => {
     if (!db) return false
@@ -971,11 +828,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
   })
 
   // 播放历史（v1.0.6 使用 music_id）
-  ipcMain.handle('get-play-history', () => {
-    if (!db) return []
-    return db.getRecentPlaysByMusicId()
-  })
-
   ipcMain.handle('get-recent-plays', (_, limit?: number) => {
     if (!db) return []
     return db.getRecentPlaysByMusicId(limit)
@@ -1218,12 +1070,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     }
 
     return result
-  })
-
-  // 重复音乐检测
-  ipcMain.handle('get-duplicate-groups', () => {
-    if (!db) return []
-    return db.getDuplicateGroups()
   })
 
   // ========== 歌词功能 ==========
@@ -1710,7 +1556,21 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     const music = db.getMusicById(musicId)
     if (!music) throw new Error('音乐不存在')
 
-    // 删除文件
+    // 仅允许删除已登记扫描目录下的文件
+    const dirs = db.getAllLocalMusicDirs()
+    const { resolve, normalize, sep } = await import('path')
+    const resolved = normalize(resolve(music.filePath))
+    const allowed = dirs.some((d) => {
+      if (!d.path) return false
+      const root = normalize(resolve(d.path))
+      const fileCmp = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+      const rootCmp = process.platform === 'win32' ? root.toLowerCase() : root
+      return fileCmp === rootCmp || fileCmp.startsWith(rootCmp.endsWith(sep) ? rootCmp : rootCmp + sep)
+    })
+    if (!allowed) {
+      throw new Error('文件不在已登记的扫描目录内，拒绝删除')
+    }
+
     const { unlink } = await import('fs/promises')
     try {
       await unlink(music.filePath)
@@ -1718,57 +1578,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
       throw new Error(`删除文件失败: ${error.message}`)
     }
 
-    // 从数据库删除
-    db.deleteMusic(musicId)
+    db.deleteAllMusic(musicId)
     return true
-  })
-
-  ipcMain.handle('clear-all-music', async () => {
-    if (!db) throw new Error('数据库未初始化')
-    db.clearAllMusic()
-    return true
-  })
-
-  // Excel导出
-  ipcMain.handle('export-music-to-excel', async (_, musicIds: number[], options?: any) => {
-    if (!db) throw new Error('数据库未初始化')
-
-    // 获取音乐列表
-    const musicList: any[] = []
-    for (const id of musicIds) {
-      const music = db.getMusicById(id)
-      if (music) musicList.push(music)
-    }
-
-    if (musicList.length === 0) {
-      throw new Error('没有可导出的音乐')
-    }
-
-    // 导出
-    const exporter = new ExcelExporter(db)
-    const result = await exporter.exportMusicList(musicList, options) as { type: string; data: any }
-
-    // 保存文件
-    const saveResult = await dialog.showSaveDialog(mainWindow, {
-      title: '保存Excel文件',
-      defaultPath: `音乐列表_${new Date().toISOString().slice(0, 10)}.${result.type === 'csv' ? 'csv' : 'xlsx'}`,
-      filters: [
-        { name: 'Excel文件', extensions: ['xlsx'] },
-        { name: 'CSV文件', extensions: ['csv'] }
-      ]
-    })
-
-    if (saveResult.canceled || !saveResult.filePath) {
-      return null
-    }
-
-    if (result.type === 'csv' || saveResult.filePath.endsWith('.csv')) {
-      writeFileSync(saveResult.filePath, result.data, 'utf8')
-    } else {
-      writeFileSync(saveResult.filePath, Buffer.from(result.data))
-    }
-
-    return saveResult.filePath
   })
 
   // 导出音乐文件
@@ -1803,27 +1614,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
 
     return exportResult
   })
-
-  // 文件监控
-  if (fileMonitor) {
-    ipcMain.handle('start-file-monitor', async (_, directoryPath: string, options?: any) => {
-      if (!fileMonitor) throw new Error('文件监控未初始化')
-      fileMonitor.watchDirectory(directoryPath, options)
-      return true
-    })
-
-    ipcMain.handle('stop-file-monitor', async (_, directoryPath: string) => {
-      if (!fileMonitor) throw new Error('文件监控未初始化')
-      fileMonitor.unwatchDirectory(directoryPath)
-      return true
-    })
-
-    ipcMain.handle('stop-all-file-monitors', async () => {
-      if (!fileMonitor) throw new Error('文件监控未初始化')
-      fileMonitor.stopAll()
-      return true
-    })
-  }
 
   // 快捷键管理
   if (shortcutManager) {
@@ -2029,25 +1819,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     // 监听托盘操作（通过webContents发送）
     mainWindow.webContents.on('did-finish-load', () => {
       // 这个事件监听器会在渲染进程发送消息时触发
-    })
-  }
-
-  // ========== 播放统计功能 ==========
-  if (db) {
-    ipcMain.handle('get-overall-statistics', () => {
-      return db.getOverallStatistics()
-    })
-
-    ipcMain.handle('get-top-played-songs', async (_, limit: number = 20) => {
-      return db.getTopPlayedSongs(limit)
-    })
-
-    ipcMain.handle('get-play-trend', async (_, days: number = 30) => {
-      return db.getPlayTrend(days)
-    })
-
-    ipcMain.handle('get-artist-statistics', async (_, limit: number = 20) => {
-      return db.getArtistStatistics(limit)
     })
   }
 

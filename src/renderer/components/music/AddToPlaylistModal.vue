@@ -168,16 +168,16 @@ const selectPlaylist = async (playlist: any) => {
       const musicIds = props.musicListToAd.map(m => m.id).filter((id): id is number => id !== undefined)
       progress.value = { current: 0, total: musicIds.length, added: 0, skipped: 0 }
 
-      // 监听进度更新
+      // 监听进度更新（必须用 on 返回的 handler 才能正确 off）
       const handleProgress = (_event: any, data: any) => {
         progress.value = data
       }
-      window.electronAPI.onBatchAddProgress(handleProgress)
+      const progressHandler = window.electronAPI.onBatchAddProgress(handleProgress)
 
       const result = await window.electronAPI.batchAddToPlaylist(playlist.id, musicIds)
 
       // 移除进度监听
-      window.electronAPI.offBatchAddProgress(handleProgress)
+      window.electronAPI.offBatchAddProgress(progressHandler)
 
       console.log(t('playlist.batchAddComplete', { added: result.added, skipped: result.skipped }))
 
