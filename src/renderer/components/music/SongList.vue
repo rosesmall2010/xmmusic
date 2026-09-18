@@ -241,7 +241,7 @@
     <AddToPlaylistModal
       v-model="showBatchAddToPlaylist"
       v-if="selectedSongs.size > 0"
-      :music-list-to-ad="Array.from(selectedSongs).map(filePath => props.songs.find(s => s.filePath === filePath)!).filter(Boolean)"
+      :music-list-to-ad="selectedMusicList"
       @added="handleBatchAddedToPlaylist"
     />
     <NewTagInfoModal
@@ -368,22 +368,12 @@ const visibleRange = computed(() => {
 })
 
 const visibleSongs = computed(() => {
-  // 保留原始对象引用，只添加 originalIndex 属性
-  // 这样当 music.favorite 或 music.inQueue 更新时，Vue 能够检测到变化
-  return props.songs.slice(visibleRange.value.start, visibleRange.value.end).map((song, index) => {
-    // 直接修改原始对象添加 originalIndex（如果还没有的话）
-    if (!('originalIndex' in song)) {
-      Object.defineProperty(song, 'originalIndex', {
-        value: visibleRange.value.start + index,
-        writable: true,
-        enumerable: true,
-        configurable: true
-      })
-    } else {
-      song.originalIndex = visibleRange.value.start + index
-    }
-    return song
-  })
+  // 不直接 mutate props.songs 里的原始对象（它们可能被 store/播放队列共享引用），
+  // originalIndex 只在本组件内用于展示序号，返回浅拷贝即可
+  return props.songs.slice(visibleRange.value.start, visibleRange.value.end).map((song, index) => ({
+    ...song,
+    originalIndex: visibleRange.value.start + index
+  }))
 })
 
 const totalHeight = computed(() => props.songs.length * itemHeight)
@@ -496,6 +486,19 @@ const batchSyncing = ref(false)
 const isAllSelected = computed(() => {
   return props.songs.length > 0 && selectedSongs.value.size === props.songs.length
 })
+
+// filePath -> 歌曲的查找表，避免批量加歌单时对整个 songs 数组做线性 .find()
+const songsByFilePath = computed(() => {
+  const map = new Map<string, MusicItem>()
+  for (const song of props.songs) map.set(song.filePath, song)
+  return map
+})
+
+const selectedMusicList = computed(() =>
+  Array.from(selectedSongs.value)
+    .map(filePath => songsByFilePath.value.get(filePath))
+    .filter((m): m is MusicItem => Boolean(m))
+)
 
 // 切换选择
 const toggleSelect = (filePath: string) => {

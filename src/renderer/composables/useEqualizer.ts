@@ -133,6 +133,7 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let settingsLoaded = false
 let loadSettingsPromise: Promise<void> | null = null
 let didBindLoadApply = false
+let didBindGainsWatch = false
 
 const EQ_LOCAL_KEY = 'xmmusic-equalizer'
 
@@ -679,16 +680,22 @@ export function useEqualizer() {
     })
   }
 
-  // 监听增益变化（用于拖动滑块时的实时应用，但不频繁保存，保存由 setGain 触发）
-  watch(gains, () => {
-    if (enabled.value) applyGains()
-  }, { deep: true })
+  // 监听增益变化/启用状态：enabled/gains 是模块级单例，watch 只需注册一次，
+  // 否则每个调用 useEqualizer() 的组件都会叠加一份重复 watcher
+  if (!didBindGainsWatch) {
+    didBindGainsWatch = true
 
-  // 监听启用状态：开启时若尚未接管则主动挂图；已接管则重路由
-  watch(enabled, (on) => {
-    if (!on) return
-    ensureCapturedForEq()
-  })
+    // 监听增益变化（用于拖动滑块时的实时应用，但不频繁保存，保存由 setGain 触发）
+    watch(gains, () => {
+      if (enabled.value) applyGains()
+    }, { deep: true })
+
+    // 监听启用状态：开启时若尚未接管则主动挂图；已接管则重路由
+    watch(enabled, (on) => {
+      if (!on) return
+      ensureCapturedForEq()
+    })
+  }
 
   /**
    * 获取频谱数据（0-255），用于可视化特效

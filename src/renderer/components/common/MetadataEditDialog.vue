@@ -93,6 +93,10 @@
         <div class="loading-content">
           <div class="spinner"></div>
           <p>{{ loadingText }}</p>
+          <div v-if="progress" class="progress-bar">
+            <div class="progress-fill" :style="{ width: `${(progress.current / progress.total) * 100}%` }"></div>
+          </div>
+          <p v-if="progress" class="progress-text">{{ progress.current }}/{{ progress.total }}</p>
         </div>
       </div>
 
@@ -146,6 +150,7 @@ const coverPreview = ref<string | null>(null)
 const coverPath = ref<string | null>(null)
 const loading = ref(false)
 const loadingText = ref('')
+const progress = ref<{ current: number; total: number } | null>(null)
 
 const hasChanges = computed(() => {
   return !!(
@@ -272,6 +277,7 @@ const save = async () => {
     if (isBatch.value) {
       // 批量更新
       loadingText.value = t('metadataEdit.updating', { count: props.musicIds.length })
+      window.electronAPI.onBatchUpdateMetadataProgress(p => { progress.value = p })
       const result = await window.electronAPI.batchUpdateMusicMetadata(props.musicIds, updates)
 
       if (result.failed > 0) {
@@ -295,6 +301,8 @@ const save = async () => {
   } finally {
     loading.value = false
     loadingText.value = ''
+    progress.value = null
+    window.electronAPI.removeBatchUpdateMetadataProgress()
   }
 }
 
@@ -474,6 +482,25 @@ const close = () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.progress-bar {
+  width: 200px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: white;
+  transition: width 0.2s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .dialog-actions {

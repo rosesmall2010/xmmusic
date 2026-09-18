@@ -228,6 +228,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeID3FixProgress: () => {
     ipcRenderer.removeAllListeners('id3-fix-progress')
   },
+  onBatchUpdateMetadataProgress: (callback: (progress: { current: number; total: number }) => void) => {
+    ipcRenderer.on('batch-update-metadata-progress', (_, progress) => callback(progress))
+  },
+  removeBatchUpdateMetadataProgress: () => {
+    ipcRenderer.removeAllListeners('batch-update-metadata-progress')
+  },
   onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => {
     const handler = (_: any, progress: any) => callback(_, progress)
     ipcRenderer.on('batch-add-progress', handler)

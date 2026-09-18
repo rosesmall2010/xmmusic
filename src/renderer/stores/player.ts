@@ -29,17 +29,21 @@ export const usePlayerStore = defineStore('player', () => {
 
   // 添加到队列
   function addToQueue(music: MusicItem, position?: number) {
+    const next = [...queue.value]
     if (position !== undefined) {
-      queue.value.splice(position, 0, music)
+      next.splice(position, 0, music)
     } else {
-      queue.value.push(music)
+      next.push(music)
     }
+    queue.value = next
   }
 
   // 从队列移除
   function removeFromQueue(index: number) {
     if (index >= 0 && index < queue.value.length) {
-      queue.value.splice(index, 1)
+      const next = [...queue.value]
+      next.splice(index, 1)
+      queue.value = next
       // 调整当前索引
       if (currentQueueIndex.value === index) {
         currentQueueIndex.value = -1
@@ -57,10 +61,12 @@ export const usePlayerStore = defineStore('player', () => {
 
   // 随机排序队列
   function shuffleQueue() {
-    for (let i = queue.value.length - 1; i > 0; i--) {
+    const next = [...queue.value]
+    for (let i = next.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [queue.value[i], queue.value[j]] = [queue.value[j], queue.value[i]]
+      [next[i], next[j]] = [next[j], next[i]]
     }
+    queue.value = next
     // 重置当前索引
     currentQueueIndex.value = -1
   }
@@ -69,8 +75,10 @@ export const usePlayerStore = defineStore('player', () => {
   function moveInQueue(fromIndex: number, toIndex: number) {
     if (fromIndex >= 0 && fromIndex < queue.value.length &&
         toIndex >= 0 && toIndex < queue.value.length) {
-      const [item] = queue.value.splice(fromIndex, 1)
-      queue.value.splice(toIndex, 0, item)
+      const next = [...queue.value]
+      const [item] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, item)
+      queue.value = next
 
       // 更新当前索引
       if (currentQueueIndex.value === fromIndex) {
@@ -456,7 +464,8 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   // 队列结构变化（播放全部/增删/清空/拖拽排序/元数据更新）才需要保存整条队列
-  watch(queue, scheduleQueuePersist, { deep: true })
+  // 上面的队列操作都已改成整体重新赋值（不再原地 splice/交换），watch 不需要 deep 就能感知变化
+  watch(queue, scheduleQueuePersist)
 
   // 仅在队列下标 / 模式 / 音量变化时保存偏好（不跟播放进度、isPlaying）
   watch(

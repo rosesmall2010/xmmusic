@@ -184,7 +184,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
       mainWindow.setSize(MINI_WIDTH, MINI_HEIGHT, true)
       mainWindow.setAlwaysOnTop(true)
 
-      // 添加事件监听器
+      // 添加事件监听器（先移除，避免重复调用 enabled=true 时监听器叠加）
+      mainWindow.removeListener('resize', handleWindowResize)
+      mainWindow.removeListener('move', handleWindowMove)
       mainWindow.on('resize', handleWindowResize)
       mainWindow.on('move', handleWindowMove)
     } else {
@@ -1856,7 +1858,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     }
   })
 
-  ipcMain.handle('batch-update-music-metadata', async (_, musicIds: number[], updates: any, onProgress?: (current: number, total: number) => void) => {
+  ipcMain.handle('batch-update-music-metadata', async (_, musicIds: number[], updates: any) => {
     if (!db) throw new Error('数据库未初始化')
 
     const filePaths: string[] = []
@@ -1873,7 +1875,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
 
     try {
       // 批量更新文件中的 ID3 标签
-      const result = await metadataEditor.batchUpdateMetadata(filePaths, updates, onProgress)
+      const result = await metadataEditor.batchUpdateMetadata(filePaths, updates, (current, total) => {
+        mainWindow.webContents.send('batch-update-metadata-progress', { current, total })
+      })
 
       // 更新数据库（使用 all_music 表）
       const dbUpdates: any = {}

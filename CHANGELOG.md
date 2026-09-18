@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.5] - 2026-09-18
+
+### 修复
+- 代码审查中优先级问题（详见 [docs/1.2.4/代码审查-缺陷与性能问题.md](docs/1.2.4/代码审查-缺陷与性能问题.md) M1-M11）：删除音乐后歌单统计不同步；`updatePlaylistOrder` 补事务包裹；`advancedSearch` 目录过滤 LIKE 转义补 `ESCAPE` 子句使其生效；路径 Unicode 归一化为 NFC，修复 macOS NFD 分解形式路径被误判为新目录重复扫描；批量编辑元数据补上真实进度推送与进度条；迷你模式重复启用不再叠加窗口事件监听器；播放队列改为整体重新赋值风格并去掉 `deep: true` 全量遍历；`useEqualizer` 的 watch 补单例去重；本地音乐列表批量加歌单查找改用 Map 缓存；`visibleSongs` 不再 mutate 共享的歌曲对象；顶栏主题图标补上系统深浅色切换的实时响应
+
 ## [1.2.4] - 2026-09-17
 
 ### 新增

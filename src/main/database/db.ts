@@ -768,10 +768,20 @@ export default class MusicDatabase {
 
   /**
    * 删除音乐记录
+   * playlist_item 靠外键 ON DELETE CASCADE 自动清理，但 playlist.song_count/total_duration
+   * 是应用层维护的冗余字段，删除后要主动重算受影响的歌单统计
    */
   deleteAllMusic(id: number): void {
-    const stmt = this.db!.prepare('DELETE FROM all_music WHERE id = ?')
-    stmt.run(id)
+    const run = this.db!.transaction(() => {
+      const affected = this.db!
+        .prepare('SELECT DISTINCT playlist_id FROM playlist_item WHERE music_id = ?')
+        .all(id) as Array<{ playlist_id: number }>
+      this.db!.prepare('DELETE FROM all_music WHERE id = ?').run(id)
+      for (const { playlist_id } of affected) {
+        this.updatePlaylistStats(playlist_id)
+      }
+    })
+    run()
   }
 
   /**
@@ -1292,9 +1302,10 @@ export default class MusicDatabase {
     }
 
     if (criteria.directory) {
-      // 使用 music_dir 表进行目录过滤
-      const dirPattern = `${criteria.directory.replace(/%/g, '\\%')}%`
-      conditions.push('md.path LIKE ?')
+      // 使用 music_dir 表进行目录过滤；LIKE 需要显式 ESCAPE 子句才会识别转义字符
+      const escaped = criteria.directory.replace(/[\\%_]/g, '\\$&')
+      const dirPattern = `${escaped}%`
+      conditions.push("md.path LIKE ? ESCAPE '\\'")
       params.push(dirPattern)
     }
 
@@ -1409,9 +1420,12 @@ export default class MusicDatabase {
 
   updatePlaylistOrder(playlistIds: number[]): void {
     const stmt = this.db!.prepare('UPDATE playlist SET display_order = ? WHERE id = ?')
-    playlistIds.forEach((id, index) => {
-      stmt.run(index, id)
+    const run = this.db!.transaction((ids: number[]) => {
+      ids.forEach((id, index) => {
+        stmt.run(index, id)
+      })
     })
+    run(playlistIds)
   }
 
   getPlaylistById(id: number): Playlist | null {

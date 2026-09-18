@@ -43,6 +43,15 @@ describe('normalizePath', () => {
     expect(normalizePath('\\\\server\\share\\Music\\', 'win32')).toBe('//server/share/Music')
     expect(normalizePath('\\\\NAS\\\\Music', 'win32')).toBe('//NAS/Music')
   })
+
+  it('应该把 NFD 分解形式归一化为 NFC，使同一目录名产生一致结果', () => {
+    // 用 \u 转义构造两种字节形式，避免源码里字面重音字符本身被编辑器归一化：
+    // NFC：单个 e-acute 码点 U+00E9；NFD：字母 e (U+0065) + 组合重音符 U+0301
+    const nfc = '/Users/name/Music/caf\u00E9'
+    const nfd = '/Users/name/Music/cafe\u0301'
+    expect(nfc).not.toBe(nfd)
+    expect(normalizePath(nfd, 'darwin')).toBe(normalizePath(nfc, 'darwin'))
+  })
 })
 
 describe('buildFullPath', () => {

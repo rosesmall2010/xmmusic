@@ -158,6 +158,8 @@ export interface ElectronAPI {
   removeScanStateChanged: () => void
   onID3FixProgress: (callback: (progress: { current: number; total: number }) => void) => void
   removeID3FixProgress: () => void
+  onBatchUpdateMetadataProgress: (callback: (progress: { current: number; total: number }) => void) => void
+  removeBatchUpdateMetadataProgress: () => void
   onBatchAddProgress: (callback: (event: any, progress: { current: number; total: number; added: number; skipped: number }) => void) => any
   offBatchAddProgress: (handler: any) => void
   onShortcutAction: (callback: (action: string) => void) => void

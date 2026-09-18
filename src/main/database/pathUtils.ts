@@ -44,6 +44,10 @@ export function normalizePath(
   const body = isUNC ? path.slice(2) : path
   path = (isUNC ? '//' : '') + body.replace(/[/\\]+/g, '/')
 
+  // Unicode 归一化为 NFC：macOS 经 Finder 移动/重命名的文件路径可能是 NFD 分解形式，
+  // 视觉上和数据库里已有的 NFC 记录一样，但字节不同，不归一化会被当成新目录重复扫描
+  path = path.normalize('NFC')
+
   // 去除末尾分隔符（但保留根路径的单个斜杠）
   if (path.length > 1 && path.endsWith('/')) {
     path = path.slice(0, -1)

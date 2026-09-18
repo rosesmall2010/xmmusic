@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
@@ -124,10 +124,19 @@ const historyLabel = (item: any) => {
   if (typeof item === 'string') return item
   return item.query || item.keyword || ''
 }
+// 系统深色/浅色偏好：订阅 change 事件，system 模式下运行时切换系统主题才能实时刷新
+const systemPrefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+const systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+const onSystemThemeChange = (e: MediaQueryListEvent) => {
+  systemPrefersDark.value = e.matches
+}
+systemThemeQuery.addEventListener('change', onSystemThemeChange)
+onUnmounted(() => systemThemeQuery.removeEventListener('change', onSystemThemeChange))
+
 // 当前生效的主题（把 system 解析为实际的 light/dark），来源统一为 settingsStore
 const theme = computed<'light' | 'dark'>(() => {
   if (settingsStore.theme === 'system') {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    return systemPrefersDark.value ? 'dark' : 'light'
   }
   return settingsStore.theme
 })
