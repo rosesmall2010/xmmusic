@@ -399,7 +399,7 @@ export default class MusicDatabase {
     return rows.map((row) => {
       const fullPath = buildPathFromMusicRecord(
         this.db!,
-        { dir_id: row.dir_id, file_name: row.file_name },
+        { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path },
         process.platform
       )
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
@@ -456,8 +456,9 @@ export default class MusicDatabase {
         )
       LIMIT ?
     `)
-    const like = `%${q}%`
-    const rows = stmt.all(like, like, limit) as any[]
+    // 前缀匹配（而非两端通配），让 idx_all_music_search_pinyin/search_initials 索引生效
+    const prefix = `${q}%`
+    const rows = stmt.all(prefix, prefix, limit) as any[]
     return this.mapSearchResultRows(rows)
   }
 
@@ -511,6 +512,14 @@ export default class MusicDatabase {
   }
 
   // ========== all_music 表操作（v1.0.6 新架构） ==========
+
+  /**
+   * 在一个事务里执行一批写操作（供扫描等场景批量提交，避免逐条隐式事务）
+   */
+  runInTransaction<T>(fn: () => T): T {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db.transaction(fn)()
+  }
 
   /**
    * 插入音乐记录（使用 dir_id + file_name）
@@ -615,7 +624,7 @@ export default class MusicDatabase {
     }
 
     // 构建完整路径
-    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
 
     return this.mapAllMusicRowToMusicItem(row, fullPath)
   }
@@ -648,7 +657,7 @@ export default class MusicDatabase {
       return null
     }
 
-    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+    const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
 
     return this.mapAllMusicRowToMusicItem(row, fullPath)
   }
@@ -1102,8 +1111,9 @@ export default class MusicDatabase {
    */
   getMusicWithoutLyrics(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
-      SELECT am.*
+      SELECT am.*, md.path as dir_path
       FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
         AND (am.lyrics_path IS NULL OR am.lyrics_path = '')
       ORDER BY am.id ASC
@@ -1111,7 +1121,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       return musicItem as MusicItem
     })
@@ -1122,8 +1132,9 @@ export default class MusicDatabase {
    */
   getMusicWithClaimedLyricsPath(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
-      SELECT am.*
+      SELECT am.*, md.path as dir_path
       FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
         AND am.lyrics_path IS NOT NULL
         AND am.lyrics_path != ''
@@ -1132,7 +1143,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       return musicItem as MusicItem
     })
@@ -1167,8 +1178,9 @@ export default class MusicDatabase {
   /** 分页取无封面歌曲（cover_path 为空） */
   getMusicWithoutCover(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
-      SELECT am.*
+      SELECT am.*, md.path as dir_path
       FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
         AND am.is_exists = 1
         AND (am.cover_path IS NULL OR am.cover_path = '')
@@ -1177,7 +1189,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       return musicItem as MusicItem
     })
@@ -1186,8 +1198,9 @@ export default class MusicDatabase {
   /** 分页取「声称有封面路径」的歌曲（筛路径失效） */
   getMusicWithClaimedCoverPath(offset: number, limit: number): MusicItem[] {
     const stmt = this.db!.prepare(`
-      SELECT am.*
+      SELECT am.*, md.path as dir_path
       FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
         AND am.is_exists = 1
         AND am.cover_path IS NOT NULL
@@ -1197,7 +1210,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       return musicItem as MusicItem
     })
@@ -1337,7 +1350,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(...params, limit) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -1356,7 +1369,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(hash) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       return this.mapAllMusicRowToMusicItem(row, fullPath)
     })
   }
@@ -1373,7 +1386,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(genre) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       return this.mapAllMusicRowToMusicItem(row, fullPath)
     })
   }
@@ -1571,7 +1584,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       return this.mapAllMusicRowToMusicItem(row, fullPath)
     })
   }
@@ -1610,7 +1623,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all() as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -1703,7 +1716,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(playlistId) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -1785,7 +1798,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -1836,7 +1849,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all() as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -1879,7 +1892,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       musicItem.favorite = row.is_favorite === 1
       musicItem.inQueue = row.in_queue === 1
@@ -2998,7 +3011,7 @@ export default class MusicDatabase {
     `)
     const rows = stmt.all(limit, offset) as any[]
     return rows.map(row => {
-      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name }, process.platform)
+      const fullPath = buildPathFromMusicRecord(this.db!, { dir_id: row.dir_id, file_name: row.file_name, dir_path: row.dir_path }, process.platform)
       const { fullPath: _, ...musicItem } = this.mapAllMusicRowToMusicItem(row, fullPath)
       // 添加收藏和队列状态
       musicItem.favorite = row.is_favorite === 1

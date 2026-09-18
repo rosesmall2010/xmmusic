@@ -38,6 +38,11 @@ describe('normalizePath', () => {
     expect(normalizePath('/Users//name///Music', 'darwin')).toBe('/Users/name/Music')
     expect(normalizePath('C:\\\\Users\\\\Music', 'win32')).toBe('C:/Users/Music')
   })
+
+  it('应该保留 UNC 网络路径的双斜杠前缀', () => {
+    expect(normalizePath('\\\\server\\share\\Music\\', 'win32')).toBe('//server/share/Music')
+    expect(normalizePath('\\\\NAS\\\\Music', 'win32')).toBe('//NAS/Music')
+  })
 })
 
 describe('buildFullPath', () => {
@@ -58,6 +63,10 @@ describe('buildFullPath', () => {
     const result = buildFullPath('C:/Music', '/song.mp3', 'win32')
     expect(result).toContain('song.mp3')
     expect(result).toContain('C:')
+  })
+
+  it('应该正确拼接 UNC 网络路径的文件名', () => {
+    expect(buildFullPath('//server/share/Music', 'song.mp3', 'win32')).toBe('//server/share/Music\\song.mp3')
   })
 })
 

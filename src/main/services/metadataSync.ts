@@ -320,6 +320,9 @@ export async function batchSyncMusicMetadataToDb(
         error: error?.message || String(error)
       })
     }
+
+    // 让出事件循环，避免连续同步 IO 阻塞主进程
+    await new Promise<void>(resolve => setImmediate(resolve))
   }
 
   return result

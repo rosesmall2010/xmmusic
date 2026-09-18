@@ -60,6 +60,14 @@ class ScanManager {
   }
 
   /**
+   * 供 scan-music-folder 等独立扫描入口注册/清空当前扫描器，
+   * 使通用的暂停/取消能转发到真正在跑的扫描器实例
+   */
+  setScanner(scanner: FileScanner | null): void {
+    this.currentScanner = scanner
+  }
+
+  /**
    * 开始扫描（v1.0.6 更新：扫描所有配置的目录）
    */
   async startScan(options: {

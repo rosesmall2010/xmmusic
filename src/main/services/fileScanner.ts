@@ -57,6 +57,8 @@ export default class FileScanner {
   private activeTasks: number = 0
   private isPaused: boolean = false
   private isCancelled: boolean = false
+  /** 扫描期间待写入的 DB 操作队列，攒够一批后在一个事务里统一提交 */
+  private pendingWrites: Array<() => void> = []
 
   constructor(db: MusicDatabase) {
     this.db = db
@@ -68,6 +70,15 @@ export default class FileScanner {
 
   setCancelled(cancelled: boolean): void {
     this.isCancelled = cancelled
+  }
+
+  /** 把队列里积压的写入任务放进一个事务里批量提交 */
+  private flushPendingWrites(): void {
+    if (this.pendingWrites.length === 0) return
+    const jobs = this.pendingWrites.splice(0)
+    this.db.runInTransaction(() => {
+      jobs.forEach(job => job())
+    })
   }
 
   /**
@@ -303,8 +314,9 @@ export default class FileScanner {
           result.skipped++
         }
         processedCount++
-        // 定期执行 checkpoint，确保数据及时持久化
+        // 定期把积压的写入批量落盘，并执行 checkpoint 确保数据及时持久化
         if (processedCount % CHECKPOINT_INTERVAL === 0) {
+          this.flushPendingWrites()
           try {
             this.db.getDatabase().pragma('wal_checkpoint(PASSIVE)')
           } catch (e) {
@@ -327,6 +339,8 @@ export default class FileScanner {
       // 并发执行
       await this.executeWithConcurrency(tasks)
     } catch (error: any) {
+      // 取消/异常退出前，先把已处理但还未落盘的写入批量提交，避免丢失
+      this.flushPendingWrites()
       if (error.message === '扫描已取消') {
         // 非递归扫描：如果中途取消，尽量把“仍存在的文件”置回 is_exists=1，避免全部变成不存在
         if (!options.recursive && rootDirId) {
@@ -365,6 +379,9 @@ export default class FileScanner {
         throw error
       }
     }
+
+    // 正常扫描完成：把剩余未落盘的写入批量提交
+    this.flushPendingWrites()
 
     // 3.2 扫描结束后：同步该根目录下的缺失文件状态（is_exists）
     // 规则：对 scannedDirIds（数据库中属于该根目录的目录）逐个更新：
@@ -517,20 +534,25 @@ export default class FileScanner {
         const existingMusic = db.prepare('SELECT * FROM all_music WHERE id = ?').get(existing.id) as any
 
         // 如果文件大小或修改时间变化，可能需要重新扫描
-        if (options.forceRescan ||
-            existingMusic.file_size !== fileStat.size ||
-            existingMusic.updated_at < fileStat.mtime.toISOString()) {
-          // 重新扫描（这里简化处理，只更新文件大小）
-          this.db.updateAllMusic(existing.id, {
-            file_size: fileStat.size,
-            is_exists: 1
-          })
-        }
+        const needsUpdate = options.forceRescan ||
+          existingMusic.file_size !== fileStat.size ||
+          existingMusic.updated_at < fileStat.mtime.toISOString()
 
-        // 确保在 local_music 列表中
-        if (!this.db.isInLocalMusicByMusicId(existing.id)) {
-          this.db.addToLocalMusicByMusicId(existing.id)
-        }
+        // 写入延后到批量事务里提交，这里只入队
+        this.pendingWrites.push(() => {
+          if (needsUpdate) {
+            // 重新扫描（这里简化处理，只更新文件大小）
+            this.db.updateAllMusic(existing.id, {
+              file_size: fileStat.size,
+              is_exists: 1
+            })
+          }
+
+          // 确保在 local_music 列表中
+          if (!this.db.isInLocalMusicByMusicId(existing.id)) {
+            this.db.addToLocalMusicByMusicId(existing.id)
+          }
+        })
 
         return { success: false, corrupted: false }
       }
@@ -549,33 +571,35 @@ export default class FileScanner {
       // 6. 检测文件是否损坏
       const isCorrupted = await this.detectCorruptedFile(filePath)
       if (isCorrupted) {
-        // 插入损坏文件记录
-        const musicId = this.db.insertAllMusic({
-          dir_id: dirId,
-          file_name: fileName,
-          title: fileName.replace(/\.[^/.]+$/, ''),
-          artist: '未知艺术家',
-          album: null,
-          year: null,
-          genre: null,
-          file_size: 0,
-          file_hash: fileHash,
-          file_extension: extname(fileName).toLowerCase(),
-          duration: null,
-          bitrate: null,
-          sample_rate: null,
-          channels: null,
-          cover_path: null,
-          lyrics_path: null,
-          is_exists: isExists ? 1 : 0,
-          is_playable: 0,
-          play_error_reason: '文件损坏',
-          play_count: 0,
-          last_played_at: null,
-          is_corrupted: 1,
-          is_duplicate: 0
+        // 插入损坏文件记录（入队，批量提交）
+        this.pendingWrites.push(() => {
+          this.db.insertAllMusic({
+            dir_id: dirId,
+            file_name: fileName,
+            title: fileName.replace(/\.[^/.]+$/, ''),
+            artist: '未知艺术家',
+            album: null,
+            year: null,
+            genre: null,
+            file_size: 0,
+            file_hash: fileHash,
+            file_extension: extname(fileName).toLowerCase(),
+            duration: null,
+            bitrate: null,
+            sample_rate: null,
+            channels: null,
+            cover_path: null,
+            lyrics_path: null,
+            is_exists: isExists ? 1 : 0,
+            is_playable: 0,
+            play_error_reason: '文件损坏',
+            play_count: 0,
+            last_played_at: null,
+            is_corrupted: 1,
+            is_duplicate: 0
+          })
         })
-        return { success: false, corrupted: true, musicId }
+        return { success: false, corrupted: true }
       }
 
       // 7. 解析元数据
@@ -584,38 +608,40 @@ export default class FileScanner {
       // 8. 获取文件信息
       const fileStat = await stat(filePath)
 
-      // 9. 插入 all_music 记录
-      const musicId = this.db.insertAllMusic({
-        dir_id: dirId,
-        file_name: fileName,
-        title: metadata.title || fileName.replace(/\.[^/.]+$/, ''),
-        artist: metadata.artist || '未知艺术家',
-        album: metadata.album || null,
-        year: metadata.year || null,
-        genre: metadata.genre || null,
-        file_size: fileStat.size,
-        file_hash: fileHash,
-        file_extension: extname(fileName).toLowerCase(),
-        duration: metadata.duration || null,
-        bitrate: metadata.bitrate || null,
-        sample_rate: metadata.sampleRate || null,
-        channels: metadata.channels || null,
-        cover_path: metadata.coverPath || null,
-        // VBR 信息暂时不存储到数据库，只在解析时使用
-        lyrics_path: null,
-        is_exists: isExists ? 1 : 0,
-        is_playable: 1,
-        play_error_reason: null,
-        play_count: 0,
-        last_played_at: null,
-        is_corrupted: 0,
-        is_duplicate: 0
+      // 9+10. 插入 all_music 记录并加入 local_music 列表（同一批事务里提交）
+      this.pendingWrites.push(() => {
+        const musicId = this.db.insertAllMusic({
+          dir_id: dirId,
+          file_name: fileName,
+          title: metadata.title || fileName.replace(/\.[^/.]+$/, ''),
+          artist: metadata.artist || '未知艺术家',
+          album: metadata.album || null,
+          year: metadata.year || null,
+          genre: metadata.genre || null,
+          file_size: fileStat.size,
+          file_hash: fileHash,
+          file_extension: extname(fileName).toLowerCase(),
+          duration: metadata.duration || null,
+          bitrate: metadata.bitrate || null,
+          sample_rate: metadata.sampleRate || null,
+          channels: metadata.channels || null,
+          cover_path: metadata.coverPath || null,
+          // VBR 信息暂时不存储到数据库，只在解析时使用
+          lyrics_path: null,
+          is_exists: isExists ? 1 : 0,
+          is_playable: 1,
+          play_error_reason: null,
+          play_count: 0,
+          last_played_at: null,
+          is_corrupted: 0,
+          is_duplicate: 0
+        })
+
+        // 添加到 local_music 列表
+        this.db.addToLocalMusicByMusicId(musicId)
       })
 
-      // 10. 添加到 local_music 列表
-      this.db.addToLocalMusicByMusicId(musicId)
-
-      return { success: true, corrupted: false, musicId }
+      return { success: true, corrupted: false }
     } catch (error: any) {
       throw error
     }

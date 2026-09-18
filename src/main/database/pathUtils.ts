@@ -38,8 +38,11 @@ export function normalizePath(
     path = path.replace(/\\/g, '/')
   }
 
-  // 处理多个连续分隔符
-  path = path.replace(/[/\\]+/g, '/')
+  // UNC 路径（\\server\share\...）转换后开头是双斜杠，这是语义前缀，
+  // 坍缩连续分隔符时要保留，否则会退化成非法的单斜杠路径
+  const isUNC = path.startsWith('//')
+  const body = isUNC ? path.slice(2) : path
+  path = (isUNC ? '//' : '') + body.replace(/[/\\]+/g, '/')
 
   // 去除末尾分隔符（但保留根路径的单个斜杠）
   if (path.length > 1 && path.endsWith('/')) {
@@ -249,9 +252,14 @@ export function batchGetOrCreateMusicDir(
  */
 export function buildPathFromMusicRecord(
   db: Database,
-  musicRecord: { dir_id: number; file_name: string },
+  musicRecord: { dir_id: number; file_name: string; dir_path?: string },
   platform: NodeJS.Platform = process.platform
 ): string {
+  // 调用方如果已经 JOIN 出了 dir_path，直接用，避免逐行重新查库（N+1）
+  if (musicRecord.dir_path) {
+    return buildFullPath(musicRecord.dir_path, musicRecord.file_name, platform)
+  }
+
   // 查询目录路径
   const dirStmt = db.prepare('SELECT path FROM music_dir WHERE id = ?')
   const dir = dirStmt.get(musicRecord.dir_id) as { path: string } | undefined

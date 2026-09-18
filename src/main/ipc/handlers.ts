@@ -428,6 +428,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
 
     // 创建新的扫描器
     currentScanner = new FileScanner(db)
+    // 注册到 scanManager，使通用的暂停/取消 IPC 能转发到这个实际在跑的扫描器
+    scanManager.setScanner(currentScanner)
     scanManager.setScanning(true)
     scanManager.setCancelled(false)
 
@@ -449,10 +451,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
 
       scanManager.setScanning(false)
       currentScanner = null
+      scanManager.setScanner(null)
       return result
     } catch (error: any) {
       scanManager.setScanning(false)
       currentScanner = null
+      scanManager.setScanner(null)
       if (error.message === '扫描已取消') {
         throw error
       }

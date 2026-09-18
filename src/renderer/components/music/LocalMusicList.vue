@@ -423,7 +423,7 @@ onMounted(async () => {
   })
 
   // 监听扫描状态变化
-  window.electronAPI.onScanStateChanged((state) => {
+  window.electronAPI.onScanStateChanged((state: { isScanning: boolean; isPaused: boolean }) => {
     isScanning.value = state.isScanning
     if (!state.isScanning) {
       scanProgress.value = null
@@ -431,11 +431,28 @@ onMounted(async () => {
       musicStore.loadMusic(0, 20, true)
     }
   })
+
+  // 监听后端事件
+  unsubMusicUpdated = window.electronAPI.on('music-updated', async (_event: any, filePath: string) => {
+    const index = musicStore.musicList.findIndex(m => m.filePath === filePath)
+    if (index !== -1) {
+      await musicStore.loadMusic(0, 20, true)
+      startBackgroundLoading()
+    }
+  })
+
+  unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', async () => {
+    await musicStore.loadMusic(0, 20, true)
+    startBackgroundLoading()
+    await refreshMissingCoverCount()
+  })
 })
 
 onUnmounted(() => {
   stopBackgroundLoading()
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
+  unsubMusicUpdated?.()
+  unsubMusicListRefresh?.()
   window.electronAPI.removeScanProgress()
   window.electronAPI.removeScanStateChanged()
   // 不移除 lyrics-match 监听：由 lyricsMatchStore 跨路由持有
@@ -461,42 +478,6 @@ const startBackgroundLoading = async () => {
 const stopBackgroundLoading = () => {
   backgroundLoadToken += 1
 }
-
-// 监听后端事件
-onMounted(() => {
-  unsubMusicUpdated = window.electronAPI.on('music-updated', async (_event: any, filePath: string) => {
-    const index = musicStore.musicList.findIndex(m => m.filePath === filePath)
-    if (index !== -1) {
-      await musicStore.loadMusic(0, 20, true)
-      startBackgroundLoading()
-    }
-  })
-
-  unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', async () => {
-    await musicStore.loadMusic(0, 20, true)
-    startBackgroundLoading()
-    await refreshMissingCoverCount()
-  })
-
-  window.electronAPI.onScanProgress((progress) => {
-    scanProgress.value = progress
-  })
-
-  window.electronAPI.onScanStateChanged((state: any) => {
-    const status = typeof state === 'string' ? state : state?.status
-    isScanning.value = status === 'scanning'
-    if (!isScanning.value) {
-      scanProgress.value = null
-    }
-  })
-})
-
-onUnmounted(() => {
-  unsubMusicUpdated?.()
-  unsubMusicListRefresh?.()
-  window.electronAPI.removeScanProgress()
-  window.electronAPI.removeScanStateChanged()
-})
 
 const loadMore = async () => {
   // This is now handled by background loading, but we keep it for manual trigger if needed
