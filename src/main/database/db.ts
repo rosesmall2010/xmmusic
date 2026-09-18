@@ -1,7 +1,7 @@
-import Database from './sqlite3-sync'
+import Database, { Statement } from './sqlite3-sync'
 import { app } from 'electron'
 import { join, dirname } from 'path'
-import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync, access, accessSync, constants } from 'fs'
+import { readFileSync, existsSync, copyFile, unlinkSync, access, accessSync, constants } from 'fs'
 import { promisify } from 'util'
 import { createHash } from 'crypto'
 import type {
@@ -34,6 +34,18 @@ export function calculateFilePathMD5(filePath: string): string {
 export default class MusicDatabase {
   private static instance: MusicDatabase
   private db: Database | null = null
+  /** 热点路径 Prepared Statement 缓存（按 SQL 文本为 key），避免重复编译 */
+  private preparedStatementCache = new Map<string, Statement>()
+
+  /** 从缓存取 Prepared Statement，未命中则编译并缓存（仅用于确认的高频热点路径） */
+  prepareCached(sql: string): Statement {
+    let stmt = this.preparedStatementCache.get(sql)
+    if (!stmt) {
+      stmt = this.db!.prepare(sql)
+      this.preparedStatementCache.set(sql, stmt)
+    }
+    return stmt
+  }
 
   static getInstance(): MusicDatabase {
     if (!MusicDatabase.instance) {
@@ -43,6 +55,8 @@ export default class MusicDatabase {
   }
 
   initialize(dbPath?: string, skipVersionCheck: boolean = false): void {
+    // 数据库连接可能被重新创建（如 schema 错误重置），缓存的 Statement 绑定旧连接会失效
+    this.preparedStatementCache.clear()
     try {
       // 根据环境变量选择数据库文件名
       // 注意：main.ts 中已经设置了开发模式的 userData 路径（添加了 -dev 后缀）
@@ -790,7 +804,7 @@ export default class MusicDatabase {
    * 最后重算受影响歌单的 song_count / total_duration。
    * 大列表按批处理 IN 参数，避免触及 SQLite 变量上限。
    */
-  cleanupMissingLocalMusic(): {
+  async cleanupMissingLocalMusic(): Promise<{
     checked: number
     removed: number
     playlistsUpdated: number
@@ -806,7 +820,7 @@ export default class MusicDatabase {
     skippedUnreachable: number
     /** 路径存在但无读取权限等，跳过不删 */
     skippedInaccessible: number
-  } {
+  }> {
     if (!this.db) {
       throw new Error('数据库未初始化')
     }
@@ -855,6 +869,9 @@ export default class MusicDatabase {
     }
 
     for (const row of rows) {
+      // 让出事件循环，避免大库下连续同步文件系统访问阻塞主进程
+      await new Promise<void>(resolve => setImmediate(resolve))
+
       if (!isDirReachable(row.dir_id)) {
         skippedUnreachable++
         continue
@@ -1093,7 +1110,7 @@ export default class MusicDatabase {
    * 统计无歌词（或歌词文件已丢失）的歌曲数
    * 空路径用 SQL；路径失效需回磁盘核对
    */
-  getMusicWithoutLyricsCount(): number {
+  async getMusicWithoutLyricsCount(): Promise<number> {
     const emptyStmt = this.db!.prepare(`
       SELECT COUNT(*) as count FROM all_music
       WHERE is_duplicate = 0
@@ -1109,6 +1126,8 @@ export default class MusicDatabase {
       if (page.length === 0) break
       for (const m of page) {
         if (m.lyricsPath && !existsSync(m.lyricsPath)) count++
+        // 让出事件循环，避免大库/网络盘下连续同步文件系统访问阻塞主进程
+        await new Promise<void>(resolve => setImmediate(resolve))
       }
       offset += page.length
       if (page.length < pageSize) break
@@ -1162,7 +1181,7 @@ export default class MusicDatabase {
   /**
    * 统计无有效封面（空路径或封面文件已丢失）的歌曲数
    */
-  getMusicWithoutCoverCount(): number {
+  async getMusicWithoutCoverCount(): Promise<number> {
     const emptyStmt = this.db!.prepare(`
       SELECT COUNT(*) as count FROM all_music
       WHERE is_duplicate = 0
@@ -1178,6 +1197,8 @@ export default class MusicDatabase {
       if (page.length === 0) break
       for (const m of page) {
         if (m.coverPath && !existsSync(m.coverPath)) count++
+        // 让出事件循环，避免大库/网络盘下连续同步文件系统访问阻塞主进程
+        await new Promise<void>(resolve => setImmediate(resolve))
       }
       offset += page.length
       if (page.length < pageSize) break
@@ -2543,7 +2564,7 @@ export default class MusicDatabase {
         params.push(pinyinQuery, pinyinQuery)
       }
 
-      const stmt = this.db.prepare(
+      const stmt = this.prepareCached(
         `SELECT suggestion FROM (
            SELECT am.title AS suggestion
            FROM local_music lm
@@ -2669,163 +2690,6 @@ export default class MusicDatabase {
       totalDuration: row.total_duration || 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at
-    }
-  }
-
-  /**
-   * 检查数据库版本
-   * 如果版本不匹配，清空并重建数据库
-   */
-  private checkDatabaseVersion(): void {
-    try {
-      // 获取当前存储的版本号
-      const storedVersion = this.getSetting(DB_VERSION_KEY)
-
-      console.log(`📊 数据库版本检查:`)
-      console.log(`   当前代码版本: ${DB_VERSION}`)
-      console.log(`   数据库存储版本: ${storedVersion || '未设置'}`)
-
-      if (storedVersion === null) {
-        // 首次运行或旧版本数据库，保存当前版本
-        console.log(`✅ 首次运行，保存数据库版本: ${DB_VERSION}`)
-        this.setSetting(DB_VERSION_KEY, DB_VERSION)
-        return
-      }
-
-      if (storedVersion !== DB_VERSION) {
-        // 版本不匹配（这种情况不应该发生，因为在 initialize 开始时已经检查过了）
-        console.warn(`⚠️  数据库版本不匹配！`)
-        console.warn(`   预期版本: ${DB_VERSION}`)
-        console.warn(`   实际版本: ${storedVersion}`)
-        // 更新版本号
-        this.setSetting(DB_VERSION_KEY, DB_VERSION.toString())
-        console.log(`✅ 已更新数据库版本为: ${DB_VERSION}`)
-      } else {
-        console.log(`✅ 数据库版本匹配`)
-      }
-    } catch (error: any) {
-      console.error(`❌ 版本检查失败:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * 清空并重建数据库
-   */
-  private clearAndRebuildDatabase(): void {
-    try {
-      console.log(`🗑️  开始清空数据库...`)
-
-      // 1. 删除所有表数据（保留表结构）
-      this.clearAllTables()
-
-      // 2. 删除封面和歌词文件
-      this.clearMediaFiles()
-
-      // 3. 重新执行迁移（确保表结构最新）
-      console.log(`🔄 重新执行数据库迁移...`)
-      this.migrate()
-
-      // 4. 重新创建索引
-      console.log(`🔄 重新创建索引...`)
-      this.createIndexes()
-
-      // 5. 保存新版本号
-      this.setSetting(DB_VERSION_KEY, DB_VERSION)
-
-      console.log(`✅ 数据库清空并重建完成`)
-    } catch (error: any) {
-      console.error(`❌ 清空重建失败:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * 清空所有表数据
-   */
-  private clearAllTables(): void {
-    try {
-      // 获取所有表名
-      const tables = this.db!.prepare(`
-        SELECT name FROM sqlite_master
-        WHERE type='table'
-        AND name NOT LIKE 'sqlite_%'
-      `).all() as Array<{ name: string }>
-
-      console.log(`📋 找到 ${tables.length} 个表需要清空`)
-
-      // 禁用外键约束
-      this.db!.exec('PRAGMA foreign_keys = OFF')
-
-      // 开始事务
-      this.db!.exec('BEGIN TRANSACTION')
-
-      try {
-        // 删除所有表数据
-        for (const table of tables) {
-          console.log(`   清空表: ${table.name}`)
-          this.db!.prepare(`DELETE FROM ${table.name}`).run()
-        }
-
-        // 重置自增ID（不重置，继续累加）
-        // 注意：根据需求，自增ID不重置，所以这里不执行 DELETE FROM sqlite_sequence
-
-        // 提交事务
-        this.db!.exec('COMMIT')
-        console.log(`✅ 所有表数据已清空`)
-      } catch (error) {
-        // 回滚事务
-        this.db!.exec('ROLLBACK')
-        throw error
-      } finally {
-        // 重新启用外键约束
-        this.db!.exec('PRAGMA foreign_keys = ON')
-      }
-    } catch (error: any) {
-      console.error(`❌ 清空表失败:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * 清空封面和歌词文件
-   */
-  private clearMediaFiles(): void {
-    try {
-      const userDataPath = app.getPath('userData')
-
-      // 清空封面目录
-      const coversDir = join(userDataPath, 'covers')
-      if (existsSync(coversDir)) {
-        console.log(`🗑️  清空封面目录: ${coversDir}`)
-        const files = readdirSync(coversDir)
-        for (const file of files) {
-          try {
-            unlinkSync(join(coversDir, file))
-          } catch (error) {
-            console.warn(`   删除封面文件失败: ${file}`, error)
-          }
-        }
-        console.log(`✅ 已删除 ${files.length} 个封面文件`)
-      }
-
-      // 清空歌词目录（如果有）
-      const lyricsDir = join(userDataPath, 'lyrics')
-      if (existsSync(lyricsDir)) {
-        console.log(`🗑️  清空歌词目录: ${lyricsDir}`)
-        const files = readdirSync(lyricsDir)
-        for (const file of files) {
-          try {
-            unlinkSync(join(lyricsDir, file))
-          } catch (error) {
-            console.warn(`   删除歌词文件失败: ${file}`, error)
-          }
-        }
-        console.log(`✅ 已删除 ${files.length} 个歌词文件`)
-      }
-    } catch (error: any) {
-      console.error(`❌ 清空媒体文件失败:`, error)
-      // 不抛出错误，允许继续
     }
   }
 

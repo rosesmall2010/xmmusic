@@ -290,6 +290,8 @@ export const usePlayerStore = defineStore('player', () => {
         if (local) {
           try {
             const parsed = JSON.parse(local)
+            // 旧版本 blob 里可能残留 playQueue 字段，若不剔除会在此处覆盖掉上面已恢复的新队列
+            delete parsed.playQueue
             applyState(parsed)
           } catch (parseError) {
             console.warn('解析本地播放状态失败，清除无效数据:', parseError)

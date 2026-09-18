@@ -309,7 +309,7 @@ const teardownAudioGraph = () => {
 
   try {
     if (audioContext && audioContext.state !== 'closed') {
-      void audioContext.close()
+      audioContext.close().catch(() => {})
     }
   } catch {
     // ignore

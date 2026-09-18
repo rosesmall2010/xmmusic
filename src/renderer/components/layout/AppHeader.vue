@@ -142,6 +142,9 @@ const theme = computed<'light' | 'dark'>(() => {
 })
 const isMac = ref(navigator.userAgent.includes('Mac'))
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+onUnmounted(() => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+})
 
 const handleSearchInput = () => {
   if (debounceTimer) {

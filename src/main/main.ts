@@ -125,22 +125,36 @@ function isUnderRoot(filePath: string, root: string): boolean {
   return fileCmp === rootCmp || fileCmp.startsWith(rootCmp.endsWith(sep) ? rootCmp : rootCmp + sep)
 }
 
+/** local-file 权限校验结果短期缓存，吸收拖进度条/滚动封面产生的高频重复请求 */
+const pathPermissionCache = new Map<string, { allowed: boolean; expiresAt: number }>()
+const PATH_PERMISSION_CACHE_TTL = 2000
+
 /**
  * local-file 协议白名单：userData（封面/歌词缓存）、扫描目录、或曲库已登记的文件路径。
  */
 function isLocalFilePathAllowed(filePath: string): boolean {
+  const now = Date.now()
+  const cached = pathPermissionCache.get(filePath)
+  if (cached && cached.expiresAt > now) return cached.allowed
+
+  let allowed = false
   try {
-    if (isUnderRoot(filePath, app.getPath('userData'))) return true
-    if (db) {
+    if (isUnderRoot(filePath, app.getPath('userData'))) {
+      allowed = true
+    } else if (db) {
       for (const dir of db.getAllLocalMusicDirs()) {
-        if (dir.path && isUnderRoot(filePath, dir.path)) return true
+        if (dir.path && isUnderRoot(filePath, dir.path)) {
+          allowed = true
+          break
+        }
       }
-      if (db.getMusicByPath(filePath)) return true
+      if (!allowed && db.getMusicByPath(filePath)) allowed = true
     }
   } catch (error) {
     console.warn('校验 local-file 路径失败:', error)
   }
-  return false
+  pathPermissionCache.set(filePath, { allowed, expiresAt: now + PATH_PERMISSION_CACHE_TTL })
+  return allowed
 }
 
 export function isMainWindowLoaded(): boolean {

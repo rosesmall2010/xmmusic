@@ -522,8 +522,7 @@ export default class FileScanner {
       }
 
       // 3. 检查文件是否已存在
-      const db = this.db.getDatabase()
-      const existing = db.prepare(`
+      const existing = this.db.prepareCached(`
         SELECT id FROM all_music
         WHERE dir_id = ? AND file_name = ?
       `).get(dirId, fileName) as { id: number } | undefined
@@ -531,7 +530,7 @@ export default class FileScanner {
       if (existing) {
         // 文件已存在，检查是否需要更新
         const fileStat = await stat(filePath)
-        const existingMusic = db.prepare('SELECT * FROM all_music WHERE id = ?').get(existing.id) as any
+        const existingMusic = this.db.prepareCached('SELECT * FROM all_music WHERE id = ?').get(existing.id) as any
 
         // 如果文件大小或修改时间变化，可能需要重新扫描
         const needsUpdate = options.forceRescan ||

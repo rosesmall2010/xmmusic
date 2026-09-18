@@ -164,7 +164,7 @@
             <div class="lyrics-container" ref="lyricsContainerRef" @contextmenu.prevent="showLyricsContextMenu">
               <p
                 v-for="(line, index) in lyrics"
-                :key="index"
+                :key="line.time"
                 class="lyrics-line"
                 :class="{ active: index === currentLyricIndex }"
                 @click="seek(line.time)"
