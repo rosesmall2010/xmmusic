@@ -314,21 +314,31 @@ export const usePlayerStore = defineStore('player', () => {
   // 启动时校验一遍，把已经不在库里的曲目摘掉。
   async function pruneMissingFromQueue() {
     if (typeof window === 'undefined' || !window.electronAPI?.getExistingMusicIds) return
-    if (queue.value.length === 0) return
+    const currentId = currentMusic.value?.id
+    const ids = Array.from(
+      new Set([
+        ...queue.value.map((m) => m.id),
+        ...(currentId != null ? [currentId] : [])
+      ])
+    )
+    // 队列为空且无当前曲时无需校验
+    if (ids.length === 0) return
     try {
-      const ids = queue.value.map(m => m.id)
       const existing = new Set(await window.electronAPI.getExistingMusicIds(ids))
-      if (existing.size === ids.length) return
 
-      const currentId = currentMusic.value?.id
-      queue.value = queue.value.filter(m => existing.has(m.id))
+      queue.value = queue.value.filter((m) => existing.has(m.id))
 
-      if (currentId !== undefined && existing.has(currentId)) {
-        currentQueueIndex.value = queue.value.findIndex(m => m.id === currentId)
-      } else {
+      if (currentId != null && existing.has(currentId)) {
+        currentQueueIndex.value = queue.value.findIndex((m) => m.id === currentId)
+      } else if (currentId != null) {
+        // 当前曲已不在库（含「队列为空但仍在播」）
         currentQueueIndex.value = queue.value.length > 0 ? 0 : -1
         currentMusic.value = queue.value[0] ?? null
         shouldAutoResume.value = false
+      } else {
+        currentQueueIndex.value = queue.value.length > 0
+          ? Math.min(Math.max(currentQueueIndex.value, 0), queue.value.length - 1)
+          : -1
       }
     } catch (error) {
       console.warn('校验播放队列曲目是否仍存在于曲库失败，跳过清理:', error)
@@ -476,6 +486,7 @@ export const usePlayerStore = defineStore('player', () => {
     initialize,
     resumePosition,
     shouldAutoResume,
-    saveState: persistState
+    saveState: persistState,
+    pruneMissingFromQueue
   }
 })

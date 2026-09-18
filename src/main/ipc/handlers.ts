@@ -993,6 +993,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, fi
     db.clearAllExceptSettings()
   })
 
+  /** 清理本地音乐中磁盘文件已不存在的曲库记录 */
+  ipcMain.handle('cleanup-missing-local-music', async () => {
+    if (!db) throw new Error('数据库未初始化')
+    return db.cleanupMissingLocalMusic()
+  })
+
   ipcMain.handle('clear-favorites', async () => {
     if (!db) return
     db.clearFavorites()

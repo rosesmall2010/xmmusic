@@ -84,6 +84,22 @@ export interface ElectronAPI {
   getPlayHistory: () => Promise<any[]>
   getRecentPlays: (limit?: number) => Promise<any[]>
   clearPlayHistory: () => Promise<void>
+  /** 清理本地音乐中磁盘文件已不存在的曲库记录（并同步歌单/收藏/队列等） */
+  cleanupMissingLocalMusic: () => Promise<{
+    checked: number
+    removed: number
+    playlistsUpdated: number
+    related: {
+      localMusic: number
+      favorites: number
+      playlistItems: number
+      recentPlays: number
+      playQueue: number
+      discover: number
+    }
+    skippedUnreachable: number
+    skippedInaccessible: number
+  }>
 
   // 音乐目录
   getMusicDirectories: () => Promise<any[]>

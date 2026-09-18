@@ -6,19 +6,28 @@
         <div class="stats">{{ $t('sidebar.totalSongs', { count: totalCount }) }}</div>
       </div>
       <div class="header-actions">
-        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0 || isMatchingBusy">
+        <button class="btn-secondary" @click="handleClearAll" :disabled="totalCount === 0 || isLibraryBusy">
           {{ $t('settings.clearAll') }}
         </button>
         <button
           class="btn-secondary"
+          @click="handleCleanupMissing"
+          :disabled="totalCount === 0 || isLibraryBusy"
+        >
+          {{ isCleaningMissing ? $t('localMusic.cleaningMissing') : $t('localMusic.cleanupMissing') }}
+        </button>
+        <button
+          class="btn-secondary"
           @click="handleBatchMatchLyrics"
-          :disabled="totalCount === 0 || isScanning || isMatchingBusy"
+          :disabled="totalCount === 0 || isLibraryBusy"
           :title="
-            lyricsMatchStore.manualMatchUiBusy
-              ? $t('localMusic.manualMatchBusyTip')
-              : isMatchingCovers
-                ? $t('localMusic.coverMatchBusyTip')
-                : undefined
+            isCleaningMissing
+              ? $t('localMusic.cleanupMissingBusyTip')
+              : lyricsMatchStore.manualMatchUiBusy
+                ? $t('localMusic.manualMatchBusyTip')
+                : isMatchingCovers
+                  ? $t('localMusic.coverMatchBusyTip')
+                  : undefined
           "
         >
           {{ isMatchingLyrics ? $t('localMusic.matchingLyrics') : $t('localMusic.batchMatchLyrics') }}
@@ -26,18 +35,18 @@
         <button
           class="btn-secondary"
           @click="handleBatchMatchCovers"
-          :disabled="totalCount === 0 || isScanning || isMatchingBusy || missingCoverCount === 0"
+          :disabled="totalCount === 0 || isLibraryBusy || missingCoverCount === 0"
           :title="batchCoverButtonTitle"
         >
           {{ isMatchingCovers ? $t('localMusic.matchingCovers') : $t('localMusic.batchMatchCovers') }}
         </button>
-        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0 || isMatchingBusy">
+        <button class="btn-primary" @click="handlePlayAll" :disabled="totalCount === 0 || isLibraryBusy">
           {{ $t('player.playAll') }}
         </button>
         <button
           class="btn-primary"
           @click="handleScan"
-          :disabled="!canScan || isScanning || isMatchingBusy"
+          :disabled="!canScan || isLibraryBusy"
         >
           {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
         </button>
@@ -112,6 +121,7 @@
         ref="songListRef"
         :songs="musicList"
         :show-lyrics-match="true"
+        :library-busy="isLibraryBusy"
         @play="playMusic"
         @load-more="loadMore"
         @songs-updated="handleSongsUpdated"
@@ -122,7 +132,7 @@
             v-if="hasDirectories"
             class="btn-link"
             @click="handleScan"
-            :disabled="!canScan || isScanning"
+            :disabled="!canScan || isLibraryBusy"
           >
             {{ $t('localMusic.scanFolders') }}
           </button>
@@ -284,7 +294,7 @@ const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
 const coverMatchStore = useCoverMatchStore()
 const equalizer = useEqualizer()
-const { play, pause, getAudioElement } = usePlayer()
+const { play, pause, stopAndUnload, getAudioElement } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
@@ -335,10 +345,17 @@ const coverMatchProgress = computed(() => coverMatchStore.progress)
 const isMatchingBusy = computed(
   () => isMatchingLyrics.value || isMatchingCovers.value || lyricsMatchStore.manualMatchUiBusy
 )
+/** 正在清理磁盘上已不存在的本地音乐记录 */
+const isCleaningMissing = ref(false)
+/** 扫描/匹配/清理任一进行中：互斥禁用工具栏 */
+const isLibraryBusy = computed(
+  () => isMatchingBusy.value || isScanning.value || isCleaningMissing.value
+)
 /** 无有效封面歌曲数（用于禁用批量按钮） */
 const missingCoverCount = ref(0)
 
 const batchCoverButtonTitle = computed(() => {
+  if (isCleaningMissing.value) return t('localMusic.cleanupMissingBusyTip')
   if (lyricsMatchStore.manualMatchUiBusy) return t('localMusic.manualMatchBusyTip')
   if (isMatchingLyrics.value) return t('localMusic.lyricsMatchBusyTip')
   if (missingCoverCount.value === 0) return t('localMusic.noMissingCoversTip')
@@ -489,7 +506,7 @@ const loadMore = async () => {
 }
 
 const handleBatchMatchLyrics = async () => {
-  if (isMatchingBusy.value || isScanning.value) return
+  if (isLibraryBusy.value) return
   try {
     const count = await window.electronAPI.getMusicWithoutLyricsCount()
     if (count <= 0) {
@@ -536,7 +553,7 @@ const cancelBatchMatchLyrics = async () => {
 }
 
 const handleBatchMatchCovers = async () => {
-  if (isMatchingBusy.value || isScanning.value) return
+  if (isLibraryBusy.value) return
   try {
     const count = await window.electronAPI.getMusicWithoutCoverCount()
     if (count <= 0) {
@@ -590,6 +607,7 @@ const cancelBatchMatchCovers = async () => {
 }
 
 const handleScan = async () => {
+  if (isLibraryBusy.value) return
   try {
     // 1. 重新加载目录列表以确保状态同步
     await dirStore.loadDirectories()
@@ -635,6 +653,89 @@ const handleScan = async () => {
     alert(t('message.operationFailed', { error: error.message || t('common.unknown') }))
     isScanning.value = false
     scanProgress.value = null
+  }
+}
+
+const handleCleanupMissing = async () => {
+  if (totalCount.value === 0 || isLibraryBusy.value) {
+    return
+  }
+  if (!confirm(t('localMusic.cleanupMissingConfirm'))) {
+    return
+  }
+
+  isCleaningMissing.value = true
+  const playingIdBefore = playerStore.currentMusic?.id ?? null
+  try {
+    const result = await window.electronAPI.cleanupMissingLocalMusic()
+    await playerStore.pruneMissingFromQueue()
+
+    // 当前曲已被清掉：停播并卸载 Howler / 清空 audio（含队列为空仍在播的情况）
+    if (playingIdBefore != null && playerStore.currentMusic?.id !== playingIdBefore) {
+      stopAndUnload()
+      playerStore.isPlaying = false
+      playerStore.currentTime = 0
+      playerStore.duration = 0
+      try {
+        if (equalizer.isCaptured()) {
+          await equalizer.releaseCapture()
+        }
+      } catch (error) {
+        console.warn('清理失效记录后释放 Web Audio 失败:', error)
+      }
+    }
+
+    try {
+      await playerStore.saveState()
+    } catch {
+      // ignore
+    }
+
+    musicStore.clearSearchCaches()
+    stopBackgroundLoading()
+    await musicStore.loadMusic(0, Math.max(20, musicStore.musicList.length || 20), true)
+    if (musicStore.hasMore) {
+      startBackgroundLoading()
+    }
+    await refreshMissingCoverCount()
+
+    try {
+      await musicStore.loadPlaylists()
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new Event('playlist-updated'))
+    window.dispatchEvent(new Event('favorites-updated'))
+    window.dispatchEvent(new Event('recent-plays-updated'))
+
+    if (result.removed === 0) {
+      alert(
+        t('localMusic.cleanupMissingNone', {
+          checked: result.checked,
+          skippedUnreachable: result.skippedUnreachable,
+          skippedInaccessible: result.skippedInaccessible
+        })
+      )
+    } else {
+      alert(
+        t('localMusic.cleanupMissingDone', {
+          removed: result.removed,
+          checked: result.checked,
+          favorites: result.related.favorites,
+          playlistItems: result.related.playlistItems,
+          recentPlays: result.related.recentPlays,
+          playQueue: result.related.playQueue,
+          discover: result.related.discover,
+          playlistsUpdated: result.playlistsUpdated,
+          skippedUnreachable: result.skippedUnreachable,
+          skippedInaccessible: result.skippedInaccessible
+        })
+      )
+    }
+  } catch (error: any) {
+    alert(t('localMusic.cleanupMissingError') + ': ' + (error?.message || error))
+  } finally {
+    isCleaningMissing.value = false
   }
 }
 
@@ -747,7 +848,7 @@ const handleClearAll = async () => {
 }
 
 const handlePlayAll = async () => {
-  if (totalCount.value === 0) return
+  if (totalCount.value === 0 || isLibraryBusy.value) return
 
   try {
     // 获取所有歌曲

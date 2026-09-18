@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 清空列表
   clearLocalMusic: () => ipcRenderer.invoke('clear-local-music'),
+  cleanupMissingLocalMusic: () => ipcRenderer.invoke('cleanup-missing-local-music'),
   clearFavorites: () => ipcRenderer.invoke('clear-favorites'),
   clearRecentPlays: () => ipcRenderer.invoke('clear-recent-plays'),
   clearPlaylist: (playlistId: number) => ipcRenderer.invoke('clear-playlist', playlistId),
@@ -421,6 +422,21 @@ declare global {
       getPlayHistory: () => Promise<MusicItem[]>
       clearPlayHistory: () => Promise<void>
       clearLocalMusic: () => Promise<void>
+      cleanupMissingLocalMusic: () => Promise<{
+        checked: number
+        removed: number
+        playlistsUpdated: number
+        related: {
+          localMusic: number
+          favorites: number
+          playlistItems: number
+          recentPlays: number
+          playQueue: number
+          discover: number
+        }
+        skippedUnreachable: number
+        skippedInaccessible: number
+      }>
       clearFavorites: () => Promise<void>
       clearRecentPlays: () => Promise<void>
       clearPlaylist: (playlistId: number) => Promise<void>

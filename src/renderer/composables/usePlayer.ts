@@ -405,6 +405,29 @@ export function usePlayer() {
     }
   }
 
+  /** 停播并卸载 Howler / 清空原生 audio，避免已删文件继续出声 */
+  const stopAndUnload = () => {
+    pause()
+    if (audioElement) {
+      try {
+        audioElement.pause()
+        audioElement.removeAttribute('src')
+        audioElement.load()
+      } catch {
+        // ignore
+      }
+    }
+    if (howl) {
+      try {
+        howl.stop()
+        howl.unload()
+      } catch {
+        // ignore
+      }
+      howl = null
+    }
+  }
+
   const resume = () => {
     if (useNativeAudio && audioElement) {
       audioElement.play()
@@ -454,6 +477,7 @@ export function usePlayer() {
   return {
     play,
     pause,
+    stopAndUnload,
     resume,
     seek,
     setVolume,

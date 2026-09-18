@@ -320,6 +320,8 @@ const props = defineProps<{
   playlistId?: number  // 用于批量删除
   /** 本地音乐页开启：匹配 / 重新匹配歌词与封面 */
   showLyricsMatch?: boolean
+  /** 库维护进行中（清理失效记录等）：禁用右键匹配 */
+  libraryBusy?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -429,6 +431,7 @@ const fetchMatchKind = ref<'lyrics' | 'cover' | null>(null)
 let fetchMatchToken = 0
 
 const isMatchFlowBusy = () =>
+  props.libraryBusy === true ||
   matchingLyricsId.value != null ||
   matchingCoverId.value != null ||
   showLyricsPick.value ||

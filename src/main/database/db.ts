@@ -1,7 +1,7 @@
 import Database from './sqlite3-sync'
 import { app } from 'electron'
 import { join, dirname } from 'path'
-import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync, access, constants } from 'fs'
+import { readFileSync, existsSync, copyFile, unlinkSync, readdirSync, access, accessSync, constants } from 'fs'
 import { promisify } from 'util'
 import { createHash } from 'crypto'
 import type {
@@ -767,14 +767,208 @@ export default class MusicDatabase {
   }
 
   /**
+   * 清理本地音乐中磁盘文件已不存在的记录，并同步清理所有关联数据：
+   * local_music / favorites / playlist_item / recent_plays / play_queue / discover_music / all_music（FTS 由触发器同步），
+   * 最后重算受影响歌单的 song_count / total_duration。
+   * 大列表按批处理 IN 参数，避免触及 SQLite 变量上限。
+   */
+  cleanupMissingLocalMusic(): {
+    checked: number
+    removed: number
+    playlistsUpdated: number
+    related: {
+      localMusic: number
+      favorites: number
+      playlistItems: number
+      recentPlays: number
+      playQueue: number
+      discover: number
+    }
+    /** 扫描根目录本身不可达（外置盘未挂载等），这些曲目跳过不删 */
+    skippedUnreachable: number
+    /** 路径存在但无读取权限等，跳过不删 */
+    skippedInaccessible: number
+  } {
+    if (!this.db) {
+      throw new Error('数据库未初始化')
+    }
+
+    /** 单批 IN 参数上限（留余量，低于 SQLite 默认 ~32766） */
+    const IN_CHUNK = 500
+
+    const emptyRelated = {
+      localMusic: 0,
+      favorites: 0,
+      playlistItems: 0,
+      recentPlays: 0,
+      playQueue: 0,
+      discover: 0
+    }
+
+    const rows = this.db.prepare(`
+      SELECT am.id, am.dir_id, am.file_name
+      FROM local_music lm
+      JOIN all_music am ON lm.music_id = am.id
+    `).all() as Array<{ id: number; dir_id: number; file_name: string }>
+
+    const missingIds: number[] = []
+    let skippedUnreachable = 0
+    let skippedInaccessible = 0
+    /** dir_id → 扫描根是否可达；不可达则整目录跳过，避免离线盘误删 */
+    const dirReachable = new Map<number, boolean>()
+
+    const isDirReachable = (dirId: number): boolean => {
+      const cached = dirReachable.get(dirId)
+      if (cached !== undefined) return cached
+      let ok = false
+      try {
+        const dir = this.db!.prepare('SELECT path FROM music_dir WHERE id = ?').get(dirId) as
+          | { path: string }
+          | undefined
+        if (dir?.path) {
+          accessSync(dir.path, constants.F_OK)
+          ok = true
+        }
+      } catch {
+        ok = false
+      }
+      dirReachable.set(dirId, ok)
+      return ok
+    }
+
+    for (const row of rows) {
+      if (!isDirReachable(row.dir_id)) {
+        skippedUnreachable++
+        continue
+      }
+      let fullPath = ''
+      try {
+        fullPath = buildPathFromMusicRecord(
+          this.db,
+          { dir_id: row.dir_id, file_name: row.file_name },
+          process.platform
+        )
+      } catch {
+        // 目录记录异常：不删，计入不可达
+        skippedUnreachable++
+        continue
+      }
+      if (!fullPath) {
+        skippedUnreachable++
+        continue
+      }
+      try {
+        accessSync(fullPath, constants.F_OK)
+      } catch (e: any) {
+        const code = e?.code
+        if (code === 'EACCES' || code === 'EPERM' || code === 'EBUSY') {
+          skippedInaccessible++
+          continue
+        }
+        missingIds.push(row.id)
+      }
+    }
+
+    if (missingIds.length === 0) {
+      return {
+        checked: rows.length,
+        removed: 0,
+        playlistsUpdated: 0,
+        related: emptyRelated,
+        skippedUnreachable,
+        skippedInaccessible
+      }
+    }
+
+    const chunkIds = (ids: number[]) => {
+      const chunks: number[][] = []
+      for (let i = 0; i < ids.length; i += IN_CHUNK) {
+        chunks.push(ids.slice(i, i + IN_CHUNK))
+      }
+      return chunks
+    }
+
+    const countRelatedChunked = (table: string, ids: number[]) => {
+      let total = 0
+      for (const chunk of chunkIds(ids)) {
+        const ph = chunk.map(() => '?').join(',')
+        const r = this.db!.prepare(
+          `SELECT COUNT(*) as c FROM ${table} WHERE music_id IN (${ph})`
+        ).get(...chunk) as { c: number }
+        total += r.c
+      }
+      return total
+    }
+
+    const related = {
+      localMusic: countRelatedChunked('local_music', missingIds),
+      favorites: countRelatedChunked('favorites', missingIds),
+      playlistItems: countRelatedChunked('playlist_item', missingIds),
+      recentPlays: countRelatedChunked('recent_plays', missingIds),
+      playQueue: countRelatedChunked('play_queue', missingIds),
+      discover: countRelatedChunked('discover_music', missingIds)
+    }
+
+    const affectedPlaylistSet = new Set<number>()
+    for (const chunk of chunkIds(missingIds)) {
+      const ph = chunk.map(() => '?').join(',')
+      const rowsPl = this.db.prepare(`
+        SELECT DISTINCT playlist_id as id
+        FROM playlist_item
+        WHERE music_id IN (${ph})
+      `).all(...chunk) as Array<{ id: number }>
+      for (const r of rowsPl) affectedPlaylistSet.add(r.id)
+    }
+    const affectedPlaylists = Array.from(affectedPlaylistSet)
+
+    const tx = this.db.transaction((ids: number[]) => {
+      for (const chunk of chunkIds(ids)) {
+        const ph = chunk.map(() => '?').join(',')
+        // 显式清理关联表（不单靠 FK CASCADE，避免 pragma 异常时残留）
+        this.db!.prepare(`DELETE FROM playlist_item WHERE music_id IN (${ph})`).run(...chunk)
+        this.db!.prepare(`DELETE FROM favorites WHERE music_id IN (${ph})`).run(...chunk)
+        this.db!.prepare(`DELETE FROM recent_plays WHERE music_id IN (${ph})`).run(...chunk)
+        this.db!.prepare(`DELETE FROM play_queue WHERE music_id IN (${ph})`).run(...chunk)
+        this.db!.prepare(`DELETE FROM discover_music WHERE music_id IN (${ph})`).run(...chunk)
+        this.db!.prepare(`DELETE FROM local_music WHERE music_id IN (${ph})`).run(...chunk)
+        // 删除主记录（触发器同步 music_fts）
+        this.db!.prepare(`DELETE FROM all_music WHERE id IN (${ph})`).run(...chunk)
+      }
+
+      for (const playlistId of affectedPlaylists) {
+        this.updatePlaylistStats(playlistId)
+      }
+    })
+    tx(missingIds)
+
+    return {
+      checked: rows.length,
+      removed: missingIds.length,
+      playlistsUpdated: affectedPlaylists.length,
+      related,
+      skippedUnreachable,
+      skippedInaccessible
+    }
+  }
+
+  /**
    * 从给定的 id 列表里筛出仍存在于 all_music 的那些
    * 用于渲染端播放队列（持久化在 localStorage，跟库的生命周期无关）恢复时校验
+   * 分批 IN，避免超大队列触及 SQLite 变量上限
    */
   getExistingMusicIds(ids: number[]): number[] {
     if (ids.length === 0) return []
-    const placeholders = ids.map(() => '?').join(',')
-    const rows = this.db!.prepare(`SELECT id FROM all_music WHERE id IN (${placeholders})`).all(...ids) as Array<{ id: number }>
-    return rows.map(r => r.id)
+    const CHUNK = 500
+    const found: number[] = []
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK)
+      const placeholders = chunk.map(() => '?').join(',')
+      const rows = this.db!.prepare(`SELECT id FROM all_music WHERE id IN (${placeholders})`).all(
+        ...chunk
+      ) as Array<{ id: number }>
+      for (const r of rows) found.push(r.id)
+    }
+    return found
   }
 
   /**
