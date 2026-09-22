@@ -2,6 +2,7 @@ import { basename, extname } from 'path'
 import type { MusicItem } from '@shared/types/music'
 import { parseFilenameForTags } from '../../shared/utils/parseFilename'
 import ID3Fixer from './id3Fixer'
+import { scoreDecodedText } from './id3TextDecode'
 import type MusicDatabase from '../database/db'
 
 export interface SyncMetadataUpdates {
@@ -40,7 +41,7 @@ function isMostlyPrintableAscii(value: string | null | undefined): boolean {
   return ascii / s.length >= 0.85
 }
 
-/** 粗略判断字符串是否像乱码（替换符、控制符、无 CJK 却大量 Latin-1 扩展） */
+/** 粗略判断字符串是否像乱码（替换符、控制符、无 CJK 却大量 Latin-1 扩展、CJK+假名） */
 function looksGarbled(value: string | null | undefined): boolean {
   if (!value || !value.trim()) return false
   const s = value.trim()
@@ -51,33 +52,30 @@ function looksGarbled(value: string | null | undefined): boolean {
   const latinExt = (s.match(/[\u0080-\u024F]/g) || []).length
   // 常见：GBK 被当 Latin1/UTF-8 读出，呈现一串扩展拉丁字母而无汉字
   if (latinExt >= 2 && cjk === 0 && /[À-ÿ]/.test(s)) return true
+  // Big5 被当 GBK：错汉字常夹假名/注音
+  if (cjk > 0 && /[\u3040-\u30FFㄅ-ㄯ]/.test(s)) return true
   return false
 }
 
 /**
  * 是否值得尝试编码转换：
- * - 英文/ASCII 标签禁止转码（utf16le/gbk 误转会把英文变成汉字乱码）
- * - 已有正常汉字且不乱码：禁止转码
- * - 仅当字段疑似乱码时才尝试
+ * - 纯 ASCII 禁止转码
+ * - 其余交给字段级评分决定是否采纳（正确中文评分不变则跳过）
  */
 function shouldAttemptEncodingFix(raw: {
   title?: string
   artist?: string
   album?: string
   genre?: string
+  year?: string
 }): boolean {
-  const fields = [raw.title, raw.artist, raw.album, raw.genre]
+  const fields = [raw.title, raw.artist, raw.album, raw.genre, raw.year]
     .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
 
   if (fields.length === 0) return false
   if (fields.every(isMostlyPrintableAscii)) return false
-
-  const hasCleanCjk = fields.some(
-    (f) => /[\u4e00-\u9fa5]/.test(f) && !looksGarbled(f)
-  )
-  if (hasCleanCjk && !fields.some(looksGarbled)) return false
-
-  return fields.some(looksGarbled)
+  // 任一字段疑似乱码，或存在非 ASCII（含西欧/CJK），都允许尝试
+  return true
 }
 
 function countCjk(value: string | null | undefined): number {
@@ -105,47 +103,34 @@ async function resolveId3Fields(
   // 仅在疑似乱码时尝试编码转换；英文标签绝不转码
   if (shouldAttemptEncodingFix(raw)) {
     try {
-      const detections = await id3Fixer.detectEncoding(filePath)
-      // 排除 utf16le：对 ASCII 英文误转极易变成「像汉字的乱码」
-      const best = detections.find(
-        (d) => d.encoding !== 'utf8' && d.encoding !== 'utf16le' && d.confidence > 0.5
+      // mp3info 风格自动识别；按字段独立采纳，避免西欧字段拖累中文乱码修复
+      const converted = id3Fixer.convertID3TagsEncoding(
+        {
+          title: raw.title || '',
+          artist: raw.artist || '',
+          album: raw.album || '',
+          year: raw.year,
+          genre: raw.genre
+        },
+        'auto'
       )
-      if (best) {
-        const converted = id3Fixer.convertID3TagsEncoding(
-          {
-            title: raw.title || '',
-            artist: raw.artist || '',
-            album: raw.album || '',
-            year: raw.year,
-            genre: raw.genre
-          },
-          best.encoding
-        )
-        const rawGarbledCount = [raw.title, raw.artist, raw.album, raw.genre]
-          .filter(looksGarbled).length
-        const convertedGarbledCount = [
-          converted.title,
-          converted.artist,
-          converted.album,
-          converted.genre
-        ].filter(looksGarbled).length
-        const rawCjk =
-          countCjk(raw.title) + countCjk(raw.artist) + countCjk(raw.album) + countCjk(raw.genre)
-        const convertedCjk =
-          countCjk(converted.title) +
-          countCjk(converted.artist) +
-          countCjk(converted.album) +
-          countCjk(converted.genre)
-        // 仅当转换后更干净（乱码更少，或汉字明显增加且自身不乱码）才采纳
-        const improved =
-          convertedGarbledCount < rawGarbledCount ||
-          (convertedCjk > rawCjk && convertedGarbledCount === 0)
-        if (improved) {
-          tags = converted
-        }
+      const mergeField = (key: 'title' | 'artist' | 'album' | 'year' | 'genre') => {
+        const before = raw[key] || ''
+        const after = converted[key] || ''
+        if (!after || after === before) return
+        // 必须评分提升，且不能把「有汉字」修没；乱码字段优先要求出现汉字
+        if (scoreDecodedText(after) <= scoreDecodedText(before)) return
+        if (countCjk(before) > 0 && countCjk(after) < countCjk(before)) return
+        if (looksGarbled(before) && countCjk(after) === 0 && !isMostlyPrintableAscii(after)) return
+        tags = { ...tags, [key]: after }
       }
+      mergeField('title')
+      mergeField('artist')
+      mergeField('album')
+      mergeField('year')
+      mergeField('genre')
     } catch (error) {
-      console.warn('检测 ID3 编码失败，使用原始标签:', filePath, error)
+      console.warn('自动识别 ID3 编码失败，使用原始标签:', filePath, error)
     }
   }
 

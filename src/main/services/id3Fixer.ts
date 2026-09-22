@@ -1,7 +1,9 @@
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'fs'
-import { join, dirname } from 'path'
+import { copyFileSync, mkdirSync } from 'fs'
+import { join } from 'path'
 import { app } from 'electron'
 import iconv from 'iconv-lite'
+import { autoDecodeId3Tags, autoDecodeTagString } from './id3TextDecode'
+
 // 动态加载 node-id3
 const getNodeID3 = () => {
   try {
@@ -11,8 +13,9 @@ const getNodeID3 = () => {
   }
 }
 
-// 支持的编码列表
+// 支持的编码列表（auto = mp3info 风格自动识别）
 const SUPPORTED_ENCODINGS = [
+  'auto',
   'utf8',
   'gbk',
   'gb2312',
@@ -88,7 +91,7 @@ export default class ID3Fixer {
   }
 
   /**
-   * 读取原始ID3标签（可能包含乱码）
+   * 读取 ID3 标签原始字符串（node-id3 读出，可能仍是乱码；供 UI 展示「原始」列）
    */
   async readRawID3Tags(filePath: string): Promise<Id3TagFields | null> {
     try {
@@ -113,35 +116,60 @@ export default class ID3Fixer {
   }
 
   /**
-   * 检测ID3标签的编码
+   * 读取并自动识别编码后的 ID3 标签（扫描入库 / 一键自动转码用）
+   */
+  async readAutoDecodedID3Tags(filePath: string): Promise<Id3TagFields | null> {
+    const raw = await this.readRawID3Tags(filePath)
+    if (!raw) return null
+    const decoded = autoDecodeId3Tags(raw)
+    return {
+      title: decoded.title,
+      artist: decoded.artist,
+      album: decoded.album,
+      year: decoded.year,
+      genre: decoded.genre
+    }
+  }
+
+  /**
+   * 检测 ID3 标签编码：优先给出 auto 结果，并附带手动编码预览供对照
    */
   async detectEncoding(filePath: string): Promise<EncodingDetection[]> {
     const results: EncodingDetection[] = []
 
     try {
-      // 读取ID3标签（原始字节）
-      const nodeID3 = getNodeID3()
-      const tags = nodeID3.read(filePath)
+      const raw = await this.readRawID3Tags(filePath)
+      if (!raw) return results
 
-      if (!tags) {
-        return results
-      }
+      const auto = autoDecodeId3Tags(raw)
+      const autoConfidence = this.calculateConfidence(
+        auto.title,
+        auto.artist,
+        auto.album,
+        auto.genre
+      )
+      results.push({
+        encoding: 'auto',
+        // 不抬高置信度地板，避免垃圾结果排到前面
+        confidence: autoConfidence,
+        preview: {
+          title: auto.title,
+          artist: auto.artist,
+          album: auto.album,
+          year: auto.year,
+          genre: auto.genre
+        }
+      })
 
-      // 获取原始标签值（可能是乱码的）；流派也参与检测
-      const rawTitle = tags.title || ''
-      const rawArtist = tags.artist || ''
-      const rawAlbum = tags.album || ''
-      const rawYear = tags.year || ''
-      const rawGenre = tags.genre || ''
-
-      // 尝试每种编码
+      // 手动编码预览（不含 auto）
       for (const encoding of SUPPORTED_ENCODINGS) {
+        if (encoding === 'auto') continue
         try {
-          const title = this.tryDecode(rawTitle, encoding)
-          const artist = this.tryDecode(rawArtist, encoding)
-          const album = this.tryDecode(rawAlbum, encoding)
-          const year = rawYear ? this.tryDecode(rawYear, encoding) : undefined
-          const genre = rawGenre ? this.tryDecode(rawGenre, encoding) : undefined
+          const title = this.tryDecode(raw.title, encoding)
+          const artist = this.tryDecode(raw.artist, encoding)
+          const album = this.tryDecode(raw.album, encoding)
+          const year = raw.year ? this.tryDecode(raw.year, encoding) : undefined
+          const genre = raw.genre ? this.tryDecode(raw.genre, encoding) : undefined
 
           const confidence = this.calculateConfidence(title, artist, album, genre)
 
@@ -152,12 +180,11 @@ export default class ID3Fixer {
               preview: { title, artist, album, year, genre }
             })
           }
-        } catch (error) {
+        } catch {
           // 编码失败，跳过
         }
       }
 
-      // 按置信度排序
       results.sort((a, b) => b.confidence - a.confidence)
     } catch (error) {
       console.error('检测编码失败:', error)
@@ -167,22 +194,23 @@ export default class ID3Fixer {
   }
 
   /**
-   * 尝试使用指定编码解码字符串
+   * 尝试使用指定编码解码字符串（auto 走 mp3info 自动识别）
    */
   private tryDecode(value: string, encoding: Encoding): string {
     if (!value) return ''
 
     try {
-      // 如果已经是UTF-8，直接返回
+      if (encoding === 'auto') {
+        return autoDecodeTagString(value).text
+      }
       if (encoding === 'utf8') {
         return value
       }
 
-      // 将字符串转换为Buffer，然后使用指定编码解码
-      // 注意：这里假设value可能是用其他编码存储的
-      const buffer = Buffer.from(value, 'latin1') // 先按latin1读取原始字节
+      // 先按 latin1 还原原始字节，再用指定编码解码
+      const buffer = Buffer.from(value, 'latin1')
       return iconv.decode(buffer, encoding)
-    } catch (error) {
+    } catch {
       return value
     }
   }
@@ -195,12 +223,23 @@ export default class ID3Fixer {
   }
 
   /**
-   * 转换ID3标签编码（不写入文件，只返回转换后的值）
+   * 转换 ID3 标签编码（不写入文件，只返回转换后的值）
+   * sourceEncoding = 'auto' 时使用 mp3info 自动识别（含 Big5 乱码还原）
    */
   public convertID3TagsEncoding(
     rawTags: Id3TagFields,
     sourceEncoding: Encoding
   ): Id3TagFields {
+    if (sourceEncoding === 'auto') {
+      const decoded = autoDecodeId3Tags(rawTags)
+      return {
+        title: decoded.title,
+        artist: decoded.artist,
+        album: decoded.album,
+        year: decoded.year,
+        genre: decoded.genre
+      }
+    }
     return {
       title: this.tryDecode(rawTags.title, sourceEncoding),
       artist: this.tryDecode(rawTags.artist, sourceEncoding),
@@ -304,24 +343,36 @@ export default class ID3Fixer {
         genre: true
       }
 
-      if (fieldsToFix.title && tags.title) {
-        fixedTags.title = this.tryDecode(tags.title, sourceEncoding)
-      }
-
-      if (fieldsToFix.artist && tags.artist) {
-        fixedTags.artist = this.tryDecode(tags.artist, sourceEncoding)
-      }
-
-      if (fieldsToFix.album && tags.album) {
-        fixedTags.album = this.tryDecode(tags.album, sourceEncoding)
-      }
-
-      if (fieldsToFix.year && tags.year) {
-        fixedTags.year = this.tryDecode(tags.year, sourceEncoding)
-      }
-
-      if (fieldsToFix.genre && tags.genre) {
-        fixedTags.genre = this.tryDecode(tags.genre, sourceEncoding)
+      // auto：整包走自动识别，保证字段间策略一致；其它编码逐字段 tryDecode
+      if (sourceEncoding === 'auto') {
+        const decoded = autoDecodeId3Tags({
+          title: tags.title || '',
+          artist: tags.artist || '',
+          album: tags.album || '',
+          year: tags.year,
+          genre: tags.genre
+        })
+        if (fieldsToFix.title && decoded.title) fixedTags.title = decoded.title
+        if (fieldsToFix.artist && decoded.artist) fixedTags.artist = decoded.artist
+        if (fieldsToFix.album && decoded.album) fixedTags.album = decoded.album
+        if (fieldsToFix.year && decoded.year) fixedTags.year = decoded.year
+        if (fieldsToFix.genre && decoded.genre) fixedTags.genre = decoded.genre
+      } else {
+        if (fieldsToFix.title && tags.title) {
+          fixedTags.title = this.tryDecode(tags.title, sourceEncoding)
+        }
+        if (fieldsToFix.artist && tags.artist) {
+          fixedTags.artist = this.tryDecode(tags.artist, sourceEncoding)
+        }
+        if (fieldsToFix.album && tags.album) {
+          fixedTags.album = this.tryDecode(tags.album, sourceEncoding)
+        }
+        if (fieldsToFix.year && tags.year) {
+          fixedTags.year = this.tryDecode(tags.year, sourceEncoding)
+        }
+        if (fieldsToFix.genre && tags.genre) {
+          fixedTags.genre = this.tryDecode(tags.genre, sourceEncoding)
+        }
       }
 
       // 5. 更新标签

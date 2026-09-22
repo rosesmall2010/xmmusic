@@ -106,10 +106,10 @@
                       type="button"
                       class="btn-field"
                       :disabled="loading"
-                      :title="$t('tagEditor.convertFieldGB2312')"
-                      @click="convertSingleField(field, 'gb2312')"
+                      :title="$t('tagEditor.convertFieldAuto')"
+                      @click="convertSingleField(field, 'auto')"
                     >
-                      GB2312
+                      {{ $t('tagEditor.autoDetectShort') }}
                     </button>
                     <button
                       type="button"
@@ -150,8 +150,8 @@
             </div>
 
             <div class="encoding-actions">
-              <button @click="convertAll('gb2312')" class="btn-convert" :disabled="loading || !rawID3Tags">
-                {{ $t('tagEditor.convertFromGB2312') }}
+              <button @click="convertAll('auto')" class="btn-convert" :disabled="loading || !rawID3Tags">
+                {{ $t('tagEditor.convertFromAuto') }}
               </button>
               <button @click="convertAll('gbk')" class="btn-convert" :disabled="loading || !rawID3Tags">
                 {{ $t('tagEditor.convertFromGBK') }}
@@ -204,7 +204,7 @@ import { parseFilenameForTags } from '@/utils/parseFilename'
 const { t } = useI18n()
 
 type TagField = 'artist' | 'title' | 'album' | 'year' | 'genre'
-type EncodingName = 'gb2312' | 'gbk'
+type EncodingName = 'auto' | 'gbk'
 
 interface TagSnapshot {
   title: string

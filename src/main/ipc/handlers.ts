@@ -1017,13 +1017,18 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     return await id3Fixer.readRawID3Tags(filePath)
   })
 
-  ipcMain.handle('convert-id3-tags-encoding', async (_, rawTags: any, sourceEncoding: string) => {
-    // 验证编码类型
-    const validEncodings = ['utf8', 'gbk', 'gb2312', 'big5', 'utf16le', 'latin1'] as const
-    if (!validEncodings.includes(sourceEncoding as any)) {
+  const validId3Encodings = ['auto', 'utf8', 'gbk', 'gb2312', 'big5', 'utf16le', 'latin1'] as const
+  type Id3Encoding = (typeof validId3Encodings)[number]
+  const assertId3Encoding = (sourceEncoding: string): Id3Encoding => {
+    if (!validId3Encodings.includes(sourceEncoding as Id3Encoding)) {
       throw new Error(`不支持的编码类型: ${sourceEncoding}`)
     }
-    return id3Fixer.convertID3TagsEncoding(rawTags, sourceEncoding as 'utf8' | 'gbk' | 'gb2312' | 'big5' | 'utf16le' | 'latin1')
+    return sourceEncoding as Id3Encoding
+  }
+
+  ipcMain.handle('convert-id3-tags-encoding', async (_, rawTags: any, sourceEncoding: string) => {
+    // 验证编码类型（auto = mp3info 风格自动识别，含 Big5 乱码还原）
+    return id3Fixer.convertID3TagsEncoding(rawTags, assertId3Encoding(sourceEncoding))
   })
 
   ipcMain.handle('detect-id3-encoding', async (_, filePath: string) => {
@@ -1031,7 +1036,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   })
 
   ipcMain.handle('fix-id3-tags', async (_, filePath: string, sourceEncoding: string, fields?: any) => {
-    const result = await id3Fixer.fixID3Tags(filePath, sourceEncoding as any, fields)
+    const result = await id3Fixer.fixID3Tags(filePath, assertId3Encoding(sourceEncoding), fields)
 
     if (result.success && result.fixedTags && db) {
       // 更新数据库
@@ -1052,7 +1057,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   })
 
   ipcMain.handle('fix-id3-tags-batch', async (_, filePaths: string[], sourceEncoding: string, fields?: any) => {
-    const result = await id3Fixer.fixID3TagsBatch(filePaths, sourceEncoding as any, fields, (current, total) => {
+    const result = await id3Fixer.fixID3TagsBatch(filePaths, assertId3Encoding(sourceEncoding), fields, (current, total) => {
       mainWindow.webContents.send('id3-fix-progress', { current, total })
     })
 

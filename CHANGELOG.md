@@ -7,6 +7,10 @@
 
 ## [1.2.5] - 2026-09-18
 
+### 变更
+- **ID3 乱码识别**：改用 xmtools/mp3info 同款自动识别（UTF-8 / GB18030 / Latin1 / Big5 多候选择优），扫描入库按字段独立采纳；编辑弹窗以「自动识别」为主并保留 GBK 手动兜底
+- 修复自动识别缺陷：避免 GBK 字节被误当成合法 UTF-8 入库；收紧 Big5 还原与西欧重音名保护；IPC `fix-id3-tags` 与 convert 共用编码白名单
+
 ### 修复
 - 代码审查中优先级问题（详见 [docs/1.2.4/代码审查-缺陷与性能问题.md](docs/1.2.4/代码审查-缺陷与性能问题.md) M1-M11）：删除音乐后歌单统计不同步；`updatePlaylistOrder` 补事务包裹；`advancedSearch` 目录过滤 LIKE 转义补 `ESCAPE` 子句使其生效；路径 Unicode 归一化为 NFC，修复 macOS NFD 分解形式路径被误判为新目录重复扫描；批量编辑元数据补上真实进度推送与进度条；迷你模式重复启用不再叠加窗口事件监听器；播放队列改为整体重新赋值风格并去掉 `deep: true` 全量遍历；`useEqualizer` 的 watch 补单例去重；本地音乐列表批量加歌单查找改用 Map 缓存；`visibleSongs` 不再 mutate 共享的歌曲对象；顶栏主题图标补上系统深浅色切换的实时响应
 - 代码审查低优先级问题（详见同文档 L1-L12）：`local-file://` 协议权限校验补短 TTL 缓存吸收高频重复请求；`MusicDatabase` 新增 `prepareCached` 并接入搜索建议与扫描期间存在性检查两处真实热点，减少重复编译 SQL；`cleanupMissingLocalMusic`/`getMusicWithoutLyricsCount`/`getMusicWithoutCoverCount` 改为异步并在同步文件系统访问循环中让出事件循环；删除 `checkDatabaseVersion`/`clearAndRebuildDatabase`/`clearAllTables`/`clearMediaFiles` 等无调用点死代码；`AudioContext.close()` 补 rejection 处理；修复队列迁移在异常退出后的窄窗口过期数据覆盖风险；顶栏搜索防抖定时器补卸载清理；歌词逐行渲染 `:key` 改用时间戳而非下标

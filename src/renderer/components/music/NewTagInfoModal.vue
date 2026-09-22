@@ -17,16 +17,16 @@
           <button
             type="button"
             class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.batchGb2312')"
-            @click="batchApply('gb2312')"
+            :disabled="loading || !id3Snapshot"
+            :data-tip="$t('tagInfoEditor.batchAuto')"
+            @click="batchApply('auto')"
           >
-            <Binary :size="16" />
+            <Sparkles :size="16" />
           </button>
           <button
             type="button"
             class="icon-btn"
-            :disabled="loading"
+            :disabled="loading || !id3Snapshot"
             :data-tip="$t('tagInfoEditor.batchGbk')"
             @click="batchApply('gbk')"
           >
@@ -118,10 +118,10 @@
                     type="button"
                     class="icon-btn"
                     :disabled="loading"
-                    :data-tip="$t('tagInfoEditor.convertGb2312')"
-                    @click="applyFromId3(field, 'gb2312')"
+                    :data-tip="$t('tagInfoEditor.convertAuto')"
+                    @click="applyFromId3(field, 'auto')"
                   >
-                    <Binary :size="14" />
+                    <Sparkles :size="14" />
                   </button>
                   <button
                     v-if="isEncodable(field)"
@@ -179,14 +179,14 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeftRight, Wand2, RotateCcw, Database, ClipboardCopy, Binary, Languages } from 'lucide-vue-next'
+import { ArrowLeftRight, Wand2, RotateCcw, Database, ClipboardCopy, Sparkles, Languages } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 import { parseFilenameForTags } from '@/utils/parseFilename'
 
 const { t } = useI18n()
 
 type TagField = 'artist' | 'title' | 'album' | 'year' | 'genre'
-type EncodingName = 'gb2312' | 'gbk'
+type EncodingName = 'auto' | 'gbk'
 
 interface TagSnapshot {
   title: string
@@ -306,7 +306,7 @@ const applyFromDb = (field: TagField) => {
   editedData[field] = dbSnapshot.value[field]
 }
 
-const batchApply = async (source: 'gb2312' | 'gbk' | 'id3' | 'db') => {
+const batchApply = async (source: 'auto' | 'gbk' | 'id3' | 'db') => {
   if (source === 'db') {
     FIELDS.forEach((f) => (editedData[f] = dbSnapshot.value[f]))
     return
