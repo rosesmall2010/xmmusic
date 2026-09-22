@@ -54,17 +54,17 @@
     "@electron/rebuild": "^4.2.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.10.1",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "@vitest/ui": "^4.1.10",
-    "concurrently": "^10.0.3",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "@vitest/ui": "^5.0.1",
+    "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "electron": "^42.7.0",
     "electron-builder": "^26.15.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
-    "vitest": "^4.1.10",
-    "vue": "^3.5.40",
-    "wait-on": "^9.0.10"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1",
+    "vue": "^3.5.43",
+    "wait-on": "^9.1.0"
   },
   "overrides": {
     "node-abi": "^4.33.0",
@@ -74,18 +74,18 @@
     "uuid": "^11.1.1"
   },
   "dependencies": {
-    "@tanstack/vue-virtual": "^3.13.12",
-    "@vueuse/core": "^14.3.0",
+    "@tanstack/vue-virtual": "^3.13.39",
+    "@vueuse/core": "^15.0.0",
     "better-sqlite3": "^12.11.1",
     "howler": "^2.2.4",
     "iconv-lite": "^0.7.3",
     "lucide-vue-next": "^1.0.0",
-    "music-metadata": "^11.14.0",
+    "music-metadata": "^11.15.0",
     "node-id3": "^0.2.9",
-    "pinia": "^4.0.2",
+    "pinia": "^4.0.3",
     "pinyin-pro": "^3.29.4",
-    "vue-i18n": "^11.4.7",
-    "vue-router": "^5.2.0",
+    "vue-i18n": "^11.4.12",
+    "vue-router": "^5.3.1",
     "vuedraggable": "^4.1.0"
   }
 }
