@@ -10,7 +10,7 @@
 ### 变更
 - **ID3 乱码识别**：改用 xmtools/mp3info 同款自动识别（UTF-8 / GB18030 / Latin1 / Big5 多候选择优），扫描入库按字段独立采纳；编辑弹窗以「自动识别」为主并保留 GBK 手动兜底
 - 修复自动识别缺陷：避免 GBK 字节被误当成合法 UTF-8 入库；收紧 Big5 还原与西欧重音名保护；IPC `fix-id3-tags` 与 convert 共用编码白名单
-- README 补充正式版 / 开发版数据存放目录（macOS、Windows、Linux）及 `m4.db` 说明
+- README 补充正式版 / 开发版数据存放目录（macOS、Windows、Linux）及 `m4.db` 说明；同步最新版本说明至 v1.2.5
 
 ### 修复
 - 全屏播放队列与抽屉：切歌（尤其随机模式万级队列）定位当前曲改为瞬时跳转；钳制 scrollTop、等待布局完成并同步虚拟列表状态，避免空白帧
