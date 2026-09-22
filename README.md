@@ -169,6 +169,26 @@ xattr -cr /Applications/xmmusic.app
 
 **建议**：优先从 GitHub Releases 用浏览器直接下载 `.dmg`，少走聊天/网盘转发。当前发布包**未做 Apple 公证**，双击可能仍会提示一次，属预期行为。
 
+### 数据存放目录
+
+安装后的正式版将曲库、设置与缓存写在 Electron `userData` 目录（与音乐文件本身无关）：
+
+| 平台 | 路径 |
+|------|------|
+| **macOS** | `~/Library/Application Support/xmmusic/` |
+| **Windows** | `%APPDATA%\xmmusic\`（一般为 `C:\Users\<用户名>\AppData\Roaming\xmmusic\`） |
+| **Linux** | `~/.config/xmmusic/`（若提供对应安装包时） |
+
+
+目录内常见文件：
+
+- `m4.db` — 曲库数据库
+- `xmmusic-settings.json` — 应用设置
+- `covers/` — 封面缓存
+- `id3_backups/` — ID3 修复时的备份
+
+> 开发模式（`npm run dev`）使用独立目录 `xmmusic-dev` 与数据库 `m4-dev.db`，不会覆盖正式版数据。
+
 ### 从源码构建
 
 ```bash
@@ -318,8 +338,10 @@ xmmusic/
 4.  **数据库调试**:
     *   **开发环境**: 使用完全独立的数据库，避免污染生产数据。
     *   **文件位置**:
-        *   macOS: `~/Library/Application Support/xmmusic-dev/xmmusic-dev.db`
-        *   Windows: `%APPDATA%/xmmusic-dev/xmmusic-dev.db`
+        *   macOS 正式版: `~/Library/Application Support/xmmusic/m4.db`
+        *   macOS 开发版: `~/Library/Application Support/xmmusic-dev/m4-dev.db`
+        *   Windows 正式版: `%APPDATA%\xmmusic\m4.db`
+        *   Windows 开发版: `%APPDATA%\xmmusic-dev\m4-dev.db`
     *   **查看**: 推荐使用 **DB Browser for SQLite** 或 VS Code 插件打开该文件查看实时数据。
 
 5.  **常见问题**:
@@ -383,7 +405,7 @@ xmmusic/
 
 ### 💡 最佳实践
 
-- **数据库隔离**: 开发时项目会自动使用 `xmmusic-dev.db`，放心测试，不会影响生产数据。
+- **数据库隔离**: 开发时项目会自动使用 `xmmusic-dev` 目录下的 `m4-dev.db`，放心测试，不会影响生产数据。
 - **文件操作**: 避免直接在渲染进程使用 Node.js API，必须通过 IPC 调用主进程方法。
 - **图标使用**: 请使用 `lucide-vue-next` 图标库，保持风格统一。
 - **异步处理**: 耗时操作（如批量扫描）应支持进度回调，避免阻塞主线程。

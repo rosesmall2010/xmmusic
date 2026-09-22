@@ -149,11 +149,25 @@ watch([() => props.visible, currentQueueIndex], async ([isVisible, index]) => {
   }
 })
 
-const scrollToCurrent = () => {
+const scrollToCurrent = async () => {
   if (!listRef.value || currentQueueIndex.value < 0) return
+
+  // 抽屉刚打开时 clientHeight 可能仍为 0，等布局完成再算
+  for (let i = 0; i < 30; i++) {
+    if (listRef.value.clientHeight > 0) break
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+  if (!listRef.value || listRef.value.clientHeight <= 0) return
+
   // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示
-  const targetTop = currentQueueIndex.value * itemHeight - listRef.value.clientHeight / 2 + itemHeight / 2
-  listRef.value.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
+  // 万级队列随机跳转距离极大，用 auto 瞬时定位，避免 smooth 滚动很久
+  const maxTop = Math.max(0, queue.value.length * itemHeight - listRef.value.clientHeight)
+  const rawTop =
+    currentQueueIndex.value * itemHeight - listRef.value.clientHeight / 2 + itemHeight / 2
+  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
+  listRef.value.scrollTo({ top: targetTop, behavior: 'auto' })
+  // 同步虚拟窗口状态，避免 programmatic scroll 漏事件导致晚一帧空白
+  scrollTop.value = targetTop
 }
 
 onMounted(() => {

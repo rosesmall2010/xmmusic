@@ -1116,12 +1116,25 @@ const handleVolumeSave = async () => {
   await playerStore.saveState()
 }
 
-const scrollToCurrentQueueItem = () => {
+const scrollToCurrentQueueItem = async () => {
   if (!queueListRef.value || currentQueueIndex.value < 0) return
 
-  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示（与 PlayQueueDrawer.vue 一致）
-  const targetTop = currentQueueIndex.value * queueItemHeight - queueListRef.value.clientHeight / 2 + queueItemHeight / 2
-  queueListRef.value.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
+  // 刚切换面板时 clientHeight 可能仍为 0，等布局完成再算
+  for (let i = 0; i < 30; i++) {
+    if (queueListRef.value.clientHeight > 0) break
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+  }
+  if (!queueListRef.value || queueListRef.value.clientHeight <= 0) return
+
+  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示
+  // 万级队列随机跳转距离极大，用 auto 瞬时定位，避免 smooth 滚动很久
+  const maxTop = Math.max(0, queue.value.length * queueItemHeight - queueListRef.value.clientHeight)
+  const rawTop =
+    currentQueueIndex.value * queueItemHeight - queueListRef.value.clientHeight / 2 + queueItemHeight / 2
+  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
+  queueListRef.value.scrollTo({ top: targetTop, behavior: 'auto' })
+  // 同步虚拟窗口状态，避免个别环境下 programmatic scroll 漏事件导致晚一帧空白
+  queueScrollTop.value = targetTop
 }
 
 
@@ -1829,10 +1842,7 @@ watch(currentTime, (time) => {
 // 监听当前队列索引变化，自动滚动到当前播放的歌曲
 watch(currentQueueIndex, () => {
   if (rightPanelMode.value === 'queue') {
-    // 延迟一下确保 DOM 已更新
-    setTimeout(() => {
-      scrollToCurrentQueueItem()
-    }, 100)
+    void scrollToCurrentQueueItem()
   }
 })
 
@@ -1840,9 +1850,7 @@ watch(currentQueueIndex, () => {
 watch(rightPanelMode, (mode) => {
   closeQueueContextMenu()
   if (mode === 'queue') {
-    setTimeout(() => {
-      scrollToCurrentQueueItem()
-    }, 100)
+    void scrollToCurrentQueueItem()
   } else if (mode === 'lyrics') {
     syncLyricIndex(currentTime.value, true)
   }
