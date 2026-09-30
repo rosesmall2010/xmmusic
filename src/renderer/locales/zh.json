@@ -114,6 +114,8 @@
     "localCoverBadge": "本地",
     "sourceNetease": "网易云",
     "sourceLrclib": "LRCLIB",
+    "sourceKugou": "酷狗",
+    "sourceQq": "QQ音乐",
     "applyingCover": "正在写入...",
     "similarity": "相似度",
     "useSelectedLyrics": "使用选中项",

@@ -53,12 +53,17 @@ export interface LyricsMatchSummary {
 }
 
 /** 在线歌词来源；缺省视为网易云 */
-export type LyricsMatchSource = 'netease' | 'lrclib'
+export type LyricsMatchSource = 'netease' | 'lrclib' | 'kugou' | 'qq'
 
 /** 定位一条候选歌词所需的信息（预览 / 应用时回传主进程） */
 export interface LyricsCandidateRef {
   songId: number
   source?: LyricsMatchSource
+  /**
+   * 外站附加凭证：酷狗为 accesskey；QQ 为 songmid
+   * （网易云 / LRCLIB 不需要）
+   */
+  externalKey?: string
 }
 
 /** 在线匹配候选（用户选择用） */

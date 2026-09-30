@@ -13,11 +13,14 @@ import type {
   LyricsMatchSummary,
   LyricsMatchStatus,
   LyricsMatchCandidate,
-  LyricsCandidateRef
+  LyricsCandidateRef,
+  LyricsMatchSource
 } from '../../shared/types/lyrics'
 import type MusicDatabase from '../database/db'
 import LyricsService from './lyricsService'
-import lrclib, { type LrclibTrack } from './lrclibClient'
+import lrclib from './lrclibClient'
+import kugouLyrics from './kugouLyricsClient'
+import qqLyrics, { qqMidToSongId } from './qqLyricsClient'
 
 const SEARCH_APIS = [
   'https://music-api.0m2.cn',
@@ -78,15 +81,15 @@ const PURE_DIGITS = /^\d+$/
 /** 手动选择的本地歌词文件大小上限 */
 const MAX_LOCAL_LYRICS_BYTES = 2 * 1024 * 1024
 const LOCAL_LYRICS_EXT = /\.(lrc|txt)$/i
-/** 网易云已返回后，再等 lrclib 的宽限时间；超时则放弃本次以免无限拖慢弹窗 */
-const EXTERNAL_LYRICS_GRACE_MS = 10000
 /**
  * 与 LyricsService.parseLyrics 一致：分钟须两位（`[00:05.00]`）
  * 写入前会把一位分钟补零，避免「匹配成功但解析为空」
  */
 const HAS_TIMED_LRC_LINE = /\[\d{2}:\d{2}(?:\.\d{1,3})?\].*\S/
-/** lrclib 候选：时长相差超过此秒数则略降权（不直接丢弃） */
-const LRCLIB_DURATION_SLACK_SEC = 15
+/** 外站候选：时长相差超过此秒数则略降权（不直接丢弃） */
+const EXTERNAL_DURATION_SLACK_SEC = 15
+
+type ExternalScored = Array<{ candidate: LyricsMatchCandidate; artistScore: number }>
 
 type SearchSong = {
   id: number
@@ -103,34 +106,6 @@ type SearchOutcome = {
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-
-/** Promise 在 ms 内未完成则返回 fallback（原 Promise 继续跑，不取消） */
-const withTimeout = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
-  new Promise((resolve) => {
-    let settled = false
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true
-        resolve(fallback)
-      }
-    }, ms)
-    p.then(
-      (v) => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timer)
-          resolve(v)
-        }
-      },
-      () => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timer)
-          resolve(fallback)
-        }
-      }
-    )
-  })
 
 /** 去掉括号内容，便于相似度比较 */
 const stripParen = (s: string) =>
@@ -419,36 +394,6 @@ export default class LyricsMatchService {
     return { songs: [], lowRelevance: false }
   }
 
-  private pickBestSong(
-    music: MusicItem,
-    songs: SearchSong[],
-    titleHints: string[]
-  ): { song: SearchSong; similarity: number } | null {
-    // searchHints 已滤掉 <2 字的歌名：无可用候选则不自动写入
-    if (titleHints.length === 0) return null
-    const unknownArtist = this.isUnknownArtist(music.artist || '')
-    let best: { song: SearchSong; similarity: number; artistScore: number } | null = null
-    for (const song of songs) {
-      const similarity = this.songTitleScore(music, titleHints, song)
-      // 远端单字曲名靠 inclusion 拿 50 分，非完全一致时不自动采用
-      if (stripParen(song.name || '').length < 2 && similarity < 100) continue
-      // 歌手未知时艺人分仅用于同名曲打平（如同名「极乐世界」优先郑钧版）
-      const artistScore = this.artistScore(music, titleHints, song)
-      // 已知歌手时艺人分过低则跳过，避免同名异艺人写串
-      if (!unknownArtist && artistScore < ARTIST_SCORE_FLOOR) continue
-      // 歌手未知且文件名各段都对不上艺人：歌名须高度一致才自动写入，防「Low Of The World 叮当」配到 Aqua《Around the World》
-      if (unknownArtist && artistScore < ARTIST_SCORE_FLOOR && similarity < UNKNOWN_ARTIST_MIN_SIMILARITY) continue
-      if (
-        !best ||
-        similarity > best.similarity ||
-        (similarity === best.similarity && artistScore > best.artistScore)
-      ) {
-        best = { song, similarity, artistScore }
-      }
-    }
-    return best
-  }
-
   /** 拉词走网易云官方接口，与搜索镜像分离；不进 searchMutex，保留批量多路拉词 */
   private async fetchLyric(songId: number): Promise<{ lyric: string | null; instrumental: boolean }> {
     const text = await fetchText(LRC_API + String(songId))
@@ -526,28 +471,65 @@ export default class LyricsMatchService {
   }
 
   /**
+   * 将外站搜到的曲目打成与网易云同结构的候选（歌名相关度 + 可选时长降权）
+   */
+  private scoreExternalTrack(
+    music: MusicItem,
+    hints: string[],
+    track: {
+      id: number
+      source: LyricsMatchSource
+      name: string
+      artistName: string
+      albumName?: string
+      duration?: number
+      externalKey?: string
+    }
+  ): { candidate: LyricsMatchCandidate; artistScore: number } | null {
+    const song: SearchSong = {
+      id: track.id,
+      name: track.name,
+      artists: track.artistName,
+      artistList: track.artistName ? [track.artistName] : [],
+      album: track.albumName
+    }
+    let similarity = this.songTitleScore(music, hints, song)
+    const localDuration =
+      typeof music.duration === 'number' && music.duration > 0 ? music.duration : null
+    if (
+      localDuration != null &&
+      track.duration != null &&
+      Math.abs(track.duration - localDuration) > EXTERNAL_DURATION_SLACK_SEC
+    ) {
+      similarity = Math.max(0, similarity - 5)
+    }
+    if (similarity < MIN_TITLE_RELEVANCE) return null
+    return {
+      candidate: {
+        songId: track.id,
+        source: track.source,
+        externalKey: track.externalKey,
+        name: track.name,
+        artists: track.artistName,
+        album: track.albumName,
+        similarity
+      },
+      artistScore: this.artistScore(music, hints, song)
+    }
+  }
+
+  /**
    * lrclib 候选：仅保留有带时间轴歌词（或纯音乐）的结果
    */
   private async searchLrclibCandidates(
     music: MusicItem,
     hints: string[]
-  ): Promise<Array<{ candidate: LyricsMatchCandidate; artistScore: number }>> {
+  ): Promise<ExternalScored> {
     const params = this.lrclibSearchParams(music, hints)
     if (!params.q && !params.trackName) return []
 
     const tracks = await lrclib.search(params)
-    const localDuration =
-      typeof music.duration === 'number' && music.duration > 0 ? music.duration : null
-
-    const toSearchSong = (t: LrclibTrack): SearchSong => ({
-      id: t.id,
-      name: t.name,
-      artists: t.artistName,
-      artistList: t.artistName ? [t.artistName] : [],
-      album: t.albumName
-    })
-
-    const scored: Array<{ candidate: LyricsMatchCandidate; artistScore: number }> = []
+    const scored: ExternalScored = []
     for (const track of tracks) {
       if (track.instrumental) {
         // 纯音乐也入列，应用时走 skipped_instrumental
@@ -559,23 +541,103 @@ export default class LyricsMatchService {
         // 缓存规范化后的歌词，预览/应用时无需再改
         track.syncedLyrics = synced
       }
-      const song = toSearchSong(track)
-      let similarity = this.songTitleScore(music, hints, song)
-      if (
-        localDuration != null &&
-        track.duration != null &&
-        Math.abs(track.duration - localDuration) > LRCLIB_DURATION_SLACK_SEC
-      ) {
-        similarity = Math.max(0, similarity - 5)
-      }
-      if (similarity < MIN_TITLE_RELEVANCE) continue
+      const item = this.scoreExternalTrack(music, hints, {
+        id: track.id,
+        source: 'lrclib',
+        name: track.name,
+        artistName: track.artistName,
+        albumName: track.albumName,
+        duration: track.duration
+      })
+      if (item) scored.push(item)
+    }
+    return scored
+  }
+
+  /** 酷狗歌词候选（搜索接口直接返回可下载的歌词条目） */
+  private async searchKugouCandidates(
+    music: MusicItem,
+    hints: string[]
+  ): Promise<ExternalScored> {
+    const { keyword } = this.searchHints(music)
+    if (!keyword) return []
+    const durationSec =
+      typeof music.duration === 'number' && music.duration > 0 ? music.duration : undefined
+    const tracks = await kugouLyrics.search({ keyword, durationSec })
+    const scored: ExternalScored = []
+    for (const track of tracks) {
+      const item = this.scoreExternalTrack(music, hints, {
+        id: track.id,
+        source: 'kugou',
+        name: track.name,
+        artistName: track.artistName,
+        duration: track.duration,
+        externalKey: track.accessKey
+      })
+      if (item) scored.push(item)
+    }
+    return scored
+  }
+
+  /** QQ 音乐搜曲候选（拉词时用 songmid） */
+  private async searchQqCandidates(
+    music: MusicItem,
+    hints: string[]
+  ): Promise<ExternalScored> {
+    const { keyword } = this.searchHints(music)
+    if (!keyword) return []
+    const tracks = await qqLyrics.search(keyword)
+    const scored: ExternalScored = []
+    for (const track of tracks) {
+      const item = this.scoreExternalTrack(music, hints, {
+        id: qqMidToSongId(track.mid),
+        source: 'qq',
+        name: track.name,
+        artistName: track.artistName,
+        albumName: track.albumName,
+        duration: track.duration,
+        externalKey: track.mid
+      })
+      if (item) scored.push(item)
+    }
+    return scored
+  }
+
+  /** 来源优先级（同分时）：LRCLIB > 网易云 > 酷狗 > QQ */
+  private sourcePriority(source?: LyricsMatchSource): number {
+    switch (source) {
+      case 'lrclib':
+        return 4
+      case 'netease':
+        return 3
+      case 'kugou':
+        return 2
+      case 'qq':
+        return 1
+      default:
+        return 0
+    }
+  }
+
+  /** 网易云搜歌结果打成统一候选结构 */
+  private scoreNeteaseSongs(
+    music: MusicItem,
+    hints: string[],
+    songs: SearchSong[],
+    /** 手动候选不过相关度下限；自动/批量仍过滤 */
+    applyMinRelevance: boolean
+  ): ExternalScored {
+    const scored: ExternalScored = []
+    for (const song of songs) {
+      const similarity = this.songTitleScore(music, hints, song)
+      if (applyMinRelevance && similarity < MIN_TITLE_RELEVANCE) continue
       scored.push({
         candidate: {
-          songId: track.id,
-          source: 'lrclib',
-          name: track.name,
-          artists: track.artistName,
-          album: track.albumName,
+          songId: song.id,
+          source: 'netease',
+          name: song.name,
+          artists: song.artists,
+          album: song.album,
           similarity
         },
         artistScore: this.artistScore(music, hints, song)
@@ -585,15 +647,70 @@ export default class LyricsMatchService {
   }
 
   /**
-   * 自动/批量：从 lrclib 候选中按与网易云相同的门槛选出最佳
+   * 四源并发搜索：LRCLIB / 网易云 / 酷狗 / QQ 同时发起；单源失败不影响其它
+   */
+  private async searchAllSourcesConcurrent(
+    music: MusicItem,
+    keyword: string,
+    hints: string[],
+    pickMode: boolean
+  ): Promise<{
+    scored: ExternalScored
+    neteaseError?: unknown
+    neteaseLowRelevance: boolean
+  }> {
+    const wrap = (label: string, p: Promise<ExternalScored>): Promise<ExternalScored> =>
+      p.catch((e) => {
+        console.warn(`[lyricsMatch] ${label} 搜索失败`, e)
+        return [] as ExternalScored
+      })
+
+    type NeteaseBag =
+      | { ok: true; outcome: SearchOutcome }
+      | { ok: false; error: unknown }
+
+    const [lrclibScored, kugouScored, qqScored, neteaseBag] = await Promise.all([
+      wrap('lrclib', this.searchLrclibCandidates(music, hints)),
+      wrap('kugou', this.searchKugouCandidates(music, hints)),
+      wrap('qq', this.searchQqCandidates(music, hints)),
+      this.searchSongs(keyword, pickMode, hints)
+        .then((outcome): NeteaseBag => ({ ok: true, outcome }))
+        .catch((error): NeteaseBag => ({ ok: false, error }))
+    ])
+
+    let neteaseScored: ExternalScored = []
+    let neteaseError: unknown
+    let neteaseLowRelevance = false
+    if (neteaseBag.ok) {
+      neteaseLowRelevance = neteaseBag.outcome.lowRelevance
+      // 手动：全部入列；自动：过相关度下限
+      neteaseScored = this.scoreNeteaseSongs(
+        music,
+        hints,
+        neteaseBag.outcome.songs,
+        !pickMode
+      )
+    } else {
+      neteaseError = neteaseBag.error
+    }
+
+    return {
+      scored: [...lrclibScored, ...neteaseScored, ...kugouScored, ...qqScored],
+      neteaseError,
+      neteaseLowRelevance
+    }
+  }
+
+  /**
+   * 自动/批量：按门槛筛过的候选，按相似度 / 艺人分 / 来源优先级降序
    * （歌名 ≥50；已知歌手艺人 ≥50；未知歌手且艺人对不上时歌名 ≥80）
    */
-  private pickBestLrclibCandidate(
+  private rankPassingCandidates(
     music: MusicItem,
-    scored: Array<{ candidate: LyricsMatchCandidate; artistScore: number }>
-  ): { candidate: LyricsMatchCandidate; artistScore: number } | null {
+    scored: ExternalScored
+  ): Array<{ candidate: LyricsMatchCandidate; artistScore: number }> {
     const unknownArtist = this.isUnknownArtist(music.artist || '')
-    let best: { candidate: LyricsMatchCandidate; artistScore: number } | null = null
+    const passed: Array<{ candidate: LyricsMatchCandidate; artistScore: number }> = []
     for (const item of scored) {
       const { candidate, artistScore } = item
       const similarity = candidate.similarity
@@ -606,22 +723,21 @@ export default class LyricsMatchService {
       ) {
         continue
       }
-      if (
-        !best ||
-        similarity > best.candidate.similarity ||
-        (similarity === best.candidate.similarity && artistScore > best.artistScore)
-      ) {
-        best = item
-      }
+      if (similarity < SIMILARITY_THRESHOLD) continue
+      passed.push(item)
     }
-    if (!best || best.candidate.similarity < SIMILARITY_THRESHOLD) return null
-    return best
+    passed.sort(
+      (a, b) =>
+        b.candidate.similarity - a.candidate.similarity ||
+        b.artistScore - a.artistScore ||
+        this.sourcePriority(b.candidate.source) - this.sourcePriority(a.candidate.source)
+    )
+    return passed
   }
 
   /**
    * 搜索候选列表（按相似度降序），供手动挑选
-   * 网易云与 lrclib 并行启动；先等网易云，lrclib 再宽限一小段时间，超时放弃以免拖慢弹窗
-   * 网易云失败或空结果时完整等待 lrclib；两者都拿不到结果时才抛出网易云错误
+   * LRCLIB / 网易云 / 酷狗 / QQ 四源并发；全部完成后再合并
    * 网易云不设相似度下限：全部结果入列，由用户预览后决定用或取消
    */
   async searchCandidates(music: MusicItem): Promise<LyricsMatchCandidate[]> {
@@ -631,47 +747,22 @@ export default class LyricsMatchService {
       `[lyricsMatch] 手动候选 musicId=${music.id} title="${music.title}" keyword="${keyword}" hints=${JSON.stringify(titleHints)}`
     )
     const hints = titleHints.length ? titleHints : [keyword]
-    type ExternalScored = Array<{ candidate: LyricsMatchCandidate; artistScore: number }>
-    const lrclibPromise: Promise<ExternalScored> = this.searchLrclibCandidates(music, hints).catch(
-      (e) => {
-        console.warn('[lyricsMatch] lrclib 搜索失败', e)
-        return [] as ExternalScored
-      }
+    const { scored, neteaseError } = await this.searchAllSourcesConcurrent(
+      music,
+      keyword,
+      hints,
+      true
     )
 
-    let songs: SearchSong[] = []
-    let neteaseError: unknown
-    try {
-      songs = (await this.searchSongs(keyword, true, hints)).songs
-    } catch (e) {
-      neteaseError = e
-    }
-
-    // 网易云失败或空结果：完整等待 lrclib；否则只再宽限一小段时间
-    const externalScored =
-      neteaseError || songs.length === 0
-        ? await lrclibPromise
-        : await withTimeout(lrclibPromise, EXTERNAL_LYRICS_GRACE_MS, [] as ExternalScored)
-
-    if (neteaseError && externalScored.length === 0) {
+    if (neteaseError && scored.length === 0) {
       throw neteaseError instanceof Error ? neteaseError : new Error(String(neteaseError))
     }
 
-    const scored = songs.map((song) => ({
-      candidate: {
-        songId: song.id,
-        source: 'netease',
-        name: song.name,
-        artists: song.artists,
-        album: song.album,
-        similarity: this.songTitleScore(music, hints, song)
-      } as LyricsMatchCandidate,
-      artistScore: this.artistScore(music, hints, song)
-    }))
-    scored.push(...externalScored)
-    // 同名曲按艺人相似度排在前面
     scored.sort(
-      (a, b) => b.candidate.similarity - a.candidate.similarity || b.artistScore - a.artistScore
+      (a, b) =>
+        b.candidate.similarity - a.candidate.similarity ||
+        b.artistScore - a.artistScore ||
+        this.sourcePriority(b.candidate.source) - this.sourcePriority(a.candidate.source)
     )
     return scored.map((s) => s.candidate)
   }
@@ -687,6 +778,20 @@ export default class LyricsMatchService {
         ? this.normalizeLrcTimestamps(track.syncedLyrics)
         : null
       if (synced) track.syncedLyrics = synced
+      return { lyric: synced, instrumental: false }
+    }
+    if (ref.source === 'kugou') {
+      const key = (ref.externalKey || '').trim()
+      if (!key) throw new Error('缺少酷狗 accesskey')
+      const raw = await kugouLyrics.getLyric(ref.songId, key)
+      const synced = raw ? this.normalizeLrcTimestamps(raw) : null
+      return { lyric: synced, instrumental: false }
+    }
+    if (ref.source === 'qq') {
+      const mid = (ref.externalKey || '').trim()
+      if (!mid) throw new Error('缺少 QQ songmid')
+      const raw = await qqLyrics.getLyric(mid)
+      const synced = raw ? this.normalizeLrcTimestamps(raw) : null
       return { lyric: synced, instrumental: false }
     }
     return this.fetchLyric(ref.songId)
@@ -783,7 +888,7 @@ export default class LyricsMatchService {
   }
 
   /**
-   * 按用户选定的候选（网易云 / lrclib）下载并写入歌词
+   * 按用户选定的候选（网易云 / LRCLIB / 酷狗 / QQ）下载并写入歌词
    */
   async applyCandidate(
     db: MusicDatabase,
@@ -808,8 +913,8 @@ export default class LyricsMatchService {
     if (!lyricPayload.lyric) {
       return { musicId: music.id, title, status: 'failed', message: '歌词为空' }
     }
-    // lrclib 偶发无时间轴：写入后播放端解析为空，应用前拦截
-    if (ref.source === 'lrclib' && !HAS_TIMED_LRC_LINE.test(lyricPayload.lyric)) {
+    // 偶发无时间轴：写入后播放端解析为空，应用前拦截（各源统一）
+    if (!HAS_TIMED_LRC_LINE.test(lyricPayload.lyric)) {
       return { musicId: music.id, title, status: 'failed', message: '未识别到带时间轴的歌词' }
     }
 
@@ -888,165 +993,130 @@ export default class LyricsMatchService {
     }
     const hints = titleHints.length ? titleHints : [keyword]
 
-    // 1) 优先 LRCLIB：命中门槛则直接写入；不够格 / 失败再回退网易云
-    try {
-      const lrclibScored = await this.searchLrclibCandidates(music, hints)
+    // 四源并发搜索，再按分择优拉词写盘（同分优先 LRCLIB > 网易云 > 酷狗 > QQ）
+    const { scored, neteaseError, neteaseLowRelevance } = await this.searchAllSourcesConcurrent(
+      music,
+      keyword,
+      hints,
+      false
+    )
+    if (isAborted()) return cancelledResult()
+
+    const ranked = this.rankPassingCandidates(music, scored)
+    let sawInstrumental = false
+    let lastFetchError = ''
+
+    for (const item of ranked) {
       if (isAborted()) return cancelledResult()
-      const lrclibBest = this.pickBestLrclibCandidate(music, lrclibScored)
-      if (lrclibBest) {
-        let lyricPayload: { lyric: string | null; instrumental: boolean }
-        try {
-          lyricPayload = await this.fetchCandidateLyric({
-            songId: lrclibBest.candidate.songId,
-            source: 'lrclib'
-          })
-        } catch (e: any) {
-          console.warn(
-            `[lyricsMatch] lrclib 拉词失败 musicId=${music.id}，回退网易云`,
-            e?.message || e
-          )
-          lyricPayload = { lyric: null, instrumental: false }
-        }
-
-        if (isAborted()) return cancelledResult()
-
-        // 纯音乐：不在此短路，继续回退网易云（避免 LRCLIB 误标导致有词曲被整批跳过）
-        if (lyricPayload.lyric && HAS_TIMED_LRC_LINE.test(lyricPayload.lyric)) {
-          const lrcPath = this.resolveLrcPath(music)
-          try {
-            if (isAborted()) return cancelledResult()
-            writeFileSync(lrcPath, lyricPayload.lyric, 'utf8')
-          } catch (e: any) {
-            return {
-              musicId: music.id,
-              title,
-              status: 'failed',
-              message: e?.message || '写入歌词文件失败'
-            }
-          }
-          if (isAborted()) {
-            try {
-              if (existsSync(lrcPath)) unlinkSync(lrcPath)
-            } catch {
-              /* ignore */
-            }
-            return cancelledResult()
-          }
-          db.updateAllMusic(music.id, { lyrics_path: lrcPath })
-          return {
-            musicId: music.id,
-            title,
-            status: 'matched',
-            lyricsPath: lrcPath,
-            similarity: lrclibBest.candidate.similarity,
-            message: force ? '重新匹配成功' : '匹配成功'
-          }
-        }
+      const label = item.candidate.source || 'unknown'
+      let lyricPayload: { lyric: string | null; instrumental: boolean }
+      try {
+        lyricPayload = await this.fetchCandidateLyric({
+          songId: item.candidate.songId,
+          source: item.candidate.source,
+          externalKey: item.candidate.externalKey
+        })
+      } catch (e: any) {
+        lastFetchError = e?.message || String(e)
+        console.warn(
+          `[lyricsMatch] ${label} 拉词失败 musicId=${music.id}，尝试下一候选`,
+          lastFetchError
+        )
+        continue
       }
-    } catch (e: any) {
-      console.warn(`[lyricsMatch] lrclib 搜索失败 musicId=${music.id}，回退网易云`, e?.message || e)
-    }
+      if (isAborted()) return cancelledResult()
+      if (lyricPayload.instrumental) {
+        sawInstrumental = true
+        continue
+      }
+      if (!lyricPayload.lyric || !HAS_TIMED_LRC_LINE.test(lyricPayload.lyric)) {
+        continue
+      }
 
-    if (isAborted()) return cancelledResult()
-
-    // 2) 回退网易云
-    // 镜像轮转统一由批量的 noteOutcome 负责，这里不再轮转，避免一次失败计两次
-    let outcome: SearchOutcome
-    try {
-      outcome = await this.searchSongs(keyword, false, titleHints)
-    } catch (e: any) {
-      return { musicId: music.id, title, status: 'failed', message: e?.message || '搜索失败' }
-    }
-    const { songs } = outcome
-
-    if (isAborted()) return cancelledResult()
-
-    if (songs.length === 0) {
-      if (outcome.lowRelevance) {
+      const lrcPath = this.resolveLrcPath(music)
+      try {
+        if (isAborted()) return cancelledResult()
+        writeFileSync(lrcPath, lyricPayload.lyric, 'utf8')
+      } catch (e: any) {
         return {
           musicId: music.id,
           title,
-          status: 'skipped_low_similarity',
-          similarity: 0,
-          message: '搜索结果与歌名不符'
+          status: 'failed',
+          message: e?.message || '写入歌词文件失败'
         }
       }
-      return { musicId: music.id, title, status: 'failed', message: '未找到搜索结果' }
-    }
-
-    const best = this.pickBestSong(music, songs, titleHints)
-
-    if (!best || best.similarity < SIMILARITY_THRESHOLD) {
+      if (isAborted()) {
+        try {
+          if (existsSync(lrcPath)) unlinkSync(lrcPath)
+        } catch {
+          /* ignore */
+        }
+        return cancelledResult()
+      }
+      db.updateAllMusic(music.id, { lyrics_path: lrcPath })
       return {
         musicId: music.id,
         title,
-        status: 'skipped_low_similarity',
-        similarity: best?.similarity ?? 0,
-        message: `匹配度过低(${best?.similarity ?? 0}%)`
+        status: 'matched',
+        lyricsPath: lrcPath,
+        similarity: item.candidate.similarity,
+        message: force ? '重新匹配成功' : '匹配成功'
       }
     }
 
-    let lyricPayload: { lyric: string | null; instrumental: boolean }
-    try {
-      lyricPayload = await this.fetchLyric(best.song.id)
-    } catch (e: any) {
-      return { musicId: music.id, title, status: 'failed', message: e?.message || '获取歌词失败' }
+    // 已过相似度门槛但拉词失败：优先报失败，勿误判为「匹配度过低」或「纯音乐」
+    if (lastFetchError) {
+      return {
+        musicId: music.id,
+        title,
+        status: 'failed',
+        message: lastFetchError
+      }
     }
-
-    if (isAborted()) return cancelledResult()
-
-    if (lyricPayload.instrumental) {
+    // 仅当成功拉到的结果都是纯音乐（无拉词异常）才记 instrumental
+    if (sawInstrumental) {
       return {
         musicId: music.id,
         title,
         status: 'skipped_instrumental',
-        similarity: best.similarity,
         message: '纯音乐无歌词'
       }
     }
-    if (!lyricPayload.lyric) {
+    // 有搜索命中但无一过自动门槛
+    if (ranked.length === 0 && scored.length > 0) {
+      const top = [...scored].sort(
+        (a, b) => b.candidate.similarity - a.candidate.similarity
+      )[0]
+      return {
+        musicId: music.id,
+        title,
+        status: 'skipped_low_similarity',
+        similarity: top?.candidate.similarity ?? 0,
+        message: `匹配度过低(${top?.candidate.similarity ?? 0}%)`
+      }
+    }
+    if (neteaseLowRelevance) {
+      return {
+        musicId: music.id,
+        title,
+        status: 'skipped_low_similarity',
+        similarity: 0,
+        message: '搜索结果与歌名不符'
+      }
+    }
+    if (neteaseError) {
       return {
         musicId: music.id,
         title,
         status: 'failed',
-        similarity: best.similarity,
-        message: '歌词为空'
+        message: neteaseError instanceof Error ? neteaseError.message : String(neteaseError)
       }
     }
-
-    if (isAborted()) return cancelledResult()
-
-    const lrcPath = this.resolveLrcPath(music)
-    try {
-      if (isAborted()) return cancelledResult()
-      writeFileSync(lrcPath, lyricPayload.lyric, 'utf8')
-    } catch (e: any) {
-      return {
-        musicId: music.id,
-        title,
-        status: 'failed',
-        message: e?.message || '写入歌词文件失败'
-      }
-    }
-
-    // 取消可能发生在写文件后、写库前：删除刚写入的文件并终止，避免落盘/写库
-    if (isAborted()) {
-      try {
-        if (existsSync(lrcPath)) unlinkSync(lrcPath)
-      } catch {
-        // 删除失败时仅保留取消结果，避免再写库
-      }
-      return cancelledResult()
-    }
-
-    db.updateAllMusic(music.id, { lyrics_path: lrcPath })
     return {
       musicId: music.id,
       title,
-      status: 'matched',
-      lyricsPath: lrcPath,
-      similarity: best.similarity,
-      message: force ? '重新匹配成功' : '匹配成功'
+      status: 'failed',
+      message: '未找到可用歌词'
     }
   }
 

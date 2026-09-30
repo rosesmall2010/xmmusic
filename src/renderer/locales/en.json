@@ -114,6 +114,8 @@
     "localCoverBadge": "Local",
     "sourceNetease": "NetEase",
     "sourceLrclib": "LRCLIB",
+    "sourceKugou": "Kugou",
+    "sourceQq": "QQ Music",
     "applyingCover": "Saving...",
     "similarity": "Similarity",
     "useSelectedLyrics": "Use Selected",

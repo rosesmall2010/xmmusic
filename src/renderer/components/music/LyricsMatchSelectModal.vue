@@ -73,15 +73,21 @@ const emit = defineEmits<{
   (e: 'select', candidate: LyricsCandidateRef): void
 }>()
 
-/** 不同来源的 songId 可能相同，用「来源:ID」区分 */
-const candidateKey = (c: LyricsMatchCandidate) => `${c.source ?? 'netease'}:${c.songId}`
+/** 不同来源的 songId 可能相同，用「来源:ID:附加键」区分 */
+const candidateKey = (c: LyricsMatchCandidate) =>
+  `${c.source ?? 'netease'}:${c.songId}:${c.externalKey ?? ''}`
 
-const sourceLabel = (source?: LyricsMatchSource) =>
-  source === 'lrclib' ? t('nowPlaying.sourceLrclib') : t('nowPlaying.sourceNetease')
+const sourceLabel = (source?: LyricsMatchSource) => {
+  if (source === 'lrclib') return t('nowPlaying.sourceLrclib')
+  if (source === 'kugou') return t('nowPlaying.sourceKugou')
+  if (source === 'qq') return t('nowPlaying.sourceQq')
+  return t('nowPlaying.sourceNetease')
+}
 
 const toRef = (c: LyricsMatchCandidate): LyricsCandidateRef => ({
   songId: c.songId,
-  source: c.source
+  source: c.source,
+  externalKey: c.externalKey
 })
 
 const selectedKey = ref<string | null>(null)
