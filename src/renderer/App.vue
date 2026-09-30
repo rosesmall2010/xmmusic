@@ -256,14 +256,26 @@ onBeforeUnmount(() => {
   color: var(--text-color);
 }
 
+/* 根容器必须锁死视口高度，否则子页被内容撑高后内部 overflow 无法滚动 */
+.app-root {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .app-body {
   flex: 1;
+  min-height: 0;
   display: flex;
   overflow: hidden;
 }
 
 .app-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;

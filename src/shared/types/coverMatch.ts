@@ -31,6 +31,28 @@ export interface CoverMatchProgress {
   dbOnly?: number
   currentTitle: string
   lastStatus?: CoverMatchStatus
+  /** 批量开始时间（Unix ms） */
+  startedAt?: number
+  elapsedMs?: number
+  estimatedRemainingMs?: number | null
+  concurrency?: number
+  tasks?: CoverMatchWorkerTask[]
+}
+
+/** 批量匹配单个并发槽位状态 */
+export type CoverMatchWorkerTaskStatus =
+  | 'idle'
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'skipped'
+
+export interface CoverMatchWorkerTask {
+  workerId: number
+  musicId?: number
+  title: string
+  status: CoverMatchWorkerTaskStatus
+  message?: string
 }
 
 export interface CoverMatchSummary {

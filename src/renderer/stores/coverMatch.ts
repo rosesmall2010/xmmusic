@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { CoverMatchProgress, CoverMatchSummary } from '@shared/types/coverMatch'
+import { useSettingsStore } from '@/stores/settings'
+import { mergeMatchProgress } from '@/utils/mergeMatchProgress'
 
 /**
  * 批量匹配封面状态（跨路由持久，离开本地音乐页再回来仍能看到进度）
@@ -15,12 +17,16 @@ export const useCoverMatchStore = defineStore('coverMatch', () => {
   /** 状态版本号：IPC 异步返回或 finished 事件时递增，避免过期结果覆盖新状态 */
   let syncEpoch = 0
 
+  function applyProgress(p: CoverMatchProgress) {
+    isMatching.value = true
+    progress.value = mergeMatchProgress(progress.value, p)
+  }
+
   function ensureListeners() {
     if (listenersBound) return
     listenersBound = true
     window.electronAPI.onCoverMatchProgress((p) => {
-      isMatching.value = true
-      progress.value = p
+      applyProgress(p)
     })
     window.electronAPI.onCoverMatchFinished((summary) => {
       lastSummary.value = summary
@@ -54,7 +60,10 @@ export const useCoverMatchStore = defineStore('coverMatch', () => {
           return
         }
         isMatching.value = true
-        progress.value = again.progress ?? state.progress
+        const incoming = again.progress ?? state.progress
+        if (incoming) {
+          progress.value = mergeMatchProgress(progress.value, incoming)
+        }
         return
       }
 
@@ -73,8 +82,10 @@ export const useCoverMatchStore = defineStore('coverMatch', () => {
 
     isMatching.value = true
     lastSummary.value = null
+    const concurrency = useSettingsStore().coverMatchConcurrency
 
-    runningPromise = window.electronAPI.batchMatchMissingCovers()
+    runningPromise = window.electronAPI
+      .batchMatchMissingCovers({ concurrency })
       .then((summary) => {
         lastSummary.value = summary
         return summary

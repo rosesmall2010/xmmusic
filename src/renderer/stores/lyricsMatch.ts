@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { LyricsMatchProgress, LyricsMatchSummary } from '@shared/types/lyrics'
+import { useSettingsStore } from '@/stores/settings'
+import { mergeMatchProgress } from '@/utils/mergeMatchProgress'
 
 /**
  * 批量匹配歌词状态（跨路由持久，离开本地音乐页再回来仍能看到进度）
@@ -15,12 +17,16 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
   /** 每次开始/结束递增，用于丢弃过期的 syncFromMain 结果 */
   let syncEpoch = 0
 
+  function applyProgress(p: LyricsMatchProgress) {
+    isMatching.value = true
+    progress.value = mergeMatchProgress(progress.value, p)
+  }
+
   function ensureListeners() {
     if (listenersBound) return
     listenersBound = true
     window.electronAPI.onLyricsMatchProgress((p) => {
-      isMatching.value = true
-      progress.value = p
+      applyProgress(p)
     })
     window.electronAPI.onLyricsMatchFinished((summary) => {
       lastSummary.value = summary
@@ -56,7 +62,10 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
           return
         }
         isMatching.value = true
-        progress.value = again.progress ?? state.progress
+        const incoming = again.progress ?? state.progress
+        if (incoming) {
+          progress.value = mergeMatchProgress(progress.value, incoming)
+        }
         return
       }
 
@@ -80,8 +89,10 @@ export const useLyricsMatchStore = defineStore('lyricsMatch', () => {
 
     isMatching.value = true
     lastSummary.value = null
+    const concurrency = useSettingsStore().lyricsMatchConcurrency
 
-    runningPromise = window.electronAPI.batchMatchMissingLyrics()
+    runningPromise = window.electronAPI
+      .batchMatchMissingLyrics({ concurrency })
       .then((summary) => {
         lastSummary.value = summary
         return summary

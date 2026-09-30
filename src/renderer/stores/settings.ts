@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { setLocale } from '@/locales'
+import {
+  clampMatchConcurrency,
+  DEFAULT_MATCH_CONCURRENCY
+} from '@shared/utils/matchConcurrency'
 
 export type Theme = 'light' | 'dark' | 'system'
 export type Language = 'zh' | 'en'
@@ -58,6 +62,21 @@ export const useSettingsStore = defineStore('settings', () => {
   const autoPlay = ref(localStorage.getItem('autoPlay') !== 'false') // Default true
   const scanOnStartup = ref(localStorage.getItem('scanOnStartup') === 'true')
 
+  /** 批量匹配歌词并发数（1–10） */
+  const lyricsMatchConcurrency = ref(
+    clampMatchConcurrency(
+      Number(
+        localStorage.getItem('lyricsMatchConcurrency') ??
+          localStorage.getItem('xmmusic.lyricsMatchConcurrency') ??
+          DEFAULT_MATCH_CONCURRENCY
+      )
+    )
+  )
+  /** 批量匹配封面并发数（1–10） */
+  const coverMatchConcurrency = ref(
+    clampMatchConcurrency(Number(localStorage.getItem('coverMatchConcurrency') ?? DEFAULT_MATCH_CONCURRENCY))
+  )
+
   // 全屏播放特效：从 localStorage 恢复，重启后保持上次选择；值非法时回落到频谱
   const savedEffect = localStorage.getItem('nowPlayingEffect') as NowPlayingEffect | null
   const nowPlayingEffect = ref<NowPlayingEffect>(
@@ -94,6 +113,18 @@ export const useSettingsStore = defineStore('settings', () => {
   function toggleScanOnStartup() {
     scanOnStartup.value = !scanOnStartup.value
     localStorage.setItem('scanOnStartup', String(scanOnStartup.value))
+  }
+
+  function setLyricsMatchConcurrency(n: number) {
+    const v = clampMatchConcurrency(n)
+    lyricsMatchConcurrency.value = v
+    localStorage.setItem('lyricsMatchConcurrency', String(v))
+  }
+
+  function setCoverMatchConcurrency(n: number) {
+    const v = clampMatchConcurrency(n)
+    coverMatchConcurrency.value = v
+    localStorage.setItem('coverMatchConcurrency', String(v))
   }
 
   function setLanguage(newLanguage: Language) {
@@ -204,6 +235,8 @@ export const useSettingsStore = defineStore('settings', () => {
     closeToTray,
     autoPlay,
     scanOnStartup,
+    lyricsMatchConcurrency,
+    coverMatchConcurrency,
     nowPlayingEffect,
     nowPlayingEffectEnabled,
     miniCoverStyle,
@@ -219,6 +252,8 @@ export const useSettingsStore = defineStore('settings', () => {
     shouldCaptureNowPlayingAudio,
     toggleCloseToTray,
     toggleAutoPlay,
-    toggleScanOnStartup
+    toggleScanOnStartup,
+    setLyricsMatchConcurrency,
+    setCoverMatchConcurrency
   }
 })

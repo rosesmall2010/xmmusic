@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePlaylist: (id: number) =>
     ipcRenderer.invoke('delete-playlist', id),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
+  getRecentPlaylistsByLastAdd: (limit?: number) =>
+    ipcRenderer.invoke('get-recent-playlists-by-last-add', limit),
   updatePlaylistOrder: (playlistIds: number[]) =>
     ipcRenderer.invoke('update-playlist-order', playlistIds),
   addToPlaylist: (playlistId: number, musicId: number) =>
@@ -276,7 +278,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   applyLocalLyrics: (musicId: number, localPath: string) =>
     ipcRenderer.invoke('apply-local-lyrics', musicId, localPath),
   getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
-  batchMatchMissingLyrics: () => ipcRenderer.invoke('batch-match-missing-lyrics'),
+  batchMatchMissingLyrics: (options?: { concurrency?: number }) =>
+    ipcRenderer.invoke('batch-match-missing-lyrics', options),
   cancelLyricsMatch: () => ipcRenderer.invoke('cancel-lyrics-match'),
   getLyricsMatchState: () => ipcRenderer.invoke('get-lyrics-match-state'),
   onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => {
@@ -302,7 +305,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   applyLocalCover: (musicId: number, localPath: string, options?: { force?: boolean }) =>
     ipcRenderer.invoke('apply-local-cover', musicId, localPath, options),
   getMusicWithoutCoverCount: () => ipcRenderer.invoke('get-music-without-cover-count'),
-  batchMatchMissingCovers: () => ipcRenderer.invoke('batch-match-missing-covers'),
+  batchMatchMissingCovers: (options?: { concurrency?: number }) =>
+    ipcRenderer.invoke('batch-match-missing-covers', options),
   cancelCoverMatch: () => ipcRenderer.invoke('cancel-cover-match'),
   getCoverMatchState: () => ipcRenderer.invoke('get-cover-match-state'),
   onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => {
@@ -395,6 +399,7 @@ declare global {
       }>
       deletePlaylist: (id: number) => Promise<void>
       getPlaylists: () => Promise<any[]>
+      getRecentPlaylistsByLastAdd: (limit?: number) => Promise<any[]>
       updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
       addToPlaylist: (playlistId: number, filePath: string) => Promise<void>
       batchAddToPlaylist: (playlistId: number, filePaths: string[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
@@ -502,7 +507,7 @@ declare global {
       selectLyricsFile: () => Promise<string | null>
       applyLocalLyrics: (musicId: number, localPath: string) => Promise<LyricsMatchResult>
       getMusicWithoutLyricsCount: () => Promise<number>
-      batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>
+      batchMatchMissingLyrics: (options?: { concurrency?: number }) => Promise<LyricsMatchSummary>
       cancelLyricsMatch: () => Promise<boolean>
       getLyricsMatchState: () => Promise<{ isRunning: boolean; progress: LyricsMatchProgress | null }>
       onLyricsMatchProgress: (callback: (progress: LyricsMatchProgress) => void) => void
@@ -518,7 +523,7 @@ declare global {
       applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) => Promise<CoverMatchResult>
       applyLocalCover: (musicId: number, localPath: string, options?: { force?: boolean }) => Promise<CoverMatchResult>
       getMusicWithoutCoverCount: () => Promise<number>
-      batchMatchMissingCovers: () => Promise<CoverMatchSummary>
+      batchMatchMissingCovers: (options?: { concurrency?: number }) => Promise<CoverMatchSummary>
       cancelCoverMatch: () => Promise<boolean>
       getCoverMatchState: () => Promise<{ isRunning: boolean; progress: CoverMatchProgress | null }>
       onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => void

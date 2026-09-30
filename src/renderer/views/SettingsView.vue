@@ -91,6 +91,43 @@
         </div>
       </section>
 
+      <!-- 批量匹配 -->
+      <section class="settings-section">
+        <h2 class="section-title">{{ $t('settings.batchMatch') }}</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-label">{{ $t('settings.lyricsMatchConcurrency') }}</div>
+            <div class="setting-desc">{{ $t('settings.lyricsMatchConcurrencyDesc') }}</div>
+          </div>
+          <div class="setting-control">
+            <select
+              class="setting-select"
+              :value="settingsStore.lyricsMatchConcurrency"
+              @change="onLyricsConcurrencyChange"
+            >
+              <option v-for="n in 10" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <div class="setting-label">{{ $t('settings.coverMatchConcurrency') }}</div>
+            <div class="setting-desc">{{ $t('settings.coverMatchConcurrencyDesc') }}</div>
+          </div>
+          <div class="setting-control">
+            <select
+              class="setting-select"
+              :value="settingsStore.coverMatchConcurrency"
+              @change="onCoverConcurrencyChange"
+            >
+              <option v-for="n in 10" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
       <!-- 应用内快捷键 -->
       <section class="settings-section">
         <h2 class="section-title">{{ $t('settings.shortcuts') }}</h2>
@@ -323,6 +360,13 @@ const appVersion = ref('1.0.7')
 const showAddDirDialog = ref(false)
 const editingDir = ref<{ id: number; path: string; display_order: number; enabled: boolean } | null>(null)
 const newDirPath = ref('')
+
+const onLyricsConcurrencyChange = (e: Event) => {
+  settingsStore.setLyricsMatchConcurrency(Number((e.target as HTMLSelectElement).value))
+}
+const onCoverConcurrencyChange = (e: Event) => {
+  settingsStore.setCoverMatchConcurrency(Number((e.target as HTMLSelectElement).value))
+}
 
 const shortcutActionIds = APP_SHORTCUT_ACTIONS
 const shortcuts = ref<ShortcutConfig>({})
@@ -636,6 +680,8 @@ const selectDirPath = async () => {
 
 <style scoped>
 .settings-view {
+  flex: 1;
+  min-height: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -643,6 +689,7 @@ const selectDirPath = async () => {
 }
 
 .page-header {
+  flex-shrink: 0;
   padding: var(--spacing-xl);
   border-bottom: 1px solid var(--border-color);
 }
@@ -655,8 +702,10 @@ const selectDirPath = async () => {
 
 .settings-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--spacing-xl);
+  padding-bottom: calc(var(--spacing-xl) + var(--spacing-2xl));
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
@@ -702,7 +751,17 @@ const selectDirPath = async () => {
 .setting-control {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
+}
+
+.setting-select {
+  min-width: 72px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-elevated, var(--bg-secondary));
+  color: var(--text-primary, var(--text-color));
+  font-size: var(--font-size-sm);
 }
 
 /* 语言按钮组样式 */

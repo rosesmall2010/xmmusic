@@ -2,168 +2,183 @@
   <!-- 编辑标签含表单，禁止点遮罩关闭，避免误触丢失未保存内容 -->
   <div v-if="show" class="dialog-overlay">
     <div class="dialog edit-tag-dialog" :class="{ 'has-id3': rawID3Tags }">
-      <h3>{{ $t('tagEditor.title') }}</h3>
-
-      <div class="file-info">
-        <p class="filename">{{ music?.fileName }}</p>
+      <div class="dialog-header">
+        <h3 class="dialog-title">{{ $t('tagEditor.title') }}</h3>
+        <button
+          type="button"
+          class="close-btn"
+          :disabled="loading"
+          :title="$t('common.close')"
+          :aria-label="$t('common.close')"
+          @click="close"
+        >
+          <X :size="20" />
+        </button>
       </div>
 
-      <div class="main-content">
-        <!-- 左侧：表单编辑区域（各字段均可手动编辑） -->
-        <div class="form-section">
-          <h4 class="section-title">{{ $t('tagEditor.editInfo') }}</h4>
-          <div class="form-content">
-            <div class="form-group">
-              <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
-              <input
-                v-model="formData.artist"
-                type="text"
-                :placeholder="$t('tagEditor.artistPlaceholder')"
-                :disabled="loading"
-                @keyup.enter="save"
-              />
-            </div>
-
-            <div class="swap-button-container">
-              <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
-                <ArrowLeftRight :size="16" />
-                <span>{{ $t('tagEditor.swapTitleArtist') }}</span>
-              </button>
-            </div>
-
-            <div class="form-group">
-              <label>{{ $t('tagEditor.titleLabel') }} <span class="hint">(Title)</span></label>
-              <input
-                v-model="formData.title"
-                type="text"
-                :placeholder="$t('tagEditor.titlePlaceholder')"
-                :disabled="loading"
-                @keyup.enter="save"
-              />
-            </div>
-
-            <div class="form-group">
-              <label>{{ $t('tagEditor.albumLabel') }} <span class="hint">(Album)</span></label>
-              <input
-                v-model="formData.album"
-                type="text"
-                :placeholder="$t('tagEditor.albumPlaceholder')"
-                :disabled="loading"
-                @keyup.enter="save"
-              />
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>{{ $t('tagEditor.yearLabel') }} <span class="hint">(Year)</span></label>
-                <input
-                  v-model="formData.year"
-                  type="text"
-                  inputmode="numeric"
-                  :placeholder="$t('tagEditor.yearPlaceholder')"
-                  :disabled="loading"
-                  @keyup.enter="save"
-                />
-              </div>
-              <div class="form-group">
-                <label>{{ $t('tagEditor.genreLabel') }} <span class="hint">(Genre)</span></label>
-                <input
-                  v-model="formData.genre"
-                  type="text"
-                  :placeholder="$t('tagEditor.genrePlaceholder')"
-                  :disabled="loading"
-                  @keyup.enter="save"
-                />
-              </div>
-            </div>
-          </div>
+      <!-- 中间可滚动，避免内容过长把底部按钮顶出视口 -->
+      <div class="dialog-body">
+        <div class="file-info">
+          <p class="filename">{{ music?.fileName }}</p>
         </div>
 
-        <div v-if="rawID3Tags || loadingMetadata" class="divider"></div>
+        <div class="main-content">
+          <!-- 左侧：表单编辑区域（各字段均可手动编辑） -->
+          <div class="form-section">
+            <h4 class="section-title">{{ $t('tagEditor.editInfo') }}</h4>
+            <div class="form-content">
+              <div class="form-group">
+                <label>{{ $t('tagEditor.artistLabel') }} <span class="hint">(Artist)</span></label>
+                <input
+                  v-model="formData.artist"
+                  type="text"
+                  :placeholder="$t('tagEditor.artistPlaceholder')"
+                  :disabled="loading"
+                  @keyup.enter="save"
+                />
+              </div>
 
-        <!-- 右侧：ID3 元数据 + 整包/单字段编码转换 -->
-        <div v-if="rawID3Tags || loadingMetadata" class="id3-section">
-          <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
+              <div class="swap-button-container">
+                <button @click="swapArtistAndTitle" class="btn-swap" :disabled="loading" type="button">
+                  <ArrowLeftRight :size="16" />
+                  <span>{{ $t('tagEditor.swapTitleArtist') }}</span>
+                </button>
+              </div>
 
-          <div v-if="loadingMetadata" class="loading-metadata">
-            {{ $t('tagEditor.loadingMetadata') }}
+              <div class="form-group">
+                <label>{{ $t('tagEditor.titleLabel') }} <span class="hint">(Title)</span></label>
+                <input
+                  v-model="formData.title"
+                  type="text"
+                  :placeholder="$t('tagEditor.titlePlaceholder')"
+                  :disabled="loading"
+                  @keyup.enter="save"
+                />
+              </div>
+
+              <div class="form-group">
+                <label>{{ $t('tagEditor.albumLabel') }} <span class="hint">(Album)</span></label>
+                <input
+                  v-model="formData.album"
+                  type="text"
+                  :placeholder="$t('tagEditor.albumPlaceholder')"
+                  :disabled="loading"
+                  @keyup.enter="save"
+                />
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>{{ $t('tagEditor.yearLabel') }} <span class="hint">(Year)</span></label>
+                  <input
+                    v-model="formData.year"
+                    type="text"
+                    inputmode="numeric"
+                    :placeholder="$t('tagEditor.yearPlaceholder')"
+                    :disabled="loading"
+                    @keyup.enter="save"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>{{ $t('tagEditor.genreLabel') }} <span class="hint">(Genre)</span></label>
+                  <input
+                    v-model="formData.genre"
+                    type="text"
+                    :placeholder="$t('tagEditor.genrePlaceholder')"
+                    :disabled="loading"
+                    @keyup.enter="save"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div v-else-if="rawID3Tags" class="metadata-display">
-            <div class="metadata-group">
-              <label>{{ $t('tagEditor.rawMetadata') }}</label>
-              <p class="field-hint">{{ $t('tagEditor.perFieldConvertHint') }}</p>
-              <div class="metadata-info">
-                <div
-                  v-for="field in tagFields"
-                  :key="'raw-' + field"
-                  class="metadata-item with-actions"
-                >
-                  <span class="metadata-label">{{ fieldLabel(field) }}:</span>
-                  <span class="metadata-value">{{ displayRaw(field) }}</span>
-                  <div class="field-actions" v-if="hasRawValue(field)">
-                    <button
-                      type="button"
-                      class="btn-field"
-                      :disabled="loading"
-                      :title="$t('tagEditor.convertFieldAuto')"
-                      @click="convertSingleField(field, 'auto')"
-                    >
-                      {{ $t('tagEditor.autoDetectShort') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="btn-field"
-                      :disabled="loading"
-                      :title="$t('tagEditor.convertFieldGBK')"
-                      @click="convertSingleField(field, 'gbk')"
-                    >
-                      GBK
-                    </button>
+          <div v-if="rawID3Tags || loadingMetadata" class="divider"></div>
+
+          <!-- 右侧：ID3 元数据 + 整包/单字段编码转换 -->
+          <div v-if="rawID3Tags || loadingMetadata" class="id3-section">
+            <h4 class="section-title">{{ $t('tagEditor.id3Metadata') }}</h4>
+
+            <div v-if="loadingMetadata" class="loading-metadata">
+              {{ $t('tagEditor.loadingMetadata') }}
+            </div>
+
+            <div v-else-if="rawID3Tags" class="metadata-display">
+              <div class="metadata-group">
+                <label>{{ $t('tagEditor.rawMetadata') }}</label>
+                <p class="field-hint">{{ $t('tagEditor.perFieldConvertHint') }}</p>
+                <div class="metadata-info">
+                  <div
+                    v-for="field in tagFields"
+                    :key="'raw-' + field"
+                    class="metadata-item with-actions"
+                  >
+                    <span class="metadata-label">{{ fieldLabel(field) }}:</span>
+                    <span class="metadata-value">{{ displayRaw(field) }}</span>
+                    <div class="field-actions" v-if="hasRawValue(field)">
+                      <button
+                        type="button"
+                        class="btn-field"
+                        :disabled="loading"
+                        :title="$t('tagEditor.convertFieldAuto')"
+                        @click="convertSingleField(field, 'auto')"
+                      >
+                        {{ $t('tagEditor.autoDetectShort') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-field"
+                        :disabled="loading"
+                        :title="$t('tagEditor.convertFieldGBK')"
+                        @click="convertSingleField(field, 'gbk')"
+                      >
+                        GBK
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div v-if="convertedTags" class="metadata-group converted-group">
-              <label>{{ $t('tagEditor.convertedMetadata') }}</label>
-              <div class="metadata-info converted-info">
-                <div
-                  v-for="field in tagFields"
-                  :key="'converted-' + field"
-                  class="metadata-item with-actions"
-                >
-                  <span class="metadata-label">{{ fieldLabel(field) }}:</span>
-                  <span class="metadata-value converted">{{ displayConverted(field) }}</span>
-                  <div class="field-actions" v-if="hasConvertedValue(field)">
-                    <button
-                      type="button"
-                      class="btn-field btn-field-apply"
-                      :disabled="loading"
-                      @click="applyConvertedField(field)"
-                    >
-                      {{ $t('tagEditor.applyThisField') }}
-                    </button>
+              <div v-if="convertedTags" class="metadata-group converted-group">
+                <label>{{ $t('tagEditor.convertedMetadata') }}</label>
+                <div class="metadata-info converted-info">
+                  <div
+                    v-for="field in tagFields"
+                    :key="'converted-' + field"
+                    class="metadata-item with-actions"
+                  >
+                    <span class="metadata-label">{{ fieldLabel(field) }}:</span>
+                    <span class="metadata-value converted">{{ displayConverted(field) }}</span>
+                    <div class="field-actions" v-if="hasConvertedValue(field)">
+                      <button
+                        type="button"
+                        class="btn-field btn-field-apply"
+                        :disabled="loading"
+                        @click="applyConvertedField(field)"
+                      >
+                        {{ $t('tagEditor.applyThisField') }}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="encoding-actions">
-              <button @click="convertAll('auto')" class="btn-convert" :disabled="loading || !rawID3Tags">
-                {{ $t('tagEditor.convertFromAuto') }}
-              </button>
-              <button @click="convertAll('gbk')" class="btn-convert" :disabled="loading || !rawID3Tags">
-                {{ $t('tagEditor.convertFromGBK') }}
-              </button>
-              <button
-                v-if="convertedTags"
-                @click="applyAllConvertedTags"
-                class="btn-save-converted"
-                :disabled="loading"
-              >
-                {{ $t('tagEditor.saveConverted') }}
-              </button>
+              <div class="encoding-actions">
+                <button @click="convertAll('auto')" class="btn-convert" :disabled="loading || !rawID3Tags">
+                  {{ $t('tagEditor.convertFromAuto') }}
+                </button>
+                <button @click="convertAll('gbk')" class="btn-convert" :disabled="loading || !rawID3Tags">
+                  {{ $t('tagEditor.convertFromGBK') }}
+                </button>
+                <button
+                  v-if="convertedTags"
+                  @click="applyAllConvertedTags"
+                  class="btn-save-converted"
+                  :disabled="loading"
+                >
+                  {{ $t('tagEditor.saveConverted') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -197,7 +212,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeftRight } from 'lucide-vue-next'
+import { ArrowLeftRight, X } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 import { parseFilenameForTags } from '@/utils/parseFilename'
 
@@ -528,9 +543,11 @@ const close = () => {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
   z-index: 1050;
   animation: fadeIn 0.2s ease-out;
 }
@@ -542,6 +559,12 @@ const close = () => {
   padding: var(--spacing-xl);
   position: relative;
   animation: scaleIn 0.2s ease-out;
+  display: flex;
+  flex-direction: column;
+  /* 用视口单位限高，避免 grid 居中下 max-height:100% 失效 */
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @keyframes fadeIn {
@@ -562,12 +585,61 @@ const close = () => {
 
 .edit-tag-dialog {
   width: 500px;
-  max-width: 90%;
+  max-width: 100%;
   transition: width 0.3s ease;
 }
 
 .edit-tag-dialog.has-id3 {
   width: 920px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  flex-shrink: 0;
+}
+
+.dialog-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.close-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-color);
+}
+
+.close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .file-info {
@@ -742,10 +814,12 @@ const close = () => {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
   padding-top: var(--spacing-lg);
   border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .btn-primary {
@@ -984,7 +1058,7 @@ const close = () => {
 
 @media (max-width: 768px) {
   .edit-tag-dialog.has-id3 {
-    width: 90%;
+    width: 100%;
   }
 
   .main-content {
@@ -1000,6 +1074,16 @@ const close = () => {
 
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .btn-sync {
+    margin-right: 0;
+    width: 100%;
+  }
+
+  .dialog-actions .btn-primary,
+  .dialog-actions .btn-secondary {
+    flex: 1;
   }
 }
 </style>

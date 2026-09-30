@@ -13,11 +13,16 @@ import type {
   CoverMatchCandidate,
   CoverMatchProgress,
   CoverMatchSummary,
-  CoverMatchStatus
+  CoverMatchStatus,
+  CoverMatchWorkerTask
 } from '../../shared/types/coverMatch'
 import type MusicDatabase from '../database/db'
 import MetadataEditor from './metadataEditor'
 import { parseFilenameForTags } from '../../shared/utils/parseFilename'
+import {
+  clampMatchConcurrency,
+  DEFAULT_MATCH_CONCURRENCY
+} from '../../shared/utils/matchConcurrency'
 
 const SEARCH_APIS = [
   'https://music-api.0m2.cn',
@@ -40,7 +45,8 @@ const DOWNLOAD_TIMEOUT_MS = 20000
 /** 单张封面下载上限 15MB（不缩放，但拒绝超大文件） */
 const MAX_COVER_BYTES = 15 * 1024 * 1024
 const REQUEST_GAP_MS = 120
-const BATCH_CONCURRENCY = 3
+/** 批量默认并发（实际由 options.concurrency 覆盖，范围 1–10） */
+const BATCH_CONCURRENCY = DEFAULT_MATCH_CONCURRENCY
 
 type SearchSong = {
   id: number
@@ -909,14 +915,16 @@ export default class CoverMatchService {
   }
 
   /**
-   * 批量匹配（供 S1.3）
-   * 与歌词批量一致：最多 BATCH_CONCURRENCY(=3) 路并发，每 worker 领下一首前间隔 REQUEST_GAP_MS
+   * 批量匹配
+   * 并发路数由 options.concurrency 控制（1–10）；每 worker 领下一首前间隔 REQUEST_GAP_MS
    */
   async matchBatch(
     db: MusicDatabase,
     songs: MusicItem[],
     options: {
       force?: boolean
+      concurrency?: number
+      startedAt?: number
       onProgress?: (progress: CoverMatchProgress) => void
       /** 为 false 时保留调用方已设置的取消标志（批量枚举阶段取消） */
       resetCancel?: boolean
@@ -927,6 +935,11 @@ export default class CoverMatchService {
     }
     const force = options.force === true
     const total = songs.length
+    const concurrency = clampMatchConcurrency(options.concurrency ?? BATCH_CONCURRENCY)
+    const startedAt =
+      typeof options.startedAt === 'number' && options.startedAt > 0
+        ? options.startedAt
+        : Date.now()
     let success = 0
     let failed = 0
     let skipped = 0
@@ -936,6 +949,12 @@ export default class CoverMatchService {
     let nextIndex = 0
     const results: Array<CoverMatchResult | undefined> = new Array(total)
     let lastDoneTitle = ''
+    const workerCount = Math.min(concurrency, Math.max(total, 1))
+    const tasks: CoverMatchWorkerTask[] = Array.from({ length: workerCount }, (_, i) => ({
+      workerId: i + 1,
+      title: '',
+      status: 'idle' as const
+    }))
 
     const bump = (result: CoverMatchResult) => {
       if (result.status === 'matched') {
@@ -946,7 +965,20 @@ export default class CoverMatchService {
       else skipped++
     }
 
+    const mapTaskStatus = (status: CoverMatchStatus): CoverMatchWorkerTask['status'] => {
+      if (status === 'matched') return 'success'
+      if (status === 'failed') return 'failed'
+      return 'skipped'
+    }
+
     const emitProgress = (lastStatus?: CoverMatchStatus) => {
+      const elapsedMs = Date.now() - startedAt
+      const estimatedRemainingMs =
+        completed > 0 && completed < total
+          ? Math.round(((total - completed) * elapsedMs) / completed)
+          : completed >= total
+            ? 0
+            : null
       options.onProgress?.({
         current: completed,
         total,
@@ -956,13 +988,43 @@ export default class CoverMatchService {
         writtenToFile,
         dbOnly,
         currentTitle: lastDoneTitle,
-        lastStatus
+        lastStatus,
+        startedAt,
+        elapsedMs,
+        estimatedRemainingMs,
+        concurrency: workerCount,
+        tasks: tasks.map((t) => ({ ...t }))
       })
     }
 
-    const runOne = async (index: number) => {
+    if (total === 0) {
+      emitProgress()
+      return {
+        total: 0,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        writtenToFile: 0,
+        dbOnly: 0,
+        cancelled: false,
+        results: []
+      }
+    }
+
+    emitProgress()
+
+    const runOne = async (workerSlot: number, index: number) => {
       if (this.cancelled) return
       const music = songs[index]
+      const displayTitle = music.title?.trim() || music.fileName
+      lastDoneTitle = displayTitle
+      tasks[workerSlot] = {
+        workerId: workerSlot + 1,
+        musicId: music.id,
+        title: displayTitle,
+        status: 'running'
+      }
+      emitProgress()
       const result = await this.matchOne(db, music, {
         force,
         shouldAbort: () => this.cancelled
@@ -973,24 +1035,52 @@ export default class CoverMatchService {
           results[index] = result
           bump(result)
           completed++
-          lastDoneTitle = music.title || music.fileName
+          lastDoneTitle = displayTitle
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            musicId: music.id,
+            title: displayTitle,
+            status: mapTaskStatus(result.status),
+            message: result.message
+          }
           emitProgress(result.status)
+        } else {
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            title: '',
+            status: 'idle'
+          }
+          emitProgress()
         }
         return
       }
       results[index] = result
       bump(result)
       completed++
-      lastDoneTitle = music.title || music.fileName
+      lastDoneTitle = displayTitle
+      tasks[workerSlot] = {
+        workerId: workerSlot + 1,
+        musicId: music.id,
+        title: displayTitle,
+        status: mapTaskStatus(result.status),
+        message: result.message
+      }
       emitProgress(result.status)
     }
 
-    const workerCount = Math.min(BATCH_CONCURRENCY, total)
-    const workers = Array.from({ length: workerCount }, async () => {
+    const workers = Array.from({ length: workerCount }, async (_, workerSlot) => {
       while (!this.cancelled) {
         const index = nextIndex++
-        if (index >= total) break
-        await runOne(index)
+        if (index >= total) {
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            title: '',
+            status: 'idle'
+          }
+          emitProgress()
+          break
+        }
+        await runOne(workerSlot, index)
         if (!this.cancelled && nextIndex < total) {
           await sleep(REQUEST_GAP_MS)
         }
@@ -998,6 +1088,15 @@ export default class CoverMatchService {
     })
 
     await Promise.all(workers)
+    for (const t of tasks) {
+      if (t.status === 'running') {
+        t.status = 'idle'
+        t.title = ''
+        delete t.musicId
+        delete t.message
+      }
+    }
+    emitProgress()
     // 取消标志生命周期由调用方管理：handler 入口 resetCancel，结束不清，
     // 避免「批量已取消 → 下一个单曲匹配被残留标志误中止」的尾部竞态
     return {

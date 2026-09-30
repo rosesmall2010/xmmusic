@@ -64,6 +64,7 @@ export interface ElectronAPI {
   }>
   deletePlaylist: (id: number) => Promise<void>
   getPlaylists: () => Promise<any[]>
+  getRecentPlaylistsByLastAdd: (limit?: number) => Promise<any[]>
   updatePlaylistOrder: (playlistIds: number[]) => Promise<void>
   addToPlaylist: (playlistId: number, musicId: number) => Promise<void>
   batchAddToPlaylist: (playlistId: number, musicIds: number[]) => Promise<{ success: boolean; added: number; skipped: number; total: number }>
@@ -191,6 +192,21 @@ export interface ElectronAPI {
   applyLyricsCandidate: (musicId: number, ref: LyricsCandidateRef) => Promise<any>
   selectLyricsFile: () => Promise<string | null>
   applyLocalLyrics: (musicId: number, localPath: string) => Promise<LyricsMatchResult>
+  getMusicWithoutLyricsCount: () => Promise<number>
+  batchMatchMissingLyrics: (options?: { concurrency?: number }) => Promise<import('@shared/types/lyrics').LyricsMatchSummary>
+  cancelLyricsMatch: () => Promise<boolean>
+  getLyricsMatchState: () => Promise<{
+    isRunning: boolean
+    progress: import('@shared/types/lyrics').LyricsMatchProgress | null
+  }>
+  onLyricsMatchProgress: (
+    callback: (progress: import('@shared/types/lyrics').LyricsMatchProgress) => void
+  ) => void
+  removeLyricsMatchProgress: () => void
+  onLyricsMatchFinished: (
+    callback: (summary: import('@shared/types/lyrics').LyricsMatchSummary) => void
+  ) => void
+  removeLyricsMatchFinished: () => void
 
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
@@ -210,7 +226,7 @@ export interface ElectronAPI {
     options?: { force?: boolean }
   ) => Promise<CoverMatchResult>
   getMusicWithoutCoverCount: () => Promise<number>
-  batchMatchMissingCovers: () => Promise<CoverMatchSummary>
+  batchMatchMissingCovers: (options?: { concurrency?: number }) => Promise<CoverMatchSummary>
   cancelCoverMatch: () => Promise<boolean>
   getCoverMatchState: () => Promise<{ isRunning: boolean; progress: CoverMatchProgress | null }>
   onCoverMatchProgress: (callback: (progress: CoverMatchProgress) => void) => void

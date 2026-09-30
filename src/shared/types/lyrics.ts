@@ -41,6 +41,32 @@ export interface LyricsMatchProgress {
   skipped: number
   currentTitle: string
   lastStatus?: LyricsMatchStatus
+  /** 批量开始时间（Unix ms），用于界面实时刷新已耗时 */
+  startedAt?: number
+  /** 已耗时（ms），主进程推送时快照 */
+  elapsedMs?: number
+  /** 预估剩余（ms）；完成数为 0 时为空 */
+  estimatedRemainingMs?: number | null
+  /** 本次批量实际并发路数 */
+  concurrency?: number
+  /** 各并发 worker 当前任务状态 */
+  tasks?: LyricsMatchWorkerTask[]
+}
+
+/** 批量匹配单个并发槽位状态 */
+export type LyricsMatchWorkerTaskStatus =
+  | 'idle'
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'skipped'
+
+export interface LyricsMatchWorkerTask {
+  workerId: number
+  musicId?: number
+  title: string
+  status: LyricsMatchWorkerTaskStatus
+  message?: string
 }
 
 export interface LyricsMatchSummary {

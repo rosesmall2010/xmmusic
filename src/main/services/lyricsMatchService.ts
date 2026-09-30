@@ -14,13 +14,18 @@ import type {
   LyricsMatchStatus,
   LyricsMatchCandidate,
   LyricsCandidateRef,
-  LyricsMatchSource
+  LyricsMatchSource,
+  LyricsMatchWorkerTask
 } from '../../shared/types/lyrics'
 import type MusicDatabase from '../database/db'
 import LyricsService from './lyricsService'
 import lrclib from './lrclibClient'
 import kugouLyrics from './kugouLyricsClient'
 import qqLyrics, { qqMidToSongId } from './qqLyricsClient'
+import {
+  clampMatchConcurrency,
+  DEFAULT_MATCH_CONCURRENCY
+} from '../../shared/utils/matchConcurrency'
 
 const SEARCH_APIS = [
   'https://music-api.0m2.cn',
@@ -37,8 +42,8 @@ const LRC_API = 'https://music.163.com/api/song/media?id='
 const SIMILARITY_THRESHOLD = 50
 const REQUEST_TIMEOUT_MS = 12000
 const REQUEST_GAP_MS = 120
-/** 批量匹配同时进行的任务数（搜索串行、拉词可并行） */
-const BATCH_CONCURRENCY = 3
+/** 批量匹配同时进行的任务数（默认；实际由 options.concurrency 覆盖，范围 1–10） */
+const BATCH_CONCURRENCY = DEFAULT_MATCH_CONCURRENCY
 /** 自动匹配：已知歌手时，远端艺人相似度低于此值则跳过该候选 */
 const ARTIST_SCORE_FLOOR = 50
 /** 自动匹配：歌手未知且艺人对不上时，歌名相似度须达到此值 */
@@ -170,6 +175,10 @@ export default class LyricsMatchService {
 
   resetCancel() {
     this.cancelled = false
+  }
+
+  isCancelled() {
+    return this.cancelled
   }
 
   /** 复位取消标志与镜像游标（批量取消后不复位会让随后的手动匹配直接返回「已取消」） */
@@ -1122,19 +1131,45 @@ export default class LyricsMatchService {
 
   /**
    * 批量匹配：默认只处理无歌词歌曲；forceAll 时对传入列表强制重匹配
-   * 搜索经 searchMutex 串行；拉词最多 BATCH_CONCURRENCY 路并行
+   * 搜索经 searchMutex 串行；并发路数由 options.concurrency 控制（1–10）
    */
   async matchBatch(
     db: MusicDatabase,
     songs: MusicItem[],
     options: {
       force?: boolean
+      /** 并发任务数，钳制到 1–10 */
+      concurrency?: number
+      /** 若调用方已开始计时（含枚举阶段），沿用该起点避免 UI 耗时回跳 */
+      startedAt?: number
       onProgress?: (progress: LyricsMatchProgress) => void
+      /** 为 false 时保留调用方已设置的取消标志（批量枚举阶段取消） */
+      resetCancel?: boolean
     } = {}
   ): Promise<LyricsMatchSummary> {
-    this.resetSessionState()
+    if (options.resetCancel !== false) {
+      this.resetSessionState()
+    } else {
+      // 保留 cancelled，仅复位镜像游标
+      this.apiIndex = 0
+    }
+    if (this.cancelled) {
+      return {
+        total: songs.length,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        cancelled: true,
+        results: []
+      }
+    }
     const force = options.force === true
     const total = songs.length
+    const concurrency = clampMatchConcurrency(options.concurrency ?? BATCH_CONCURRENCY)
+    const startedAt =
+      typeof options.startedAt === 'number' && options.startedAt > 0
+        ? options.startedAt
+        : Date.now()
     let success = 0
     let failed = 0
     let skipped = 0
@@ -1143,6 +1178,12 @@ export default class LyricsMatchService {
     let failStreak = 0
     const results: Array<LyricsMatchResult | undefined> = new Array(total)
     let lastDoneTitle = ''
+    const workerCount = Math.min(concurrency, Math.max(total, 1))
+    const tasks: LyricsMatchWorkerTask[] = Array.from({ length: workerCount }, (_, i) => ({
+      workerId: i + 1,
+      title: '',
+      status: 'idle' as const
+    }))
 
     const bump = (status: LyricsMatchStatus) => {
       if (status === 'matched' || status === 'linked_local') success++
@@ -1151,9 +1192,7 @@ export default class LyricsMatchService {
     }
 
     const noteOutcome = (status: LyricsMatchStatus) => {
-      const bad =
-        status === 'failed' ||
-        status === 'skipped_low_similarity'
+      const bad = status === 'failed' || status === 'skipped_low_similarity'
       if (status === 'matched' || status === 'linked_local') {
         failStreak = 0
         return
@@ -1167,7 +1206,22 @@ export default class LyricsMatchService {
       }
     }
 
+    const mapTaskStatus = (
+      status: LyricsMatchStatus
+    ): LyricsMatchWorkerTask['status'] => {
+      if (status === 'matched' || status === 'linked_local') return 'success'
+      if (status === 'failed') return 'failed'
+      return 'skipped'
+    }
+
     const emitProgress = (lastStatus?: LyricsMatchStatus) => {
+      const elapsedMs = Date.now() - startedAt
+      const estimatedRemainingMs =
+        completed > 0 && completed < total
+          ? Math.round(((total - completed) * elapsedMs) / completed)
+          : completed >= total
+            ? 0
+            : null
       options.onProgress?.({
         current: completed,
         total,
@@ -1175,20 +1229,44 @@ export default class LyricsMatchService {
         failed,
         skipped,
         currentTitle: lastDoneTitle,
-        lastStatus
+        lastStatus,
+        startedAt,
+        elapsedMs,
+        estimatedRemainingMs,
+        concurrency: workerCount,
+        tasks: tasks.map((t) => ({ ...t }))
       })
     }
 
-    const runOne = async (index: number) => {
+    // 空列表也推一次，方便 UI 拿到 startedAt / concurrency
+    if (total === 0) {
+      emitProgress()
+      return {
+        total: 0,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        cancelled: false,
+        results: []
+      }
+    }
+
+    emitProgress()
+
+    const runOne = async (workerSlot: number, index: number) => {
       if (this.cancelled) return
-      // 长跑定期轮转，避免某一镜像中后期开始返回乱结果仍被 sticky
       if (index > 0 && index % BATCH_ROTATE_EVERY === 0) {
         this.rotateApi(`批量已处理 ${index} 首`)
       }
       const music = songs[index]
-      // 进度显示「正在处理」的歌，避免并发时用 lastDoneTitle 造成「传错歌」的错觉
       const displayTitle = music.title?.trim() || music.fileName
       lastDoneTitle = displayTitle
+      tasks[workerSlot] = {
+        workerId: workerSlot + 1,
+        musicId: music.id,
+        title: displayTitle,
+        status: 'running'
+      }
       emitProgress()
       const result = await this.matchOne(db, music, {
         force,
@@ -1201,7 +1279,21 @@ export default class LyricsMatchService {
           bump(result.status)
           completed++
           lastDoneTitle = displayTitle
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            musicId: music.id,
+            title: displayTitle,
+            status: mapTaskStatus(result.status),
+            message: result.message
+          }
           emitProgress(result.status)
+        } else {
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            title: '',
+            status: 'idle'
+          }
+          emitProgress()
         }
         return
       }
@@ -1210,16 +1302,29 @@ export default class LyricsMatchService {
       noteOutcome(result.status)
       completed++
       lastDoneTitle = displayTitle
+      tasks[workerSlot] = {
+        workerId: workerSlot + 1,
+        musicId: music.id,
+        title: displayTitle,
+        status: mapTaskStatus(result.status),
+        message: result.message
+      }
       emitProgress(result.status)
     }
 
-    const workerCount = Math.min(BATCH_CONCURRENCY, total)
-    const workers = Array.from({ length: workerCount }, async () => {
+    const workers = Array.from({ length: workerCount }, async (_, workerSlot) => {
       while (!this.cancelled) {
         const index = nextIndex++
-        if (index >= total) break
-        await runOne(index)
-        // 同 worker 领取下一首前稍作间隔，减轻上游 API 压力
+        if (index >= total) {
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            title: '',
+            status: 'idle'
+          }
+          emitProgress()
+          break
+        }
+        await runOne(workerSlot, index)
         if (!this.cancelled && nextIndex < total) {
           await sleep(REQUEST_GAP_MS)
         }
@@ -1228,6 +1333,16 @@ export default class LyricsMatchService {
 
     try {
       await Promise.all(workers)
+      // 结束时清空 running，保留最终统计
+      for (const t of tasks) {
+        if (t.status === 'running') {
+          t.status = 'idle'
+          t.title = ''
+          delete t.musicId
+          delete t.message
+        }
+      }
+      emitProgress()
       return {
         total,
         success,

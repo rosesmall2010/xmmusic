@@ -74,15 +74,27 @@
     <div v-if="isMatchingLyrics && lyricsMatchProgress" class="scan-progress-bar lyrics-match-progress">
       <div class="progress-info">
         <span class="current-file" :title="lyricsMatchProgress.currentTitle">
-          {{ $t('localMusic.matchingLyrics') }}: {{ lyricsMatchProgress.currentTitle }}
+          {{ $t('localMusic.matchingLyrics') }}
+          <template v-if="lyricsMatchProgress.concurrency">
+            · {{ $t('localMusic.matchConcurrencyActive', { count: lyricsMatchProgress.concurrency }) }}
+          </template>
         </span>
         <span class="progress-stats">
           {{ lyricsMatchProgress.current }} / {{ lyricsMatchProgress.total }}
-          · {{ $t('localMusic.matchSuccessCount', { count: lyricsMatchProgress.success }) }}
-          <template v-if="lyricsMatchProgress.total >= 3">
-            · {{ $t('localMusic.matchConcurrencyHint') }}
-          </template>
+          · {{
+            $t('localMusic.matchSuccessCount', {
+              count: lyricsMatchProgress.success,
+              percent: formatMatchSuccessPercent(
+                lyricsMatchProgress.success,
+                lyricsMatchProgress.total
+              )
+            })
+          }}
         </span>
+      </div>
+      <div class="progress-time-row">
+        <span>{{ $t('localMusic.matchElapsed') }}: {{ lyricsMatchElapsedText }}</span>
+        <span>{{ $t('localMusic.matchEta') }}: {{ lyricsMatchEtaText }}</span>
       </div>
       <div class="progress-track">
         <div
@@ -90,29 +102,75 @@
           :style="{ width: `${lyricsMatchProgress.total ? (lyricsMatchProgress.current / lyricsMatchProgress.total) * 100 : 0}%` }"
         ></div>
       </div>
+      <ul v-if="lyricsMatchProgress.tasks?.length" class="match-task-list">
+        <li
+          v-for="task in lyricsMatchProgress.tasks"
+          :key="task.workerId"
+          class="match-task-item"
+          :class="`status-${task.status}`"
+        >
+          <span class="task-id">#{{ task.workerId }}</span>
+          <span class="task-status">{{ workerStatusLabel(task.status) }}</span>
+          <span class="task-title" :title="task.title || undefined">
+            {{ task.title || $t('localMusic.matchWorkerIdle') }}
+          </span>
+          <span v-if="task.message && task.status !== 'running' && task.status !== 'idle'" class="task-msg" :title="task.message">
+            {{ task.message }}
+          </span>
+        </li>
+      </ul>
       <button class="btn-link cancel-match" @click="cancelBatchMatchLyrics">{{ $t('common.cancel') }}</button>
     </div>
 
     <!-- 封面批量匹配进度 -->
-    <div v-if="isMatchingCovers" class="scan-progress-bar lyrics-match-progress">
+    <div v-if="isMatchingCovers && coverMatchProgress" class="scan-progress-bar lyrics-match-progress">
       <div class="progress-info">
-        <span class="current-file" :title="coverMatchProgress?.currentTitle || ''">
-          {{ $t('localMusic.matchingCovers') }}: {{ coverMatchProgress?.currentTitle || $t('localMusic.coverMatchPreparing') }}
-        </span>
-        <span v-if="coverMatchProgress" class="progress-stats">
-          {{ coverMatchProgress.current }} / {{ coverMatchProgress.total }}
-          · {{ $t('localMusic.matchSuccessCount', { count: coverMatchProgress.success }) }}
-          <template v-if="coverMatchProgress.total >= 3">
-            · {{ $t('localMusic.matchConcurrencyHint') }}
+        <span class="current-file" :title="coverMatchProgress.currentTitle || ''">
+          {{ $t('localMusic.matchingCovers') }}
+          <template v-if="coverMatchProgress.concurrency">
+            · {{ $t('localMusic.matchConcurrencyActive', { count: coverMatchProgress.concurrency }) }}
           </template>
         </span>
+        <span class="progress-stats">
+          {{ coverMatchProgress.current }} / {{ coverMatchProgress.total }}
+          · {{
+            $t('localMusic.matchSuccessCount', {
+              count: coverMatchProgress.success,
+              percent: formatMatchSuccessPercent(
+                coverMatchProgress.success,
+                coverMatchProgress.total
+              )
+            })
+          }}
+        </span>
+      </div>
+      <div class="progress-time-row">
+        <span>{{ $t('localMusic.matchElapsed') }}: {{ coverMatchElapsedText }}</span>
+        <span>{{ $t('localMusic.matchEta') }}: {{ coverMatchEtaText }}</span>
       </div>
       <div class="progress-track">
         <div
           class="progress-fill"
-          :style="{ width: `${coverMatchProgress?.total ? (coverMatchProgress.current / coverMatchProgress.total) * 100 : 0}%` }"
+          :style="{ width: `${coverMatchProgress.total ? (coverMatchProgress.current / coverMatchProgress.total) * 100 : 0}%` }"
         ></div>
       </div>
+      <ul v-if="coverMatchProgress.tasks?.length" class="match-task-list">
+        <li
+          v-for="task in coverMatchProgress.tasks"
+          :key="task.workerId"
+          class="match-task-item"
+          :class="`status-${task.status}`"
+        >
+          <span class="task-id">#{{ task.workerId }}</span>
+          <span class="task-status">{{ workerStatusLabel(task.status) }}</span>
+          <span class="task-title" :title="task.title || undefined">
+            {{ task.title || $t('localMusic.matchWorkerIdle') }}
+          </span>
+          <span v-if="task.message && task.status !== 'running' && task.status !== 'idle'" class="task-msg" :title="task.message">
+            {{ task.message }}
+          </span>
+        </li>
+      </ul>
       <button class="btn-link cancel-match" @click="cancelBatchMatchCovers">{{ $t('common.cancel') }}</button>
     </div>
 
@@ -156,17 +214,31 @@
         </div>
         <div class="dialog-body">
           <div class="dir-manage-actions">
-            <button
-              class="btn-primary"
-              @click="showAddDirDialog = true"
-              :disabled="dirStore.directories.length >= 20"
-            >
-              <Plus :size="16" />
-              {{ $t('settings.addDirectory') }}
-            </button>
-            <div class="dir-limit-hint" v-if="dirStore.directories.length >= 20">
-              {{ $t('settings.maxDirectoriesReached') }}
+            <div class="dir-manage-actions-left">
+              <button
+                class="btn-primary"
+                @click="showAddDirDialog = true"
+                :disabled="dirStore.directories.length >= 20"
+              >
+                <Plus :size="16" />
+                {{ $t('settings.addDirectory') }}
+              </button>
+              <div class="dir-limit-hint" v-if="dirStore.directories.length >= 20">
+                {{ $t('settings.maxDirectoriesReached') }}
+              </div>
             </div>
+            <button
+              class="btn-secondary"
+              @click="handleScanFromDirDialog"
+              :disabled="dirStore.directories.length === 0 || isLibraryBusy"
+              :title="
+                dirStore.directories.length === 0
+                  ? $t('settings.noDirectories')
+                  : $t('settings.scan')
+              "
+            >
+              {{ isScanning ? $t('settings.scanning') : $t('settings.scan') }}
+            </button>
           </div>
 
           <div v-if="dirStore.loading" class="dir-loading">{{ $t('settings.loading') }}</div>
@@ -284,8 +356,12 @@ import { useEqualizer } from '@/composables/useEqualizer'
 import { useLocalMusicDirStore } from '@/stores/localMusicDir'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { useCoverMatchStore } from '@/stores/coverMatch'
+import { useSettingsStore } from '@/stores/settings'
+import { formatDurationDhms } from '@/utils/formatDuration'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
+import type { LyricsMatchWorkerTaskStatus } from '@shared/types/lyrics'
+import type { CoverMatchWorkerTaskStatus } from '@shared/types/coverMatch'
 
 const { t } = useI18n()
 const musicStore = useMusicStore()
@@ -293,6 +369,7 @@ const playerStore = usePlayerStore()
 const dirStore = useLocalMusicDirStore()
 const lyricsMatchStore = useLyricsMatchStore()
 const coverMatchStore = useCoverMatchStore()
+const settingsStore = useSettingsStore()
 const equalizer = useEqualizer()
 const { play, pause, stopAndUnload, getAudioElement } = usePlayer()
 
@@ -342,6 +419,97 @@ const isMatchingLyrics = computed(() => lyricsMatchStore.isMatching)
 const lyricsMatchProgress = computed(() => lyricsMatchStore.progress)
 const isMatchingCovers = computed(() => coverMatchStore.isMatching)
 const coverMatchProgress = computed(() => coverMatchStore.progress)
+
+/** 每秒 tick，用于已耗时/预估剩余实时刷新（歌词或封面批量进行中） */
+const matchClockTick = ref(0)
+let matchClockTimer: ReturnType<typeof setInterval> | null = null
+
+watch(
+  [isMatchingLyrics, isMatchingCovers],
+  ([lyrics, covers]) => {
+    const matching = lyrics || covers
+    if (matchClockTimer) {
+      clearInterval(matchClockTimer)
+      matchClockTimer = null
+    }
+    if (matching) {
+      matchClockTick.value = 0
+      matchClockTimer = setInterval(() => {
+        matchClockTick.value += 1
+      }, 1000)
+    }
+  },
+  { immediate: true }
+)
+
+const calcElapsedMs = (p: { startedAt?: number; elapsedMs?: number } | null) => {
+  matchClockTick.value
+  if (!p) return 0
+  if (p.startedAt) return Math.max(0, Date.now() - p.startedAt)
+  return p.elapsedMs ?? 0
+}
+
+const calcEtaMs = (
+  p: { total?: number; current?: number; estimatedRemainingMs?: number | null } | null,
+  elapsed: number
+) => {
+  matchClockTick.value
+  if (!p || !p.total) return null
+  const done = p.current || 0
+  if (done <= 0) return null
+  if (done >= p.total) return 0
+  if (elapsed <= 0) return p.estimatedRemainingMs ?? null
+  return Math.round(((p.total - done) * elapsed) / done)
+}
+
+const lyricsMatchElapsedMs = computed(() => calcElapsedMs(lyricsMatchProgress.value))
+const lyricsMatchEtaMs = computed(() =>
+  calcEtaMs(lyricsMatchProgress.value, lyricsMatchElapsedMs.value)
+)
+const lyricsMatchElapsedText = computed(() =>
+  formatDurationDhms(lyricsMatchElapsedMs.value, t('localMusic.matchDurationDay'))
+)
+const lyricsMatchEtaText = computed(() => {
+  const eta = lyricsMatchEtaMs.value
+  if (eta == null) return t('localMusic.matchEtaCalculating')
+  return formatDurationDhms(eta, t('localMusic.matchDurationDay'))
+})
+
+const coverMatchElapsedMs = computed(() => calcElapsedMs(coverMatchProgress.value))
+const coverMatchEtaMs = computed(() =>
+  calcEtaMs(coverMatchProgress.value, coverMatchElapsedMs.value)
+)
+const coverMatchElapsedText = computed(() =>
+  formatDurationDhms(coverMatchElapsedMs.value, t('localMusic.matchDurationDay'))
+)
+const coverMatchEtaText = computed(() => {
+  const eta = coverMatchEtaMs.value
+  if (eta == null) return t('localMusic.matchEtaCalculating')
+  return formatDurationDhms(eta, t('localMusic.matchDurationDay'))
+})
+
+const workerStatusLabel = (status: LyricsMatchWorkerTaskStatus | CoverMatchWorkerTaskStatus) => {
+  switch (status) {
+    case 'running':
+      return t('localMusic.matchWorkerRunning')
+    case 'success':
+      return t('localMusic.matchWorkerSuccess')
+    case 'failed':
+      return t('localMusic.matchWorkerFailed')
+    case 'skipped':
+      return t('localMusic.matchWorkerSkipped')
+    default:
+      return t('localMusic.matchWorkerIdle')
+  }
+}
+
+/** 成功数相对总数的百分比；整数不显示小数，否则精确到 0.1 */
+const formatMatchSuccessPercent = (success: number, total: number) => {
+  if (!total || total <= 0) return '0'
+  const pct = (Math.max(0, success) / total) * 100
+  const rounded = Math.round(pct * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
 const isMatchingBusy = computed(
   () => isMatchingLyrics.value || isMatchingCovers.value || lyricsMatchStore.manualMatchUiBusy
 )
@@ -452,6 +620,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (matchClockTimer) {
+    clearInterval(matchClockTimer)
+    matchClockTimer = null
+  }
   stopBackgroundLoading()
   window.removeEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
   unsubMusicUpdated?.()
@@ -509,13 +681,23 @@ const handleBatchMatchLyrics = async () => {
     }
     if (!confirm(t('localMusic.batchMatchConfirm', { count }))) return
 
+    const conc = Math.min(settingsStore.lyricsMatchConcurrency, Math.max(1, count))
     lyricsMatchStore.setOptimisticProgress({
       current: 0,
       total: count,
       success: 0,
       failed: 0,
       skipped: 0,
-      currentTitle: ''
+      currentTitle: t('localMusic.matchPreparing'),
+      startedAt: Date.now(),
+      elapsedMs: 0,
+      estimatedRemainingMs: null,
+      concurrency: conc,
+      tasks: Array.from({ length: conc }, (_, i) => ({
+        workerId: i + 1,
+        title: '',
+        status: 'idle' as const
+      }))
     })
 
     // 列表由主进程批量结束时发出的 music-list-refresh 统一刷新
@@ -555,6 +737,7 @@ const handleBatchMatchCovers = async () => {
     }
     if (!confirm(t('localMusic.batchMatchCoversConfirm', { count }))) return
 
+    const conc = Math.min(settingsStore.coverMatchConcurrency, Math.max(1, count))
     coverMatchStore.setOptimisticProgress({
       current: 0,
       total: count,
@@ -563,7 +746,16 @@ const handleBatchMatchCovers = async () => {
       skipped: 0,
       writtenToFile: 0,
       dbOnly: 0,
-      currentTitle: ''
+      currentTitle: t('localMusic.matchPreparing'),
+      startedAt: Date.now(),
+      elapsedMs: 0,
+      estimatedRemainingMs: null,
+      concurrency: conc,
+      tasks: Array.from({ length: conc }, (_, i) => ({
+        workerId: i + 1,
+        title: '',
+        status: 'idle' as const
+      }))
     })
 
     const summary = await coverMatchStore.startBatchMatch()
@@ -910,6 +1102,13 @@ const closeDirManageDialog = () => {
   showDirManageDialog.value = false
 }
 
+/** 目录管理对话框内「扫描」：先关对话框，再走与工具栏相同的扫描逻辑 */
+const handleScanFromDirDialog = async () => {
+  if (dirStore.directories.length === 0 || isLibraryBusy.value) return
+  closeDirManageDialog()
+  await handleScan()
+}
+
 // 添加目录
 const handleAddDir = async () => {
   if (!newDirPath.value.trim()) {
@@ -1201,6 +1400,63 @@ const selectDirPath = async () => {
   font-size: var(--font-size-xs);
 }
 
+.progress-time-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.match-task-item {
+  display: grid;
+  grid-template-columns: 36px 64px minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: var(--spacing-xs);
+  align-items: center;
+  font-size: var(--font-size-xs);
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+
+.match-task-item .task-id {
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.match-task-item .task-status {
+  font-weight: 500;
+}
+
+.match-task-item.status-running .task-status {
+  color: var(--color-primary);
+}
+
+.match-task-item.status-success .task-status {
+  color: var(--color-success);
+}
+
+.match-task-item.status-failed .task-status {
+  color: var(--color-danger, #e54);
+}
+
+.match-task-item .task-title,
+.match-task-item .task-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* 目录管理对话框样式 */
 .dialog-overlay {
   position: fixed;
@@ -1272,7 +1528,16 @@ const selectDirPath = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
+}
+
+.dir-manage-actions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .dir-limit-hint {

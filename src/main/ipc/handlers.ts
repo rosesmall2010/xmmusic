@@ -26,6 +26,10 @@ import type {
 } from '../../shared/types/lyrics'
 import type { CoverMatchResult, CoverMatchProgress, CoverMatchSummary } from '../../shared/types/coverMatch'
 import { APP_SHORTCUT_ACTIONS } from '../../shared/utils/shortcutActions'
+import {
+  clampMatchConcurrency,
+  DEFAULT_MATCH_CONCURRENCY
+} from '../../shared/utils/matchConcurrency'
 
 /** 从高级搜索条件生成历史文案；仅排序/limit 等程序化查询返回 null */
 function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | null | undefined): string | null {
@@ -660,6 +664,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     return db.getPlaylists()
   })
 
+  /** 最近用过的歌单（有曲按最近入单，空歌单按 updated_at；逆序，默认 10） */
+  ipcMain.handle('get-recent-playlists-by-last-add', (_event, limit?: number) => {
+    if (!db) return []
+    return db.getRecentPlaylistsByLastAdd(limit ?? 10)
+  })
+
   ipcMain.handle('update-playlist-order', (_, playlistIds: number[]) => {
     if (!db) return
     db.updatePlaylistOrder(playlistIds)
@@ -1271,12 +1281,53 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
    * 批量匹配本地库全部无歌词歌曲
    * 进度通过 lyrics-match-progress 事件推送；结束发 lyrics-match-finished
    */
-  ipcMain.handle('batch-match-missing-lyrics', async () => {
+  ipcMain.handle('batch-match-missing-lyrics', async (_event, options?: { concurrency?: number }) => {
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
       lyricsMatchService.resetCancel()
       batchLyricsMatchActive = true
-      lyricsMatchLastProgress = null
+      const startedAt = Date.now()
+      const concurrency = clampMatchConcurrency(
+        options?.concurrency ?? DEFAULT_MATCH_CONCURRENCY
+      )
+      // 枚举前先推进度，与渲染端乐观 startedAt 对齐，避免耗时回跳
+      // total/tasks 由渲染端乐观进度保留；此处只同步计时与并发上限提示
+      const preparing: LyricsMatchProgress = {
+        current: 0,
+        total: 0,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        currentTitle: '',
+        startedAt,
+        elapsedMs: 0,
+        estimatedRemainingMs: null,
+        concurrency,
+        tasks: Array.from({ length: concurrency }, (_, i) => ({
+          workerId: i + 1,
+          title: '',
+          status: 'idle' as const
+        }))
+      }
+      lyricsMatchLastProgress = preparing
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('lyrics-match-progress', preparing)
+      }
+
+      const sendCancelledSummary = (): LyricsMatchSummary => {
+        const cancelled: LyricsMatchSummary = {
+          total: 0,
+          success: 0,
+          failed: 0,
+          skipped: 0,
+          cancelled: true,
+          results: []
+        }
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('lyrics-match-finished', cancelled)
+        }
+        return cancelled
+      }
 
       try {
         const pageSize = 100
@@ -1285,6 +1336,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
 
         let offset = 0
         while (true) {
+          if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
           const page = db.getMusicWithoutLyrics(offset, pageSize)
           if (page.length === 0) break
           for (const m of page) {
@@ -1300,6 +1352,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         // 路径写在库里但文件已丢失 → 一并纳入批量匹配
         offset = 0
         while (true) {
+          if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
           const page = db.getMusicWithClaimedLyricsPath(offset, pageSize)
           if (page.length === 0) break
           for (const m of page) {
@@ -1312,6 +1365,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           offset += page.length
           if (page.length < pageSize) break
         }
+
+        if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
 
         if (songs.length === 0) {
           const empty: LyricsMatchSummary = {
@@ -1328,8 +1383,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           return empty
         }
 
+        // 枚举阶段用户可能已 cancel；resetCancel: false 保留取消标志
         const summary = await lyricsMatchService.matchBatch(db, songs, {
           force: false,
+          concurrency,
+          startedAt,
+          resetCancel: false,
           onProgress: (progress: LyricsMatchProgress) => {
             lyricsMatchLastProgress = progress
             if (!mainWindow.isDestroyed()) {
@@ -1476,12 +1535,38 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
    * 批量匹配本地库全部无有效封面歌曲
    * 进度 cover-match-progress；结束 cover-match-finished
    */
-  ipcMain.handle('batch-match-missing-covers', async () => {
+  ipcMain.handle('batch-match-missing-covers', async (_event, options?: { concurrency?: number }) => {
     if (!db) throw new Error('数据库未初始化')
     return withCoverMatchLock(async () => {
       coverMatchService.resetCancel()
       batchCoverMatchActive = true
-      coverMatchLastProgress = null
+      const startedAt = Date.now()
+      const concurrency = clampMatchConcurrency(
+        options?.concurrency ?? DEFAULT_MATCH_CONCURRENCY
+      )
+      const preparing: CoverMatchProgress = {
+        current: 0,
+        total: 0,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        writtenToFile: 0,
+        dbOnly: 0,
+        currentTitle: '',
+        startedAt,
+        elapsedMs: 0,
+        estimatedRemainingMs: null,
+        concurrency,
+        tasks: Array.from({ length: concurrency }, (_, i) => ({
+          workerId: i + 1,
+          title: '',
+          status: 'idle' as const
+        }))
+      }
+      coverMatchLastProgress = preparing
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('cover-match-progress', preparing)
+      }
 
       const sendCancelledSummary = (): CoverMatchSummary => {
         const cancelled: CoverMatchSummary = {
@@ -1561,6 +1646,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         const summary = await coverMatchService.matchBatch(db, songs, {
           force: false,
           resetCancel: false,
+          concurrency,
+          startedAt,
           onProgress: (progress: CoverMatchProgress) => {
             coverMatchLastProgress = progress
             if (!mainWindow.isDestroyed()) {

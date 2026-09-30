@@ -1439,6 +1439,28 @@ export default class MusicDatabase {
     return rows.map(this.mapRowToPlaylist)
   }
 
+  /**
+   * 最近用过的歌单（最多 limit 个）：
+   * - 有曲目：按 playlist_item 最近 added_at
+   * - 空歌单：按 playlist.updated_at（与「刚加过歌」同等参与逆序）
+   */
+  getRecentPlaylistsByLastAdd(limit = 10): Playlist[] {
+    const safeLimit = Math.min(50, Math.max(1, Math.floor(limit) || 10))
+    const stmt = this.db!.prepare(`
+      SELECT p.*
+      FROM playlist p
+      LEFT JOIN (
+        SELECT playlist_id, MAX(added_at) AS last_added_at
+        FROM playlist_item
+        GROUP BY playlist_id
+      ) la ON la.playlist_id = p.id
+      ORDER BY COALESCE(la.last_added_at, p.updated_at, p.created_at) DESC, p.id DESC
+      LIMIT ?
+    `)
+    const rows = stmt.all(safeLimit) as any[]
+    return rows.map(this.mapRowToPlaylist)
+  }
+
   updatePlaylistOrder(playlistIds: number[]): void {
     const stmt = this.db!.prepare('UPDATE playlist SET display_order = ? WHERE id = ?')
     const run = this.db!.transaction((ids: number[]) => {
@@ -3112,5 +3134,7 @@ export default class MusicDatabase {
    */
   clearPlaylist(playlistId: number): void {
     this.db!.prepare('DELETE FROM playlist_item WHERE playlist_id = ?').run(playlistId)
+    // 同步 song_count / total_duration / updated_at，空歌单才能按更新时间参与「最近」排序
+    this.updatePlaylistStats(playlistId)
   }
 }

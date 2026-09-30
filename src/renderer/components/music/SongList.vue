@@ -159,6 +159,7 @@
     <!-- Context Menu -->
     <div
       v-if="contextMenu.visible && contextMenu.music"
+      ref="contextMenuRef"
       class="context-menu"
       :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
     >
@@ -169,9 +170,48 @@
         <Heart :size="16" :fill="contextMenu.isFavorite ? 'currentColor' : 'none'" :class="{ 'text-red-500': contextMenu.isFavorite }" class="icon" />
         {{ contextMenu.isFavorite ? $t('music.removeFromFavorites') : $t('music.addToFavorites') }}
       </div>
-      <div class="menu-item" @click="openAddToPlaylist(contextMenu.music!)">
-        <Music :size="16" class="icon" />
-        {{ $t('music.addToPlaylist') }}
+      <div
+        class="menu-item has-submenu"
+        :class="{ 'submenu-open': playlistSubmenuOpen }"
+        @mouseenter="openPlaylistSubmenu"
+        @mouseleave="scheduleClosePlaylistSubmenu"
+      >
+        <div class="menu-item-main" @click="openAddToPlaylist(contextMenu.music!)">
+          <Music :size="16" class="icon" />
+          <span class="menu-item-label">{{ $t('music.addToPlaylist') }}</span>
+          <button
+            type="button"
+            class="submenu-chevron-btn"
+            :title="$t('music.addToPlaylist')"
+            @click.stop="togglePlaylistSubmenu"
+          >
+            <ChevronRight :size="14" class="submenu-chevron" />
+          </button>
+        </div>
+        <div
+          v-if="playlistSubmenuOpen"
+          ref="playlistSubmenuRef"
+          class="context-submenu"
+          :class="{ 'open-left': playlistSubmenuOpenLeft }"
+          :style="{ top: `${playlistSubmenuTop}px` }"
+          @mouseenter="cancelClosePlaylistSubmenu"
+          @mouseleave="scheduleClosePlaylistSubmenu"
+        >
+          <div
+            v-for="pl in recentPlaylists"
+            :key="pl.id"
+            class="menu-item"
+            :title="pl.name"
+            @click="quickAddToPlaylist(pl)"
+          >
+            {{ pl.name }}
+          </div>
+          <div v-if="recentPlaylists.length > 0" class="menu-divider"></div>
+          <div class="menu-item" @click="openAddToPlaylist(contextMenu.music!)">
+            <Music :size="16" class="icon" />
+            {{ $t('music.addToPlaylist') }}
+          </div>
+        </div>
       </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="openNewTagInfo(contextMenu.music!)">
@@ -310,14 +350,14 @@ import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2 } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2, ChevronRight } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
 import CoverMatchSelectModal from '@/components/music/CoverMatchSelectModal.vue'
-import type { MusicItem } from '@shared/types/music'
+import type { MusicItem, Playlist } from '@shared/types/music'
 import type { LyricsCandidateRef, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 import { useElementSize } from '@vueuse/core'
@@ -691,38 +731,64 @@ const handlePlay = (music: MusicItem) => {
 }
 
 const showContextMenu = async (event: MouseEvent, music: MusicItem) => {
+  const targetId = music.id
   contextMenu.music = music
   contextMenu.hasValidCover = false
+  contextMenu.isFavorite = false
+  playlistSubmenuOpen.value = false
+  playlistSubmenuOpenLeft.value = false
+  playlistSubmenuTop.value = 0
+  recentPlaylists.value = []
 
-  // 先设置初始位置，然后在 nextTick 中调整边界
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
+  // 先显示菜单，再异步补全状态 / 最近歌单，避免右键卡住
+  contextMenu.visible = true
+  await nextTick()
+  adjustContextMenuPosition()
 
   try {
-    contextMenu.isFavorite = await window.electronAPI.isFileFavorite(music.id)
+    const fav = await window.electronAPI.isFileFavorite(music.id)
+    if (contextMenu.music?.id !== targetId) return
+    contextMenu.isFavorite = fav
   } catch (e) {
     console.error('Failed to check favorite status', e)
   }
 
   try {
-    contextMenu.hasValidCover = await window.electronAPI.hasValidCoverForMusic(music.id)
+    const hasCover = await window.electronAPI.hasValidCoverForMusic(music.id)
+    if (contextMenu.music?.id !== targetId) return
+    contextMenu.hasValidCover = hasCover
   } catch (e) {
     console.error('Failed to check cover status', e)
-    contextMenu.hasValidCover = false
+    if (contextMenu.music?.id === targetId) {
+      contextMenu.hasValidCover = false
+    }
   }
 
-  contextMenu.visible = true
-
-  // 在 nextTick 中调整菜单位置，确保不超出屏幕边界
-  await nextTick()
-  adjustContextMenuPosition()
+  try {
+    const list = await window.electronAPI.getRecentPlaylistsByLastAdd(10)
+    if (contextMenu.music?.id !== targetId) return
+    recentPlaylists.value = list
+    // 若悬停时已展开子菜单，列表变高后重测贴边位置
+    if (playlistSubmenuOpen.value) {
+      await adjustPlaylistSubmenuPosition()
+    }
+  } catch (e) {
+    console.error('Failed to load recent playlists', e)
+    if (contextMenu.music?.id === targetId) {
+      recentPlaylists.value = []
+    }
+  }
 }
+
+const contextMenuRef = ref<HTMLElement | null>(null)
+const playlistSubmenuRef = ref<HTMLElement | null>(null)
 
 const adjustContextMenuPosition = () => {
   if (!contextMenu.visible) return
 
-  // 获取菜单元素
-  const menuElement = document.querySelector('.context-menu') as HTMLElement
+  const menuElement = contextMenuRef.value
   if (!menuElement) return
 
   const menuRect = menuElement.getBoundingClientRect()
@@ -760,6 +826,108 @@ const adjustContextMenuPosition = () => {
 
 const closeContextMenu = () => {
   contextMenu.visible = false
+  playlistSubmenuOpen.value = false
+  playlistSubmenuOpenLeft.value = false
+  playlistSubmenuTop.value = 0
+  cancelClosePlaylistSubmenu()
+}
+
+const recentPlaylists = ref<Playlist[]>([])
+const playlistSubmenuOpen = ref(false)
+const playlistSubmenuOpenLeft = ref(false)
+const playlistSubmenuTop = ref(0)
+let playlistSubmenuCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+const cancelClosePlaylistSubmenu = () => {
+  if (playlistSubmenuCloseTimer) {
+    clearTimeout(playlistSubmenuCloseTimer)
+    playlistSubmenuCloseTimer = null
+  }
+}
+
+const scheduleClosePlaylistSubmenu = () => {
+  cancelClosePlaylistSubmenu()
+  playlistSubmenuCloseTimer = setTimeout(() => {
+    playlistSubmenuOpen.value = false
+    playlistSubmenuOpenLeft.value = false
+    playlistSubmenuTop.value = 0
+    playlistSubmenuCloseTimer = null
+  }, 120)
+}
+
+/** 测量子菜单：优先空间更大的一侧；纠正上下溢出（对齐主菜单贴边策略） */
+const adjustPlaylistSubmenuPosition = async () => {
+  playlistSubmenuOpenLeft.value = false
+  playlistSubmenuTop.value = 0
+  await nextTick()
+  const submenu = playlistSubmenuRef.value
+  if (!submenu) return
+
+  const parent = submenu.parentElement as HTMLElement | null
+  const parentRect = parent?.getBoundingClientRect()
+  const subW = submenu.offsetWidth || 180
+  const spaceRight = parentRect ? window.innerWidth - parentRect.right : window.innerWidth
+  const spaceLeft = parentRect ? parentRect.left : 0
+
+  // 右侧不够且左侧更宽 → 向左；两侧都不够时也选更宽一侧
+  if (spaceRight < subW + 8 && spaceLeft > spaceRight) {
+    playlistSubmenuOpenLeft.value = true
+    await nextTick()
+  }
+
+  let rect = submenu.getBoundingClientRect()
+  if (!playlistSubmenuOpenLeft.value && rect.right > window.innerWidth - 8) {
+    playlistSubmenuOpenLeft.value = true
+    await nextTick()
+    rect = submenu.getBoundingClientRect()
+  }
+  if (playlistSubmenuOpenLeft.value && rect.left < 8 && spaceRight >= spaceLeft) {
+    playlistSubmenuOpenLeft.value = false
+    await nextTick()
+    rect = submenu.getBoundingClientRect()
+  }
+
+  if (rect.bottom > window.innerHeight - 8) {
+    playlistSubmenuTop.value = Math.min(0, window.innerHeight - 8 - rect.bottom)
+    await nextTick()
+    rect = submenu.getBoundingClientRect()
+  }
+  if (rect.top < 8) {
+    playlistSubmenuTop.value += 8 - rect.top
+  }
+}
+
+const openPlaylistSubmenu = async () => {
+  cancelClosePlaylistSubmenu()
+  playlistSubmenuOpen.value = true
+  await adjustPlaylistSubmenuPosition()
+}
+
+/** 箭头点击切换二级菜单（触控 / 无悬停设备） */
+const togglePlaylistSubmenu = async () => {
+  cancelClosePlaylistSubmenu()
+  if (playlistSubmenuOpen.value) {
+    playlistSubmenuOpen.value = false
+    playlistSubmenuOpenLeft.value = false
+    playlistSubmenuTop.value = 0
+    return
+  }
+  await openPlaylistSubmenu()
+}
+
+const onContextMenuKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && contextMenu.visible) {
+    e.preventDefault()
+    closeContextMenu()
+  }
+}
+
+const onContextMenuViewportChange = () => {
+  if (!contextMenu.visible) return
+  adjustContextMenuPosition()
+  if (playlistSubmenuOpen.value) {
+    void adjustPlaylistSubmenuPosition()
+  }
 }
 
 const applyMatchResult = (music: MusicItem, result: { status: string; lyricsPath?: string; message?: string }) => {
@@ -1071,6 +1239,26 @@ const openAddToPlaylist = (music: MusicItem) => {
   closeContextMenu()
 }
 
+/** 二级菜单快捷加入指定歌单 */
+const quickAddToPlaylist = async (playlist: Playlist) => {
+  const music = contextMenu.music
+  if (!music?.id) return
+  closeContextMenu()
+  try {
+    await window.electronAPI.addToPlaylist(playlist.id, music.id)
+    alert(t('playlist.addedToPlaylist', { name: playlist.name }))
+    window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
+  } catch (error: any) {
+    const msg = error?.message || ''
+    if (msg.includes('UNIQUE') || msg.includes('已存在')) {
+      alert(t('playlist.songAlreadyExists', { name: playlist.name }))
+    } else {
+      alert(t('playlist.addError'))
+    }
+  }
+}
+
 const handleRemoveFromPlaylist = (music: MusicItem) => {
   if (confirm(t('music.removeFromPlaylistConfirm', { title: music.title }))) {
     emit('remove-from-playlist', music)
@@ -1257,11 +1445,16 @@ onMounted(() => {
 
   window.addEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.addEventListener('favorites-updated', handleFavoritesUpdated)
+  window.addEventListener('keydown', onContextMenuKeydown)
+  window.addEventListener('resize', onContextMenuViewportChange)
 })
 
 onUnmounted(() => {
+  cancelClosePlaylistSubmenu()
   window.removeEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.removeEventListener('favorites-updated', handleFavoritesUpdated)
+  window.removeEventListener('keydown', onContextMenuKeydown)
+  window.removeEventListener('resize', onContextMenuViewportChange)
   // 离开列表页时清掉手动匹配 busy，避免本地音乐批量按钮卡住
   fetchMatchToken++
   fetchMatchKind.value = null
@@ -1613,6 +1806,7 @@ defineExpose({ scrollToIndex })
 }
 
 .menu-item {
+  position: relative;
   padding: var(--spacing-sm) var(--spacing-lg);
   cursor: pointer;
   color: var(--text-color);
@@ -1620,8 +1814,81 @@ defineExpose({ scrollToIndex })
   transition: background var(--transition-fast);
 }
 
-.menu-item:hover {
+.menu-item:hover,
+.menu-item.has-submenu.submenu-open {
   background: var(--hover-bg);
+}
+
+.menu-item.has-submenu {
+  padding: 0;
+}
+
+.menu-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.menu-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.submenu-chevron {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.submenu-chevron-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: var(--spacing-sm);
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.submenu-chevron-btn:hover {
+  background: var(--bg-secondary, var(--hover-bg));
+}
+
+.context-submenu {
+  position: absolute;
+  top: 0;
+  /* 与父项重叠 1px，避免移入时穿过缝隙触发 mouseleave */
+  left: calc(100% - 1px);
+  min-width: 180px;
+  max-width: 280px;
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-xs);
+  z-index: 1001;
+}
+
+.context-submenu.open-left {
+  left: auto;
+  right: calc(100% - 1px);
+}
+
+.context-submenu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 快捷操作按钮 */

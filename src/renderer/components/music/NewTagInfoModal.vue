@@ -2,155 +2,170 @@
   <!-- 三栏标签对比编辑，禁止点遮罩关闭，避免误触丢失未保存内容 -->
   <div v-if="show" class="dialog-overlay">
     <div class="dialog new-tag-dialog">
-      <h3>{{ $t('tagInfoEditor.title') }}</h3>
-
-      <div class="file-info">
-        <p class="filename">{{ music?.fileName }}</p>
+      <div class="dialog-header">
+        <h3 class="dialog-title">{{ $t('tagInfoEditor.title') }}</h3>
+        <button
+          type="button"
+          class="close-btn"
+          :disabled="loading"
+          :title="$t('common.close')"
+          :aria-label="$t('common.close')"
+          @click="close"
+        >
+          <X :size="20" />
+        </button>
       </div>
 
-      <div v-if="loadingMetadata" class="loading-metadata">
-        {{ $t('tagEditor.loadingMetadata') }}
-      </div>
-
-      <template v-else>
-        <div class="batch-toolbar">
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading || !id3Snapshot"
-            :data-tip="$t('tagInfoEditor.batchAuto')"
-            @click="batchApply('auto')"
-          >
-            <Sparkles :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading || !id3Snapshot"
-            :data-tip="$t('tagInfoEditor.batchGbk')"
-            @click="batchApply('gbk')"
-          >
-            <Languages :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.batchCopyId3')"
-            @click="batchApply('id3')"
-          >
-            <ClipboardCopy :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.batchCopyDb')"
-            @click="batchApply('db')"
-          >
-            <Database :size="16" />
-          </button>
-          <span class="toolbar-divider"></span>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.swapArtistTitle')"
-            @click="swapArtistTitle"
-          >
-            <ArrowLeftRight :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.guessFromFilename')"
-            @click="guessFromFilename"
-          >
-            <Wand2 :size="16" />
-          </button>
-          <span class="toolbar-divider"></span>
-          <button
-            type="button"
-            class="icon-btn"
-            :disabled="loading"
-            :data-tip="$t('tagInfoEditor.reset')"
-            @click="resetEdited"
-          >
-            <RotateCcw :size="16" />
-          </button>
+      <!-- 中间可滚动，避免内容过长把底部按钮顶出视口 -->
+      <div class="dialog-body">
+        <div class="file-info">
+          <p class="filename">{{ music?.fileName }}</p>
         </div>
 
-        <p v-if="!id3Snapshot" class="field-hint">{{ $t('tagInfoEditor.noId3Data') }}</p>
-        <p v-if="!isMp3" class="field-hint">{{ $t('tagInfoEditor.nonMp3Hint') }}</p>
+        <div v-if="loadingMetadata" class="loading-metadata">
+          {{ $t('tagEditor.loadingMetadata') }}
+        </div>
 
-        <table class="tag-table">
-          <thead>
-            <tr>
-              <th class="col-label"></th>
-              <th>{{ $t('tagInfoEditor.columnDb') }}</th>
-              <th>{{ $t('tagInfoEditor.columnId3') }}</th>
-              <th>{{ $t('tagInfoEditor.columnEdited') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="field in FIELDS" :key="field">
-              <td class="col-label">{{ fieldLabel(field) }}</td>
-              <td class="col-value col-db">
-                <span class="value-text">{{ display(dbSnapshot[field]) }}</span>
-                <div class="field-actions">
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    :disabled="loading"
-                    :data-tip="$t('tagInfoEditor.copyFromDb')"
-                    @click="applyFromDb(field)"
-                  >
-                    <Database :size="14" />
-                  </button>
-                </div>
-              </td>
-              <td class="col-value col-id3">
-                <span class="value-text">{{ display(id3Snapshot?.[field]) }}</span>
-                <div class="field-actions" v-if="hasRawValue(field)">
-                  <button
-                    v-if="isEncodable(field)"
-                    type="button"
-                    class="icon-btn"
-                    :disabled="loading"
-                    :data-tip="$t('tagInfoEditor.convertAuto')"
-                    @click="applyFromId3(field, 'auto')"
-                  >
-                    <Sparkles :size="14" />
-                  </button>
-                  <button
-                    v-if="isEncodable(field)"
-                    type="button"
-                    class="icon-btn"
-                    :disabled="loading"
-                    :data-tip="$t('tagInfoEditor.convertGbk')"
-                    @click="applyFromId3(field, 'gbk')"
-                  >
-                    <Languages :size="14" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    :disabled="loading"
-                    :data-tip="$t('tagInfoEditor.copyFromId3')"
-                    @click="applyFromId3(field)"
-                  >
-                    <ClipboardCopy :size="14" />
-                  </button>
-                </div>
-              </td>
-              <td class="col-value col-edited">
-                <input v-model="editedData[field]" type="text" :disabled="loading" @keyup.enter="save()" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </template>
+        <template v-else>
+          <div class="batch-toolbar">
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading || !id3Snapshot"
+              :data-tip="$t('tagInfoEditor.batchAuto')"
+              @click="batchApply('auto')"
+            >
+              <Sparkles :size="16" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading || !id3Snapshot"
+              :data-tip="$t('tagInfoEditor.batchGbk')"
+              @click="batchApply('gbk')"
+            >
+              <Languages :size="16" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading"
+              :data-tip="$t('tagInfoEditor.batchCopyId3')"
+              @click="batchApply('id3')"
+            >
+              <ClipboardCopy :size="16" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading"
+              :data-tip="$t('tagInfoEditor.batchCopyDb')"
+              @click="batchApply('db')"
+            >
+              <Database :size="16" />
+            </button>
+            <span class="toolbar-divider"></span>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading"
+              :data-tip="$t('tagInfoEditor.swapArtistTitle')"
+              @click="swapArtistTitle"
+            >
+              <ArrowLeftRight :size="16" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading"
+              :data-tip="$t('tagInfoEditor.guessFromFilename')"
+              @click="guessFromFilename"
+            >
+              <Wand2 :size="16" />
+            </button>
+            <span class="toolbar-divider"></span>
+            <button
+              type="button"
+              class="icon-btn"
+              :disabled="loading"
+              :data-tip="$t('tagInfoEditor.reset')"
+              @click="resetEdited"
+            >
+              <RotateCcw :size="16" />
+            </button>
+          </div>
+
+          <p v-if="!id3Snapshot" class="field-hint">{{ $t('tagInfoEditor.noId3Data') }}</p>
+          <p v-if="!isMp3" class="field-hint">{{ $t('tagInfoEditor.nonMp3Hint') }}</p>
+
+          <table class="tag-table">
+            <thead>
+              <tr>
+                <th class="col-label"></th>
+                <th>{{ $t('tagInfoEditor.columnDb') }}</th>
+                <th>{{ $t('tagInfoEditor.columnId3') }}</th>
+                <th>{{ $t('tagInfoEditor.columnEdited') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="field in FIELDS" :key="field">
+                <td class="col-label">{{ fieldLabel(field) }}</td>
+                <td class="col-value col-db">
+                  <span class="value-text">{{ display(dbSnapshot[field]) }}</span>
+                  <div class="field-actions">
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      :disabled="loading"
+                      :data-tip="$t('tagInfoEditor.copyFromDb')"
+                      @click="applyFromDb(field)"
+                    >
+                      <Database :size="14" />
+                    </button>
+                  </div>
+                </td>
+                <td class="col-value col-id3">
+                  <span class="value-text">{{ display(id3Snapshot?.[field]) }}</span>
+                  <div class="field-actions" v-if="hasRawValue(field)">
+                    <button
+                      v-if="isEncodable(field)"
+                      type="button"
+                      class="icon-btn"
+                      :disabled="loading"
+                      :data-tip="$t('tagInfoEditor.convertAuto')"
+                      @click="applyFromId3(field, 'auto')"
+                    >
+                      <Sparkles :size="14" />
+                    </button>
+                    <button
+                      v-if="isEncodable(field)"
+                      type="button"
+                      class="icon-btn"
+                      :disabled="loading"
+                      :data-tip="$t('tagInfoEditor.convertGbk')"
+                      @click="applyFromId3(field, 'gbk')"
+                    >
+                      <Languages :size="14" />
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      :disabled="loading"
+                      :data-tip="$t('tagInfoEditor.copyFromId3')"
+                      @click="applyFromId3(field)"
+                    >
+                      <ClipboardCopy :size="14" />
+                    </button>
+                  </div>
+                </td>
+                <td class="col-value col-edited">
+                  <input v-model="editedData[field]" type="text" :disabled="loading" @keyup.enter="save()" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+      </div>
 
       <div v-if="loading" class="loading-overlay">
         <div class="loading-content">
@@ -179,7 +194,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeftRight, Wand2, RotateCcw, Database, ClipboardCopy, Sparkles, Languages } from 'lucide-vue-next'
+import { ArrowLeftRight, Wand2, RotateCcw, Database, ClipboardCopy, Sparkles, Languages, X } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 import { parseFilenameForTags } from '@/utils/parseFilename'
 
@@ -427,9 +442,11 @@ const close = () => {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
   z-index: 1050;
   animation: fadeIn 0.2s ease-out;
 }
@@ -441,6 +458,12 @@ const close = () => {
   padding: var(--spacing-xl);
   position: relative;
   animation: scaleIn 0.2s ease-out;
+  display: flex;
+  flex-direction: column;
+  /* 用视口单位限高，避免 grid 居中下 max-height:100% 失效 */
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @keyframes fadeIn {
@@ -455,7 +478,56 @@ const close = () => {
 
 .new-tag-dialog {
   width: 640px;
-  max-width: 92%;
+  max-width: 100%;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+  flex-shrink: 0;
+}
+
+.dialog-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.close-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-color);
+}
+
+.close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .file-info {
@@ -494,6 +566,7 @@ const close = () => {
 
 .tag-table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
 }
@@ -662,10 +735,12 @@ const close = () => {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
   padding-top: var(--spacing-lg);
   border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .btn-primary {
