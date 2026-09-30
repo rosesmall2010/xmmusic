@@ -26,7 +26,10 @@
 - ⚡ **极致性能** - 虚拟滚动+分批加载，轻松应对万级曲库与万级播放队列；随机切歌时队列瞬时定位当前曲（不长距离平滑滚动）
 - 🖥️ **跨平台** - 支持 macOS（Apple Silicon）、Windows、Linux
 
-## 🎯 最新版本 v1.2.5
+## 🎯 最新版本 v1.2.6
+
+### v1.2.6 更新内容
+- **批量匹配成功率** - 进度中的成功百分比改为「成功数 / 已处理数」，不再相对待匹配总数
 
 ### v1.2.5 更新内容
 - **右键「添加到歌单」二级菜单** - 悬停展开最近 10 个歌单一键加入；一级或底部入口仍可打开原对话框；成功/已存在/失败改为约 2 秒自动消失的轻提示
@@ -162,9 +165,9 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 从 [Releases](https://github.com/rosesmall2010/xmmusic/releases) 页面下载对应平台的安装包:
 
-- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.2.5-arm64.dmg`
-- **Windows**: `xmmusic Setup 1.2.5.exe`
-- **Linux**: `xmmusic-1.2.5.AppImage`
+- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.2.6-arm64.dmg`
+- **Windows**: `xmmusic Setup 1.2.6.exe`
+- **Linux**: `xmmusic-1.2.6.AppImage`
 
 > macOS 安装包仅支持 **Apple Silicon（`arm64`）**。可在终端用 `uname -m` 确认，应显示 `arm64`。
 

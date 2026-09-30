@@ -86,7 +86,7 @@
               count: lyricsMatchProgress.success,
               percent: formatMatchSuccessPercent(
                 lyricsMatchProgress.success,
-                lyricsMatchProgress.total
+                lyricsMatchProgress.current
               )
             })
           }}
@@ -138,7 +138,7 @@
               count: coverMatchProgress.success,
               percent: formatMatchSuccessPercent(
                 coverMatchProgress.success,
-                coverMatchProgress.total
+                coverMatchProgress.current
               )
             })
           }}
@@ -503,10 +503,10 @@ const workerStatusLabel = (status: LyricsMatchWorkerTaskStatus | CoverMatchWorke
   }
 }
 
-/** 成功数相对总数的百分比；整数不显示小数，否则精确到 0.1 */
-const formatMatchSuccessPercent = (success: number, total: number) => {
-  if (!total || total <= 0) return '0'
-  const pct = (Math.max(0, success) / total) * 100
+/** 成功数相对已处理数的百分比；整数不显示小数，否则精确到 0.1 */
+const formatMatchSuccessPercent = (success: number, processed: number) => {
+  if (!processed || processed <= 0) return '0'
+  const pct = (Math.max(0, success) / processed) * 100
   const rounded = Math.round(pct * 10) / 10
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
