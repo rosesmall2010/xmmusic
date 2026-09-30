@@ -1176,6 +1176,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   ipcMain.handle('match-lyrics', async (_, musicId: number, options?: { force?: boolean }) => {
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
+      await lyricsMatchService.prepareManualSearch()
       const music = db.getMusicById(musicId)
       if (!music) throw new Error('音乐不存在')
       return lyricsMatchService.matchOne(db, music, { force: options?.force === true })
@@ -1196,11 +1197,19 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   ipcMain.handle('search-lyrics-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
+      await lyricsMatchService.prepareManualSearch()
       const music = db.getMusicById(musicId)
       if (!music) throw new Error('音乐不存在')
+      console.log(
+        `[lyricsMatch] IPC search-lyrics-candidates 收到 musicId=${musicId} → DB title="${music.title}" artist="${music.artist}"`
+      )
+      const candidates = await lyricsMatchService.searchCandidates(music)
       return {
         hasExistingLyrics: lyricsMatchService.hasExistingLyrics(music),
-        candidates: await lyricsMatchService.searchCandidates(music)
+        musicId: music.id,
+        title: music.title,
+        keyword: lyricsMatchService.buildKeyword(music),
+        candidates
       }
     })
   })

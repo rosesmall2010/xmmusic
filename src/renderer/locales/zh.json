@@ -497,6 +497,7 @@
     "bass": "重低音",
     "treble": "高音增强",
     "vocal": "人声增强",
+    "custom": "自定义",
     "reset": "重置"
   },
   "discover": {

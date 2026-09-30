@@ -481,6 +481,9 @@ declare global {
       searchLyricsCandidates: (musicId: number) => Promise<{
         hasExistingLyrics: boolean
         candidates: LyricsMatchCandidate[]
+        musicId?: number
+        title?: string
+        keyword?: string
       }>
       previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
       applyLyricsCandidate: (musicId: number, songId: number) => Promise<LyricsMatchResult>

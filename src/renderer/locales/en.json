@@ -497,6 +497,7 @@
     "bass": "Bass Boost",
     "treble": "Treble Boost",
     "vocal": "Vocal Boost",
+    "custom": "Custom",
     "reset": "Reset"
   },
   "discover": {

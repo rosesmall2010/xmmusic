@@ -442,8 +442,11 @@ onMounted(async () => {
   })
 
   unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', async () => {
-    await musicStore.loadMusic(0, 20, true)
-    startBackgroundLoading()
+    try {
+      await refreshListAfterMatch()
+    } catch (e) {
+      console.error('刷新音乐列表失败:', e)
+    }
     await refreshMissingCoverCount()
   })
 })
@@ -457,6 +460,16 @@ onUnmounted(() => {
   window.electronAPI.removeScanStateChanged()
   // 不移除 lyrics-match 监听：由 lyricsMatchStore 跨路由持有
 })
+
+/** 强制刷新首屏；无论成功失败都恢复后台分页，避免分页永久停住 */
+const refreshListAfterMatch = async () => {
+  stopBackgroundLoading()
+  try {
+    await musicStore.loadMusic(0, 20, true)
+  } finally {
+    startBackgroundLoading()
+  }
+}
 
 const startBackgroundLoading = async () => {
   const token = backgroundLoadToken
@@ -505,9 +518,8 @@ const handleBatchMatchLyrics = async () => {
       currentTitle: ''
     })
 
+    // 列表由主进程批量结束时发出的 music-list-refresh 统一刷新
     const summary = await lyricsMatchStore.startBatchMatch()
-    await musicStore.loadMusic(0, 20, true)
-    startBackgroundLoading()
 
     if (summary.cancelled) {
       alert(t('localMusic.matchCancelled', {
@@ -555,8 +567,7 @@ const handleBatchMatchCovers = async () => {
     })
 
     const summary = await coverMatchStore.startBatchMatch()
-    await musicStore.loadMusic(0, 20, true)
-    startBackgroundLoading()
+    await refreshListAfterMatch()
     await refreshMissingCoverCount()
 
     if (summary.cancelled) {

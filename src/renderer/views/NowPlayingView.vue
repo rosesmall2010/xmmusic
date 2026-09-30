@@ -334,7 +334,7 @@
           <div class="match-fetch-title">
             {{ fetchMatchKind === 'lyrics' ? $t('music.fetchingLyricsCandidates') : $t('music.fetchingCoverCandidates') }}
           </div>
-          <div v-if="currentMusic?.title" class="match-fetch-sub">{{ currentMusic.title }}</div>
+          <div v-if="fetchMatchSongTitle" class="match-fetch-sub">{{ fetchMatchSongTitle }}</div>
         </div>
         <button type="button" class="match-fetch-cancel" @click="cancelFetchMatchCandidates">
           {{ $t('common.cancel') }}
@@ -653,6 +653,10 @@ const coverMatchNeedsForce = ref(false)
 /** 仅拉网阶段显示遮罩；confirm/alert 前清掉 */
 const fetchMatchKind = ref<'lyrics' | 'cover' | null>(null)
 let fetchMatchToken = 0
+/** 拉取遮罩副标题：用锁定目标曲名，避免切歌后显示成另一首 */
+const fetchMatchSongTitle = computed(() =>
+  fetchMatchKind.value === 'cover' ? coverMatchTargetTitle.value : lyricsMatchTargetTitle.value
+)
 
 const isNpMatchFlowBusy = () =>
   matchingLyrics.value ||
@@ -1349,19 +1353,26 @@ const handleOnlineMatchLyrics = async () => {
   closeLyricsContextMenu()
 
   const targetId = currentMusic.value.id
-  const targetTitle = currentMusic.value.title
+  const targetTitle = currentMusic.value.title?.trim() || currentMusic.value.fileName
   const token = ++fetchMatchToken
   lyricsMatchTargetId.value = targetId
   lyricsMatchTargetTitle.value = targetTitle
+  lyricsCandidates.value = []
   matchingLyrics.value = true
   fetchMatchKind.value = 'lyrics'
   syncManualMatchUiBusy()
 
   try {
-    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(targetId)
+    const result = await window.electronAPI.searchLyricsCandidates(targetId)
     if (token !== fetchMatchToken) return
 
     fetchMatchKind.value = null
+
+    if (result.musicId != null && result.musicId !== targetId) {
+      console.error('[lyricsMatch] musicId 不一致！请求', targetId, 'DB 返回', result.musicId)
+    }
+
+    const { hasExistingLyrics, candidates } = result
 
     // 搜索返回后若已切歌，放弃本次结果
     if (currentMusic.value?.id !== targetId) {
@@ -1564,7 +1575,7 @@ const handleOnlineMatchCover = async () => {
   closeLyricsContextMenu()
 
   const targetId = currentMusic.value.id
-  const targetTitle = currentMusic.value.title
+  const targetTitle = currentMusic.value.title?.trim() || currentMusic.value.fileName
   const token = ++fetchMatchToken
   coverMatchTargetId.value = targetId
   coverMatchTargetTitle.value = targetTitle

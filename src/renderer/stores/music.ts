@@ -64,14 +64,14 @@ export const useMusicStore = defineStore('music', () => {
 
       if (offset === 0) {
         musicList.value = items
+        currentOffset.value = items.length
       } else {
-        // For shallowRef, we need to reassign or triggerRef.
-        // Reassigning is safer for immutability but pushing + triggerRef is more efficient for large arrays.
-        // Let's use push + triggerRef to avoid copying huge arrays.
+        // 并发分页时若 offset 已错位（重复拉同一页/跳跃），丢弃避免列表出现重复或错位歌曲
+        if (offset !== musicList.value.length) return
         musicList.value.push(...items)
         triggerRef(musicList)
+        currentOffset.value = musicList.value.length
       }
-      currentOffset.value = offset + items.length
       const count = await window.electronAPI.getMusicTotalCount()
       if (epoch !== loadEpoch) return
       totalCount.value = count

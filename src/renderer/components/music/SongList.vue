@@ -257,7 +257,7 @@
     />
     <LyricsMatchSelectModal
       :show="showLyricsPick"
-      :music-title="lyricsPickTarget?.title || ''"
+      :music-title="lyricsPickTarget?.title?.trim() || lyricsPickTarget?.fileName || ''"
       :candidates="lyricsCandidates"
       :applying="applyingLyricsCandidate"
       @close="closeLyricsPick"
@@ -779,14 +779,21 @@ const openLyricsPickForMusic = async (
   const token = ++fetchMatchToken
   matchingLyricsId.value = music.id
   lyricsPickTarget.value = music
+  lyricsCandidates.value = []
   fetchMatchKind.value = 'lyrics'
   syncManualMatchUiBusy()
   try {
-    const { hasExistingLyrics, candidates } = await window.electronAPI.searchLyricsCandidates(music.id)
+    const result = await window.electronAPI.searchLyricsCandidates(music.id)
     if (token !== fetchMatchToken) return
 
     // 结束拉取遮罩后再弹 confirm/alert，避免遮罩盖住原生对话框
     fetchMatchKind.value = null
+
+    if (result.musicId != null && result.musicId !== music.id) {
+      console.error('[lyricsMatch] musicId 不一致！请求', music.id, '主进程返回', result.musicId)
+    }
+
+    const { hasExistingLyrics, candidates } = result
 
     // 无在线候选：仅 linkLocal（绝不调 matchOne）；重新匹配跳过本地关联
     if (!candidates.length) {

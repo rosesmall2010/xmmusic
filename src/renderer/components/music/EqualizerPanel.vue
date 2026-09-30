@@ -28,18 +28,32 @@
 
             <div class="preset-wrap">
               <span class="preset-label">{{ $t('equalizer.preset') }}</span>
-              <div class="select-shell">
-                <select v-model="selectedPreset" @change="handlePresetChange" class="preset-select" :disabled="!enabled">
-                  <option value="flat">{{ $t('equalizer.flat') }}</option>
-                  <option value="pop">{{ $t('equalizer.pop') }}</option>
-                  <option value="rock">{{ $t('equalizer.rock') }}</option>
-                  <option value="jazz">{{ $t('equalizer.jazz') }}</option>
-                  <option value="classical">{{ $t('equalizer.classical') }}</option>
-                  <option value="bass">{{ $t('equalizer.bass') }}</option>
-                  <option value="treble">{{ $t('equalizer.treble') }}</option>
-                  <option value="vocal">{{ $t('equalizer.vocal') }}</option>
-                </select>
-                <ChevronDown class="select-caret" :size="15" />
+              <!-- 自绘下拉：Windows 无边框窗口里原生 <select> 弹层在多层 backdrop-filter 下常弹不出 -->
+              <div ref="presetShellRef" class="select-shell">
+                <button
+                  type="button"
+                  class="preset-select"
+                  :class="{ open: presetOpen }"
+                  aria-haspopup="listbox"
+                  :aria-expanded="presetOpen"
+                  @click="presetOpen = !presetOpen"
+                >
+                  {{ $t(`equalizer.${selectedPreset}`) }}
+                </button>
+                <ChevronDown class="select-caret" :class="{ open: presetOpen }" :size="15" />
+                <ul v-if="presetOpen" class="preset-menu" role="listbox">
+                  <li
+                    v-for="key in PRESET_KEYS"
+                    :key="key"
+                    role="option"
+                    class="preset-option"
+                    :class="{ active: key === selectedPreset }"
+                    :aria-selected="key === selectedPreset"
+                    @click="selectPreset(key)"
+                  >
+                    {{ $t(`equalizer.${key}`) }}
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
@@ -99,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { X, SlidersHorizontal, ChevronDown, RotateCcw } from 'lucide-vue-next'
 import { useEqualizer, EQUALIZER_PRESETS } from '@/composables/useEqualizer'
 
@@ -122,28 +136,58 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const selectedPreset = ref('flat')
+type PresetKey = keyof typeof EQUALIZER_PRESETS
+const PRESET_KEYS = Object.keys(EQUALIZER_PRESETS) as PresetKey[]
+
+const selectedPreset = ref<PresetKey | 'custom'>('flat')
+const presetOpen = ref(false)
+const presetShellRef = ref<HTMLElement | null>(null)
 
 const onEnabledChange = (event: Event) => {
   const checked = (event.target as HTMLInputElement).checked
   toggle(checked)
 }
 
+/** 点击下拉外部或按 Esc 收起 */
+const onDocPointerDown = (e: PointerEvent) => {
+  if (presetShellRef.value && !presetShellRef.value.contains(e.target as Node)) presetOpen.value = false
+}
+const onDocKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape') presetOpen.value = false
+}
+
+watch(presetOpen, (open) => {
+  if (open) {
+    document.addEventListener('pointerdown', onDocPointerDown, true)
+    document.addEventListener('keydown', onDocKeydown)
+  } else {
+    document.removeEventListener('pointerdown', onDocPointerDown, true)
+    document.removeEventListener('keydown', onDocKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
+  document.removeEventListener('keydown', onDocKeydown)
+})
+
 watch(
   () => props.modelValue,
   (visible, wasVisible) => {
     // 关闭面板时立即落盘，避免拖动滑块后的防抖尚未完成
     if (wasVisible && !visible) {
+      presetOpen.value = false
       void flushSaveSettings()
     }
   }
 )
 
-const handlePresetChange = () => {
-  const preset = EQUALIZER_PRESETS[selectedPreset.value as keyof typeof EQUALIZER_PRESETS]
-  if (preset) {
-    applyPreset(preset)
-  }
+/** 选预设即表示要用音效：关闭状态下自动开启，避免「点了没反应」 */
+const selectPreset = (key: PresetKey) => {
+  presetOpen.value = false
+  selectedPreset.value = key
+  if (!enabled.value) toggle(true)
+  applyPreset(EQUALIZER_PRESETS[key])
 }
 
 const handleGainChange = (index: number, event: Event) => {
@@ -190,7 +234,7 @@ watch(gains, () => {
     return JSON.stringify(preset.gains) === JSON.stringify(gains.value)
   })
   if (matchedPreset) {
-    selectedPreset.value = matchedPreset
+    selectedPreset.value = matchedPreset as PresetKey
   }
 }, { deep: true })
 </script>
@@ -201,6 +245,8 @@ watch(gains, () => {
   position: fixed;
   inset: 0;
   z-index: var(--z-popover);
+  /* Windows 无边框窗口：标题栏 drag 区在系统层吞点击，浮层须显式 no-drag */
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -413,22 +459,19 @@ input:checked + .slider:before {
   font-weight: 500;
   cursor: pointer;
   outline: none;
-  appearance: none;
+  text-align: left;
+  font-family: inherit;
   transition: all var(--transition-base) var(--transition-timing);
 }
 
-.preset-select:hover:not(:disabled) {
+.preset-select:hover,
+.preset-select.open {
   border-color: var(--color-primary);
 }
 
-.preset-select:focus {
-  border-color: var(--color-primary);
+.preset-select:focus-visible,
+.preset-select.open {
   box-shadow: 0 0 0 3px var(--color-primary-alpha);
-}
-
-.preset-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .select-caret {
@@ -438,6 +481,45 @@ input:checked + .slider:before {
   transform: translateY(-50%);
   color: var(--text-tertiary);
   pointer-events: none;
+  transition: transform var(--transition-base) var(--transition-timing);
+}
+
+.select-caret.open {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.preset-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.preset-option {
+  padding: 6px var(--spacing-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.preset-option:hover {
+  background: var(--color-primary-alpha);
+}
+
+.preset-option.active {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 /* ==================== 均衡器面板 ==================== */

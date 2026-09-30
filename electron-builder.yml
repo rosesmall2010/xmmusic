@@ -2,7 +2,8 @@ appId: com.rosesmall2010.xmmusic
 productName: xmmusic
 copyright: Copyright © 2025-2026 rosesmall2010
 
-# 不要在交叉编译时重新构建原生模块
+# 默认不重建原生模块（宿主平台打包直接用 node_modules 里的二进制）
+# 交叉打 Windows 包走 scripts/dist-win.js：临时 npmRebuild=true 按目标平台下载 better-sqlite3 预编译包，打完恢复宿主二进制
 buildDependenciesFromSource: false
 nodeGypRebuild: false
 npmRebuild: false

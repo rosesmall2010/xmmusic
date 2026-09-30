@@ -181,6 +181,9 @@ export interface ElectronAPI {
   searchLyricsCandidates: (musicId: number) => Promise<{
     hasExistingLyrics: boolean
     candidates: any[]
+    musicId?: number
+    title?: string
+    keyword?: string
   }>
   previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
   applyLyricsCandidate: (musicId: number, songId: number) => Promise<any>
