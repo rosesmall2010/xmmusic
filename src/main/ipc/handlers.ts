@@ -18,7 +18,12 @@ import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/m
 import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playlistCover'
 import type { ScanProgress, MusicItem } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
-import type { LyricsData, LyricsMatchProgress, LyricsMatchSummary } from '../../shared/types/lyrics'
+import type {
+  LyricsData,
+  LyricsMatchProgress,
+  LyricsMatchSummary,
+  LyricsCandidateRef
+} from '../../shared/types/lyrics'
 import type { CoverMatchResult, CoverMatchProgress, CoverMatchSummary } from '../../shared/types/coverMatch'
 import { APP_SHORTCUT_ACTIONS } from '../../shared/utils/shortcutActions'
 
@@ -1193,6 +1198,14 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     })
   })
 
+  /** 单曲是否已有可用歌词（DB 路径或同目录 sidecar） */
+  ipcMain.handle('has-existing-lyrics', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const music = db.getMusicById(musicId)
+    if (!music) throw new Error('音乐不存在')
+    return lyricsMatchService.hasExistingLyrics(music)
+  })
+
   /** 搜索在线歌词候选（供手动选择；持锁避免与批量/单曲 apply 并发抢服务） */
   ipcMain.handle('search-lyrics-candidates', async (_, musicId: number) => {
     if (!db) throw new Error('数据库未初始化')
@@ -1215,17 +1228,36 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   })
 
   /** 预览候选歌词文本（供选择对话框展示，不写文件/不写库） */
-  ipcMain.handle('preview-lyrics-candidate', async (_, songId: number) => {
-    return lyricsMatchService.previewLyric(songId)
+  ipcMain.handle('preview-lyrics-candidate', async (_, ref: LyricsCandidateRef) => {
+    return lyricsMatchService.previewLyric(ref)
   })
 
   /** 应用用户选中的候选歌词 */
-  ipcMain.handle('apply-lyrics-candidate', async (_, musicId: number, songId: number) => {
+  ipcMain.handle('apply-lyrics-candidate', async (_, musicId: number, ref: LyricsCandidateRef) => {
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
       const music = db.getMusicById(musicId)
       if (!music) throw new Error('音乐不存在')
-      return lyricsMatchService.applyCandidate(db, music, songId)
+      return lyricsMatchService.applyCandidate(db, music, ref)
+    })
+  })
+
+  /** 手动选择本地歌词文件 */
+  ipcMain.handle('select-lyrics-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: '歌词文件', extensions: ['lrc', 'txt'] }]
+    })
+    return result.filePaths && result.filePaths.length > 0 ? result.filePaths[0] : null
+  })
+
+  /** 应用用户手动选择的本地歌词文件 */
+  ipcMain.handle('apply-local-lyrics', async (_, musicId: number, localPath: string) => {
+    if (!db) throw new Error('数据库未初始化')
+    return withLyricsMatchLock(async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      return lyricsMatchService.applyLocalFile(db, music, localPath)
     })
   })
 

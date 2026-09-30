@@ -79,6 +79,7 @@
     "better-sqlite3": "^12.11.1",
     "howler": "^2.2.4",
     "iconv-lite": "^0.7.3",
+    "lrclib-api": "^2.2.0",
     "lucide-vue-next": "^1.0.0",
     "music-metadata": "^11.15.0",
     "node-id3": "^0.2.9",

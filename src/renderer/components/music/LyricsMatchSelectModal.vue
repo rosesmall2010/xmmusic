@@ -7,16 +7,19 @@
       <div class="candidate-list">
         <button
           v-for="item in candidates"
-          :key="item.songId"
+          :key="candidateKey(item)"
           type="button"
           class="candidate-item"
-          :class="{ selected: selectedId === item.songId }"
+          :class="{ selected: selectedKey === candidateKey(item) }"
           :disabled="applying"
-          @click="selectedId = item.songId"
+          @click="selectedKey = candidateKey(item)"
           @dblclick="confirmSelect"
         >
           <div class="meta">
-            <div class="name">{{ item.name }}</div>
+            <div class="name">
+              {{ item.name }}
+              <span class="source-badge">{{ sourceLabel(item.source) }}</span>
+            </div>
             <div class="sub">
               <span>{{ item.artists || $t('nowPlaying.unknownArtist') }}</span>
               <span v-if="item.album" class="album"> · {{ item.album }}</span>
@@ -41,7 +44,7 @@
         <button
           class="btn-primary"
           type="button"
-          :disabled="applying || selectedId == null"
+          :disabled="applying || selectedKey == null"
           @click="confirmSelect"
         >
           {{ applying ? $t('nowPlaying.applyingLyrics') : $t('nowPlaying.useSelectedLyrics') }}
@@ -54,7 +57,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+import type { LyricsCandidateRef, LyricsMatchCandidate, LyricsMatchSource } from '@shared/types/lyrics'
 
 const { t } = useI18n()
 
@@ -67,17 +70,31 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'select', songId: number): void
+  (e: 'select', candidate: LyricsCandidateRef): void
 }>()
 
-const selectedId = ref<number | null>(null)
+/** 不同来源的 songId 可能相同，用「来源:ID」区分 */
+const candidateKey = (c: LyricsMatchCandidate) => `${c.source ?? 'netease'}:${c.songId}`
+
+const sourceLabel = (source?: LyricsMatchSource) =>
+  source === 'lrclib' ? t('nowPlaying.sourceLrclib') : t('nowPlaying.sourceNetease')
+
+const toRef = (c: LyricsMatchCandidate): LyricsCandidateRef => ({
+  songId: c.songId,
+  source: c.source
+})
+
+const selectedKey = ref<string | null>(null)
 const previewText = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
-const previewCache = new Map<number, string>()
+const previewCache = new Map<string, string>()
 
-const loadPreview = async (songId: number) => {
-  const cached = previewCache.get(songId)
+const findSelected = () => props.candidates.find((c) => candidateKey(c) === selectedKey.value)
+
+const loadPreview = async (item: LyricsMatchCandidate) => {
+  const key = candidateKey(item)
+  const cached = previewCache.get(key)
   if (cached !== undefined) {
     previewText.value = cached
     previewError.value = ''
@@ -87,18 +104,18 @@ const loadPreview = async (songId: number) => {
   previewLoading.value = true
   previewError.value = ''
   try {
-    const result = await window.electronAPI.previewLyricsCandidate(songId)
-    if (selectedId.value !== songId) return
+    const result = await window.electronAPI.previewLyricsCandidate(toRef(item))
+    if (selectedKey.value !== key) return
     const text = result.instrumental
       ? t('nowPlaying.previewInstrumental')
       : result.lyric || t('nowPlaying.previewEmpty')
-    previewCache.set(songId, text)
+    previewCache.set(key, text)
     previewText.value = text
   } catch (error: any) {
-    if (selectedId.value !== songId) return
+    if (selectedKey.value !== key) return
     previewError.value = error?.message || t('nowPlaying.previewFailed')
   } finally {
-    if (selectedId.value === songId) previewLoading.value = false
+    if (selectedKey.value === key) previewLoading.value = false
   }
 }
 
@@ -106,22 +123,23 @@ watch(
   () => [props.show, props.candidates] as const,
   ([show]) => {
     if (show && props.candidates.length > 0) {
-      selectedId.value = props.candidates[0].songId
+      selectedKey.value = candidateKey(props.candidates[0])
     } else if (!show) {
-      selectedId.value = null
+      selectedKey.value = null
       previewCache.clear()
     }
   },
   { immediate: true }
 )
 
-watch(selectedId, (id) => {
-  if (id == null) {
+watch(selectedKey, () => {
+  const item = findSelected()
+  if (!item) {
     previewText.value = ''
     previewError.value = ''
     return
   }
-  loadPreview(id)
+  loadPreview(item)
 })
 
 const emitClose = () => {
@@ -130,8 +148,9 @@ const emitClose = () => {
 }
 
 const confirmSelect = () => {
-  if (selectedId.value == null || props.applying) return
-  emit('select', selectedId.value)
+  const item = findSelected()
+  if (!item || props.applying) return
+  emit('select', toRef(item))
 }
 </script>
 
@@ -255,6 +274,17 @@ const confirmSelect = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.source-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
 }
 
 .sub {

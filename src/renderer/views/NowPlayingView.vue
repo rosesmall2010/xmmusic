@@ -432,6 +432,22 @@
         <ImageIcon :size="16" class="icon" />
         {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCoverOnline') }}
       </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: !currentMusic || isNpMatchFlowBusy() }"
+        @click="pickLocalLyricsFromMenu"
+      >
+        <FileText :size="16" class="icon" />
+        {{ $t('music.pickLocalLyrics') }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: !currentMusic || isNpMatchFlowBusy() }"
+        @click="pickLocalCoverFromMenu"
+      >
+        <ImageIcon :size="16" class="icon" />
+        {{ $t('music.pickLocalCover') }}
+      </div>
       <div class="menu-divider"></div>
       <div class="menu-item" @click="toggleLyricsTimeFromMenu">
         <Clock :size="16" class="icon" />
@@ -485,7 +501,7 @@ import CoverMatchSelectModal from '@/components/music/CoverMatchSelectModal.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
-import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+import type { LyricsCandidateRef, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 
 const router = useRouter()
@@ -987,6 +1003,73 @@ const matchCoverFromMenu = () => {
   handleOnlineMatchCover()
 }
 
+/** 歌词区右键：直接选择本地歌词文件应用到当前曲（不走在线搜索） */
+const pickLocalLyricsFromMenu = async () => {
+  closeLyricsContextMenu()
+  const music = currentMusic.value
+  if (!music || isNpMatchFlowBusy()) return
+  const targetId = music.id
+  const targetTitle = music.title?.trim() || music.fileName
+  matchingLyrics.value = true
+  syncManualMatchUiBusy()
+  try {
+    const file = await window.electronAPI.selectLyricsFile()
+    if (!file) return
+    // 文件对话框期间可能已切歌：放弃，避免写到上一首
+    if (currentMusic.value?.id !== targetId) return
+    const hasExisting = await window.electronAPI.hasExistingLyrics(targetId)
+    if (currentMusic.value?.id !== targetId) return
+    if (hasExisting && !confirm(t('nowPlaying.replaceLyricsConfirm', { title: targetTitle }))) return
+    if (currentMusic.value?.id !== targetId) return
+    const result = await window.electronAPI.applyLocalLyrics(targetId, file)
+    if (result.status === 'matched' || result.status === 'linked_local') {
+      await afterLyricsMatched(targetId, result.lyricsPath)
+    } else {
+      alert(t('music.matchLyricsFailed', { title: targetTitle, reason: result.message || '' }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', { title: targetTitle, reason: error?.message || error }))
+  } finally {
+    matchingLyrics.value = false
+    syncManualMatchUiBusy()
+  }
+}
+
+/** 歌词区右键：直接选择本地图片作为当前曲封面（不走在线搜索） */
+const pickLocalCoverFromMenu = async () => {
+  closeLyricsContextMenu()
+  const music = currentMusic.value
+  if (!music || isNpMatchFlowBusy()) return
+  const targetId = music.id
+  const targetTitle = music.title?.trim() || music.fileName
+  matchingCover.value = true
+  syncManualMatchUiBusy()
+  try {
+    const file = await window.electronAPI.selectImageFile()
+    if (!file) return
+    if (currentMusic.value?.id !== targetId) return
+    const hasCover = await window.electronAPI.hasValidCoverForMusic(targetId)
+    if (currentMusic.value?.id !== targetId) return
+    if (hasCover && !confirm(t('nowPlaying.replaceCoverConfirm', { title: targetTitle }))) return
+    if (currentMusic.value?.id !== targetId) return
+    const result = await window.electronAPI.applyLocalCover(targetId, file, { force: true })
+    if (result.status === 'matched') {
+      afterCoverMatched(targetId, result.coverPath)
+      // 提示仅在仍播目标曲时弹出，与在线应用封面一致
+      if (currentMusic.value?.id === targetId) {
+        alert(t(result.fileNotUpdated ? 'music.matchCoverDbOnly' : 'music.matchCoverSuccess', { title: targetTitle }))
+      }
+    } else {
+      alert(t('music.matchCoverFailed', { title: targetTitle, reason: result.message || '' }))
+    }
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', { title: targetTitle, reason: error?.message || error }))
+  } finally {
+    matchingCover.value = false
+    syncManualMatchUiBusy()
+  }
+}
+
 const toggleLyricsTimeFromMenu = () => {
   closeLyricsContextMenu()
   showLyricsTime.value = !showLyricsTime.value
@@ -1290,7 +1373,11 @@ const closeLyricsPick = () => {
   syncManualMatchUiBusy()
 }
 
-const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTitle: string) => {
+const applyLyricsCandidate = async (
+  candidate: LyricsCandidateRef,
+  targetMusicId: number,
+  targetTitle: string
+) => {
   // 切歌后丢弃过期候选，避免写错曲目
   if (currentMusic.value?.id !== targetMusicId) {
     closeLyricsPick()
@@ -1299,7 +1386,7 @@ const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTi
   applyingLyricsCandidate.value = true
   syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.applyLyricsCandidate(targetMusicId, songId)
+    const result = await window.electronAPI.applyLyricsCandidate(targetMusicId, candidate)
     if (currentMusic.value?.id !== targetMusicId) {
       closeLyricsPick()
       return
@@ -1326,11 +1413,11 @@ const applyLyricsSongId = async (songId: number, targetMusicId: number, targetTi
   }
 }
 
-const onSelectLyricsCandidate = async (songId: number) => {
+const onSelectLyricsCandidate = async (candidate: LyricsCandidateRef) => {
   const id = lyricsMatchTargetId.value
   const title = lyricsMatchTargetTitle.value
   if (id == null) return
-  await applyLyricsSongId(songId, id, title)
+  await applyLyricsCandidate(candidate, id, title)
 }
 
 /**

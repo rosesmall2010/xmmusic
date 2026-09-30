@@ -52,9 +52,17 @@ export interface LyricsMatchSummary {
   results: LyricsMatchResult[]
 }
 
-/** 在线匹配候选（用户选择用） */
-export interface LyricsMatchCandidate {
+/** 在线歌词来源；缺省视为网易云 */
+export type LyricsMatchSource = 'netease' | 'lrclib'
+
+/** 定位一条候选歌词所需的信息（预览 / 应用时回传主进程） */
+export interface LyricsCandidateRef {
   songId: number
+  source?: LyricsMatchSource
+}
+
+/** 在线匹配候选（用户选择用） */
+export interface LyricsMatchCandidate extends LyricsCandidateRef {
   name: string
   artists: string
   album?: string

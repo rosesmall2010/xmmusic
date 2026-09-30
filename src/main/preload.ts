@@ -7,7 +7,14 @@ import type {
   AdvancedSearchCriteria
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
-import type { LyricsData, LyricsMatchProgress, LyricsMatchResult, LyricsMatchSummary, LyricsMatchCandidate } from '@shared/types/lyrics'
+import type {
+  LyricsData,
+  LyricsMatchProgress,
+  LyricsMatchResult,
+  LyricsMatchSummary,
+  LyricsMatchCandidate,
+  LyricsCandidateRef
+} from '@shared/types/lyrics'
 import type {
   CoverMatchResult,
   CoverMatchCandidate,
@@ -258,12 +265,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   matchLyrics: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-lyrics', musicId, options),
   linkLocalLyrics: (musicId: number) => ipcRenderer.invoke('link-local-lyrics', musicId),
+  hasExistingLyrics: (musicId: number) => ipcRenderer.invoke('has-existing-lyrics', musicId),
   searchLyricsCandidates: (musicId: number) =>
     ipcRenderer.invoke('search-lyrics-candidates', musicId),
-  previewLyricsCandidate: (songId: number) =>
-    ipcRenderer.invoke('preview-lyrics-candidate', songId),
-  applyLyricsCandidate: (musicId: number, songId: number) =>
-    ipcRenderer.invoke('apply-lyrics-candidate', musicId, songId),
+  previewLyricsCandidate: (ref: LyricsCandidateRef) =>
+    ipcRenderer.invoke('preview-lyrics-candidate', ref),
+  applyLyricsCandidate: (musicId: number, ref: LyricsCandidateRef) =>
+    ipcRenderer.invoke('apply-lyrics-candidate', musicId, ref),
+  selectLyricsFile: () => ipcRenderer.invoke('select-lyrics-file'),
+  applyLocalLyrics: (musicId: number, localPath: string) =>
+    ipcRenderer.invoke('apply-local-lyrics', musicId, localPath),
   getMusicWithoutLyricsCount: () => ipcRenderer.invoke('get-music-without-lyrics-count'),
   batchMatchMissingLyrics: () => ipcRenderer.invoke('batch-match-missing-lyrics'),
   cancelLyricsMatch: () => ipcRenderer.invoke('cancel-lyrics-match'),
@@ -478,6 +489,7 @@ declare global {
       updateMusicLyricsPath: (musicId: number, lyricsPath: string) => Promise<void>
       matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<LyricsMatchResult>
       linkLocalLyrics: (musicId: number) => Promise<LyricsMatchResult>
+      hasExistingLyrics: (musicId: number) => Promise<boolean>
       searchLyricsCandidates: (musicId: number) => Promise<{
         hasExistingLyrics: boolean
         candidates: LyricsMatchCandidate[]
@@ -485,8 +497,10 @@ declare global {
         title?: string
         keyword?: string
       }>
-      previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
-      applyLyricsCandidate: (musicId: number, songId: number) => Promise<LyricsMatchResult>
+      previewLyricsCandidate: (ref: LyricsCandidateRef) => Promise<{ lyric: string | null; instrumental: boolean }>
+      applyLyricsCandidate: (musicId: number, ref: LyricsCandidateRef) => Promise<LyricsMatchResult>
+      selectLyricsFile: () => Promise<string | null>
+      applyLocalLyrics: (musicId: number, localPath: string) => Promise<LyricsMatchResult>
       getMusicWithoutLyricsCount: () => Promise<number>
       batchMatchMissingLyrics: () => Promise<LyricsMatchSummary>
       cancelLyricsMatch: () => Promise<boolean>

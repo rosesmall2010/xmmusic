@@ -576,6 +576,7 @@ export default class CoverMatchService {
   /**
    * 搜索候选（含封面 URL 尽力补全），按相似度降序
    * 手动：标签歌名+歌手双搜，再叠加文件名推测出的差异歌名/歌手；合并去重、不设下限
+   * （lrclib 仅提供歌词、无封面，封面候选仍只走网易云）
    * 各轮搜索失败互不影响，保留已合并结果；全失败则返回空列表（UI 仍可开本地选图）
    */
   async searchCandidates(music: MusicItem): Promise<CoverMatchCandidate[]> {

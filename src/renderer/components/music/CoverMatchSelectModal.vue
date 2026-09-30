@@ -10,12 +10,12 @@
         </p>
         <button
           v-for="item in candidates"
-          :key="item.songId"
+          :key="candidateKey(item)"
           type="button"
           class="candidate-item"
-          :class="{ selected: selectedId === item.songId && !localPath }"
+          :class="{ selected: selectedKey === candidateKey(item) && !localPath }"
           :disabled="applying"
-          @click="selectOnline(item.songId)"
+          @click="selectOnline(candidateKey(item))"
           @dblclick="confirmSelect"
         >
           <img
@@ -97,16 +97,20 @@ const emit = defineEmits<{
   (e: 'select-local', localPath: string): void
 }>()
 
-const selectedId = ref<number | null>(null)
+/** 候选 key：网易云 songId 唯一 */
+const candidateKey = (c: CoverMatchCandidate) => String(c.songId)
+
+const selectedKey = ref<string | null>(null)
 /** 用户选择的本地图片绝对路径 */
 const localPath = ref<string | null>(null)
 
-const canConfirm = computed(() => localPath.value != null || selectedId.value != null)
+const selectedItem = computed(() => props.candidates.find((c) => candidateKey(c) === selectedKey.value))
+
+const canConfirm = computed(() => localPath.value != null || selectedItem.value != null)
 
 const previewUrl = computed(() => {
   if (localPath.value) return getCoverUrl(localPath.value)
-  if (selectedId.value == null) return ''
-  return props.candidates.find((c) => c.songId === selectedId.value)?.coverUrl || ''
+  return selectedItem.value?.coverUrl || ''
 })
 
 watch(
@@ -114,18 +118,18 @@ watch(
   ([show]) => {
     if (show) {
       localPath.value = null
-      selectedId.value = props.candidates.length > 0 ? props.candidates[0].songId : null
+      selectedKey.value = props.candidates.length > 0 ? candidateKey(props.candidates[0]) : null
     } else {
-      selectedId.value = null
+      selectedKey.value = null
       localPath.value = null
     }
   },
   { immediate: true }
 )
 
-const selectOnline = (songId: number) => {
+const selectOnline = (key: string) => {
   localPath.value = null
-  selectedId.value = songId
+  selectedKey.value = key
 }
 
 const pickLocalImage = async () => {
@@ -134,7 +138,7 @@ const pickLocalImage = async () => {
     const file = await window.electronAPI.selectImageFile()
     if (!file) return
     localPath.value = file
-    selectedId.value = null
+    selectedKey.value = null
   } catch (error: any) {
     console.error('选择本地封面失败:', error)
     alert(t('nowPlaying.pickLocalCoverError') + ': ' + (error?.message || error))
@@ -152,7 +156,7 @@ const confirmSelect = () => {
     emit('select-local', localPath.value)
     return
   }
-  const item = props.candidates.find((c) => c.songId === selectedId.value)
+  const item = selectedItem.value
   if (!item?.coverUrl) return
   emit('select', { songId: item.songId, coverUrl: item.coverUrl })
 }

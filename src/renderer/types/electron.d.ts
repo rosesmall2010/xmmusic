@@ -1,5 +1,6 @@
 import type { MusicItem } from '@shared/types/music'
 import type { CoverMatchResult, CoverMatchCandidate, CoverMatchProgress, CoverMatchSummary } from '@shared/types/coverMatch'
+import type { LyricsCandidateRef, LyricsMatchResult } from '@shared/types/lyrics'
 
 export interface DesktopLyricsState {
   music: { id: number; title: string; artist: string } | null
@@ -178,6 +179,7 @@ export interface ElectronAPI {
   updateMusicLyricsOffset: (musicId: number, offsetMs: number) => Promise<void>
   matchLyrics: (musicId: number, options?: { force?: boolean }) => Promise<any>
   linkLocalLyrics: (musicId: number) => Promise<any>
+  hasExistingLyrics: (musicId: number) => Promise<boolean>
   searchLyricsCandidates: (musicId: number) => Promise<{
     hasExistingLyrics: boolean
     candidates: any[]
@@ -185,8 +187,10 @@ export interface ElectronAPI {
     title?: string
     keyword?: string
   }>
-  previewLyricsCandidate: (songId: number) => Promise<{ lyric: string | null; instrumental: boolean }>
-  applyLyricsCandidate: (musicId: number, songId: number) => Promise<any>
+  previewLyricsCandidate: (ref: LyricsCandidateRef) => Promise<{ lyric: string | null; instrumental: boolean }>
+  applyLyricsCandidate: (musicId: number, ref: LyricsCandidateRef) => Promise<any>
+  selectLyricsFile: () => Promise<string | null>
+  applyLocalLyrics: (musicId: number, localPath: string) => Promise<LyricsMatchResult>
 
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>

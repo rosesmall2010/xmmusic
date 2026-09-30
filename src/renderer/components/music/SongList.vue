@@ -210,6 +210,14 @@
         <ImageIcon :size="16" class="icon" />
         {{ matchingCoverId === contextMenu.music!.id ? $t('music.matchingCover') : $t('music.matchCover') }}
       </div>
+      <div v-if="showLyricsMatch" class="menu-item" @click="handlePickLocalLyrics(contextMenu.music!)">
+        <FileText :size="16" class="icon" />
+        {{ $t('music.pickLocalLyrics') }}
+      </div>
+      <div v-if="showLyricsMatch" class="menu-item" @click="handlePickLocalCover(contextMenu.music!)">
+        <ImageIcon :size="16" class="icon" />
+        {{ $t('music.pickLocalCover') }}
+      </div>
       <div class="menu-item" @click="openFileExplorer(contextMenu.music!)">
         <FolderOpen :size="16" class="icon" />
         {{ $t('music.openInExplorer') }}
@@ -310,7 +318,7 @@ import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
 import CoverMatchSelectModal from '@/components/music/CoverMatchSelectModal.vue'
 import type { MusicItem } from '@shared/types/music'
-import type { LyricsMatchCandidate } from '@shared/types/lyrics'
+import type { LyricsCandidateRef, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 import { useElementSize } from '@vueuse/core'
 
@@ -863,13 +871,13 @@ const handleRematchLyrics = async (music: MusicItem) => {
   await openLyricsPickForMusic(music, { alreadyConfirmedReplace: true, alreadyClaimed: true })
 }
 
-const onSelectLyricsCandidate = async (songId: number) => {
+const onSelectLyricsCandidate = async (candidate: LyricsCandidateRef) => {
   const music = lyricsPickTarget.value
   if (!music) return
   applyingLyricsCandidate.value = true
   syncManualMatchUiBusy()
   try {
-    const result = await window.electronAPI.applyLyricsCandidate(music.id, songId)
+    const result = await window.electronAPI.applyLyricsCandidate(music.id, candidate)
     if (result.status === 'matched') {
       closeLyricsPick()
       applyMatchResult(music, result)
@@ -1012,6 +1020,47 @@ const onSelectLocalCover = async (localPath: string) => {
     alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
   } finally {
     applyingCoverCandidate.value = false
+    syncManualMatchUiBusy()
+  }
+}
+
+/** 右键：直接选择本地歌词文件应用到单曲（不走在线搜索） */
+const handlePickLocalLyrics = async (music: MusicItem) => {
+  closeContextMenu()
+  if (isMatchFlowBusy()) return
+  matchingLyricsId.value = music.id
+  syncManualMatchUiBusy()
+  try {
+    const file = await window.electronAPI.selectLyricsFile()
+    if (!file) return
+    // 与在线匹配一致：库路径或同目录 sidecar 都算「已有歌词」
+    const hasExisting = await window.electronAPI.hasExistingLyrics(music.id)
+    if (hasExisting && !confirm(t('nowPlaying.replaceLyricsConfirm', { title: music.title }))) return
+    applyMatchResult(music, await window.electronAPI.applyLocalLyrics(music.id, file))
+  } catch (error: any) {
+    alert(t('music.matchLyricsFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingLyricsId.value = null
+    syncManualMatchUiBusy()
+  }
+}
+
+/** 右键：直接选择本地图片作为单曲封面（不走在线搜索） */
+const handlePickLocalCover = async (music: MusicItem) => {
+  closeContextMenu()
+  if (isMatchFlowBusy()) return
+  matchingCoverId.value = music.id
+  syncManualMatchUiBusy()
+  try {
+    const file = await window.electronAPI.selectImageFile()
+    if (!file) return
+    const hasCover = await window.electronAPI.hasValidCoverForMusic(music.id)
+    if (hasCover && !confirm(t('nowPlaying.replaceCoverConfirm', { title: music.title }))) return
+    applyCoverMatchResult(music, await window.electronAPI.applyLocalCover(music.id, file, { force: true }))
+  } catch (error: any) {
+    alert(t('music.matchCoverFailed', { title: music.title, reason: error?.message || error }))
+  } finally {
+    matchingCoverId.value = null
     syncManualMatchUiBusy()
   }
 }
