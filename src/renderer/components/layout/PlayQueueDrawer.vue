@@ -144,30 +144,35 @@ watch([() => props.visible, currentQueueIndex], async ([isVisible, index]) => {
     scrollTop.value = 0
     if (index >= 0) {
       await nextTick()
-      scrollToCurrent()
+      await scrollToCurrent()
     }
   }
 })
 
+/** 直接写 scrollTop 瞬时跳到当前曲 */
+const jumpToCurrent = (): boolean => {
+  const el = listRef.value
+  if (!el || currentQueueIndex.value < 0) return false
+  const height = el.clientHeight
+  if (height <= 0) return false
+
+  const maxTop = Math.max(0, queue.value.length * itemHeight - height)
+  const rawTop = currentQueueIndex.value * itemHeight - height / 2 + itemHeight / 2
+  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
+  scrollTop.value = targetTop
+  el.scrollTop = targetTop
+  return true
+}
+
 const scrollToCurrent = async () => {
   if (!listRef.value || currentQueueIndex.value < 0) return
+  if (jumpToCurrent()) return
 
-  // 抽屉刚打开时 clientHeight 可能仍为 0，等布局完成再算
+  // 抽屉刚打开时 clientHeight 可能仍为 0，等布局完成再定位
   for (let i = 0; i < 30; i++) {
-    if (listRef.value.clientHeight > 0) break
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    if (jumpToCurrent()) return
   }
-  if (!listRef.value || listRef.value.clientHeight <= 0) return
-
-  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示
-  // 万级队列随机跳转距离极大，用 auto 瞬时定位，避免 smooth 滚动很久
-  const maxTop = Math.max(0, queue.value.length * itemHeight - listRef.value.clientHeight)
-  const rawTop =
-    currentQueueIndex.value * itemHeight - listRef.value.clientHeight / 2 + itemHeight / 2
-  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
-  listRef.value.scrollTo({ top: targetTop, behavior: 'auto' })
-  // 同步虚拟窗口状态，避免 programmatic scroll 漏事件导致晚一帧空白
-  scrollTop.value = targetTop
 }
 
 onMounted(() => {
@@ -261,6 +266,8 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 .queue-list {
   flex: 1;
   overflow-y: auto;
+  scroll-behavior: auto;
+  overflow-anchor: none;
   padding: var(--spacing-xs) 0;
 }
 

@@ -33,6 +33,7 @@
     </template>
 
     <PlayQueueDrawer v-model:visible="showQueue" />
+    <AppToast />
   </div>
 </template>
 
@@ -43,6 +44,7 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import PlayerBar from '@/components/layout/PlayerBar.vue'
 import PlayQueueDrawer from '@/components/layout/PlayQueueDrawer.vue'
+import AppToast from '@/components/common/AppToast.vue'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { useAppShortcuts } from '@/composables/useAppShortcuts'

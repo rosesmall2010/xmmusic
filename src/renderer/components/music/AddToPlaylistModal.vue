@@ -72,6 +72,7 @@ import { useI18n } from 'vue-i18n'
 import { X, ListMusic } from 'lucide-vue-next'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import { toLocalFileUrl } from '@/utils/media'
+import { showToast } from '@/composables/useToast'
 import type { MusicItem } from '@shared/types/music'
 
 const { t } = useI18n()
@@ -181,14 +182,14 @@ const selectPlaylist = async (playlist: any) => {
 
       console.log(t('playlist.batchAddComplete', { added: result.added, skipped: result.skipped }))
 
-      // 显示结果提示
+      // 显示结果提示（轻提示，无需点确定）
       if (result.added > 0) {
         const message = result.skipped > 0
           ? t('playlist.batchAddSuccessWithSkipped', { added: result.added, skipped: result.skipped })
           : t('playlist.batchAddSuccess', { count: result.added })
-        alert(message)
+        showToast(message)
       } else if (result.skipped > 0) {
-        alert(t('playlist.allSongsExist'))
+        showToast(t('playlist.allSongsExist'))
       }
     } else if (props.musicToAd) {
       // 单个添加（v1.0.6 使用 music_id）
@@ -199,14 +200,13 @@ const selectPlaylist = async (playlist: any) => {
         await loadPlaylists()
         // 先关闭处理状态，再显示提示，避免进度条闪烁
         isProcessing.value = false
-        // 显示成功提示
-        alert(t('playlist.addedToPlaylist', { name: playlist.name }))
+        showToast(t('playlist.addedToPlaylist', { name: playlist.name }))
       } catch (error: any) {
         // 关闭处理状态
         isProcessing.value = false
         // 检查是否是重复添加的错误
         if (error?.message?.includes('UNIQUE constraint') || error?.message?.includes('已存在')) {
-          alert(t('playlist.songAlreadyExists', { name: playlist.name }))
+          showToast(t('playlist.songAlreadyExists', { name: playlist.name }))
           return // 重复添加时不关闭对话框
         } else {
           throw error // 重新抛出其他错误
@@ -227,7 +227,7 @@ const selectPlaylist = async (playlist: any) => {
     close()
   } catch (error) {
     console.error('添加到歌单失败:', error)
-    alert(t('playlist.addError'))
+    showToast(t('playlist.addError'))
     // 确保在错误时也关闭处理状态
     isProcessing.value = false
     progress.value = { current: 0, total: 0, added: 0, skipped: 0 }

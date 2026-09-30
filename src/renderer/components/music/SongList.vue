@@ -361,6 +361,7 @@ import type { MusicItem, Playlist } from '@shared/types/music'
 import type { LyricsCandidateRef, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
 import { useElementSize } from '@vueuse/core'
+import { showToast } from '@/composables/useToast'
 
 const props = defineProps<{
   songs: MusicItem[]
@@ -1246,15 +1247,15 @@ const quickAddToPlaylist = async (playlist: Playlist) => {
   closeContextMenu()
   try {
     await window.electronAPI.addToPlaylist(playlist.id, music.id)
-    alert(t('playlist.addedToPlaylist', { name: playlist.name }))
+    showToast(t('playlist.addedToPlaylist', { name: playlist.name }))
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error: any) {
     const msg = error?.message || ''
     if (msg.includes('UNIQUE') || msg.includes('已存在')) {
-      alert(t('playlist.songAlreadyExists', { name: playlist.name }))
+      showToast(t('playlist.songAlreadyExists', { name: playlist.name }))
     } else {
-      alert(t('playlist.addError'))
+      showToast(t('playlist.addError'))
     }
   }
 }

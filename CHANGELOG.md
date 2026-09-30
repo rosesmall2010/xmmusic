@@ -21,6 +21,7 @@
 - README 补充正式版 / 开发版数据存放目录（macOS、Windows、Linux）及 `m4.db` 说明；同步最新版本说明至 v1.2.5
 
 ### 修复
+- 添加到歌单成功/已存在/失败改为底部轻提示（约 2 秒自动消失），不再使用需点确定的 `alert`
 - 编辑标签对话框内容过长时底部操作按钮被顶出视口：对话框用 `calc(100vh - 48px)` 限高（避免 grid 下 `max-height:100%` 失效），中间表单/元数据区可滚动，标题栏右上角关闭图标与底部取消按钮保留；遮罩可滚动网格居中兜底；窄屏占满可用宽度；`NewTagInfoModal` 同构，三栏表设 `min-width` 以启用横向滚动，关闭按钮补 `aria-label`
 - 右键歌单二级菜单体验：SongList 支持 Esc 关闭；窗口缩放时重算主/子菜单位置；贴边按左右可用空间择优并校正上下；箭头按钮可点开/收起二级菜单（触控友好）
 - 右键歌单二级菜单：异步填入最近歌单后若子菜单已开则重测贴边；`clearPlaylist` 同步统计与 `updated_at`；最近歌单 SQL 增加 `id` 二级排序防抖动
@@ -42,6 +43,7 @@
 - 批量匹配歌词结束后手动匹配候选「完全不对」、重启 App 才恢复：批量结束与手动搜索入口复位镜像游标/取消标志；丢弃相关度过低的坏镜像响应（不回退脏结果）；搜索串行、拉词仍可最多 3 路并行；列表强制刷新用 try/finally 恢复后台分页
 - 代码审查补丁：单曲 `match-lyrics`/批量开头同步复位会话；已知歌手艺人相似度 <50 跳过；单字歌名不自动写入；空结果不再被先前网络错误误报为「搜索失败」
 - 批量/自动匹配歌词：改为按歌名相似度筛选（门槛仍 ≥50），不再用「歌手+歌名」整体打分，避免同一歌手不同曲被当成命中而把歌词写串；空结果换下一个镜像而不是直接放弃
+- 全屏播放队列与抽屉：切歌（尤其随机模式万级队列）与从歌词切到播放列表时，改为直接写 `scrollTop` 瞬时定位，并在切换面板时先隐藏列表再定位后显示，避免「滚很久才到」；列表强制 `scroll-behavior: auto` 与 `overflow-anchor: none`
 - 全屏播放队列与抽屉：切歌（尤其随机模式万级队列）定位当前曲改为瞬时跳转；钳制 scrollTop、等待布局完成并同步虚拟列表状态，避免空白帧
 - 代码审查中优先级问题（详见 [docs/1.2.4/代码审查-缺陷与性能问题.md](docs/1.2.4/代码审查-缺陷与性能问题.md) M1-M11）：删除音乐后歌单统计不同步；`updatePlaylistOrder` 补事务包裹；`advancedSearch` 目录过滤 LIKE 转义补 `ESCAPE` 子句使其生效；路径 Unicode 归一化为 NFC，修复 macOS NFD 分解形式路径被误判为新目录重复扫描；批量编辑元数据补上真实进度推送与进度条；迷你模式重复启用不再叠加窗口事件监听器；播放队列改为整体重新赋值风格并去掉 `deep: true` 全量遍历；`useEqualizer` 的 watch 补单例去重；本地音乐列表批量加歌单查找改用 Map 缓存；`visibleSongs` 不再 mutate 共享的歌曲对象；顶栏主题图标补上系统深浅色切换的实时响应
 - 代码审查低优先级问题（详见同文档 L1-L12）：`local-file://` 协议权限校验补短 TTL 缓存吸收高频重复请求；`MusicDatabase` 新增 `prepareCached` 并接入搜索建议与扫描期间存在性检查两处真实热点，减少重复编译 SQL；`cleanupMissingLocalMusic`/`getMusicWithoutLyricsCount`/`getMusicWithoutCoverCount` 改为异步并在同步文件系统访问循环中让出事件循环；删除 `checkDatabaseVersion`/`clearAndRebuildDatabase`/`clearAllTables`/`clearMediaFiles` 等无调用点死代码；`AudioContext.close()` 补 rejection 处理；修复队列迁移在异常退出后的窄窗口过期数据覆盖风险；顶栏搜索防抖定时器补卸载清理；歌词逐行渲染 `:key` 改用时间戳而非下标

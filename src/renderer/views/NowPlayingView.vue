@@ -179,7 +179,11 @@
           <!-- 队列面板：虚拟滚动，避免万级队列一次性渲染全部 DOM 节点。这里挂在 v-show 里，
                队列面板即使没打开也常驻 DOM，播放进度每 tick 触发的重渲染都要重新 diff 这份列表，
                不做虚拟滚动的话歌单上万条时全屏页 CPU 会明显偏高（做法与 PlayQueueDrawer.vue 一致） -->
-          <div v-show="rightPanelMode === 'queue'" class="queue-panel">
+          <div
+            v-show="rightPanelMode === 'queue'"
+            class="queue-panel"
+            :class="{ 'is-positioning': queuePositioning }"
+          >
             <div class="queue-list" ref="queueListRef" @scroll="handleQueueScroll">
               <div class="queue-list-inner" :style="{ height: queueTotalHeight + 'px' }">
                 <div
@@ -543,6 +547,7 @@ import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
 import MusicDetailsModal from '@/components/music/MusicDetailsModal.vue'
 import type { LyricsCandidateRef, LyricsMatchCandidate } from '@shared/types/lyrics'
 import type { CoverMatchCandidate } from '@shared/types/coverMatch'
+import { showToast } from '@/composables/useToast'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -630,6 +635,8 @@ const currentLyricIndex = ref(-1)
 const lyricsContainerRef = ref<HTMLElement | null>(null)
 const queueListRef = ref<HTMLElement | null>(null)
 const rightPanelMode = ref<'lyrics' | 'queue'>('lyrics') // 右侧面板模式
+/** 切到播放列表时先隐藏再定位，避免万级队列从旧位置「滚」过去的错觉 */
+const queuePositioning = ref(false)
 
 const loadLyrics = async () => {
   rawLyricsLines.value = []
@@ -1274,15 +1281,15 @@ const quickAddToPlaylistFromContextMenu = async (playlist: Playlist) => {
   closeQueueContextMenu()
   try {
     await window.electronAPI.addToPlaylist(playlist.id, music.id)
-    alert(t('playlist.addedToPlaylist', { name: playlist.name }))
+    showToast(t('playlist.addedToPlaylist', { name: playlist.name }))
     window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error: any) {
     const msg = error?.message || ''
     if (msg.includes('UNIQUE') || msg.includes('已存在')) {
-      alert(t('playlist.songAlreadyExists', { name: playlist.name }))
+      showToast(t('playlist.songAlreadyExists', { name: playlist.name }))
     } else {
-      alert(t('playlist.addError'))
+      showToast(t('playlist.addError'))
     }
   }
 }
@@ -1376,25 +1383,33 @@ const handleVolumeSave = async () => {
   await playerStore.saveState()
 }
 
+/** 直接写 scrollTop 瞬时跳到当前曲（不用 scrollTo，避免 auto 跟随 CSS/系统变成平滑滚动） */
+const jumpQueueToCurrent = (): boolean => {
+  const el = queueListRef.value
+  if (!el || currentQueueIndex.value < 0) return false
+  const height = el.clientHeight
+  if (height <= 0) return false
+
+  const maxTop = Math.max(0, queue.value.length * queueItemHeight - height)
+  const rawTop =
+    currentQueueIndex.value * queueItemHeight - height / 2 + queueItemHeight / 2
+  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
+
+  // 先同步虚拟窗口，再写 DOM，避免先画出顶部再跳
+  queueScrollTop.value = targetTop
+  el.scrollTop = targetTop
+  return true
+}
+
 const scrollToCurrentQueueItem = async () => {
   if (!queueListRef.value || currentQueueIndex.value < 0) return
+  if (jumpQueueToCurrent()) return
 
-  // 刚切换面板时 clientHeight 可能仍为 0，等布局完成再算
+  // 刚切换面板时 clientHeight 可能仍为 0，等布局完成再定位
   for (let i = 0; i < 30; i++) {
-    if (queueListRef.value.clientHeight > 0) break
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    if (jumpQueueToCurrent()) return
   }
-  if (!queueListRef.value || queueListRef.value.clientHeight <= 0) return
-
-  // 虚拟滚动下命中的行未必在 DOM 里，直接按下标算目标 scrollTop 居中显示
-  // 万级队列随机跳转距离极大，用 auto 瞬时定位，避免 smooth 滚动很久
-  const maxTop = Math.max(0, queue.value.length * queueItemHeight - queueListRef.value.clientHeight)
-  const rawTop =
-    currentQueueIndex.value * queueItemHeight - queueListRef.value.clientHeight / 2 + queueItemHeight / 2
-  const targetTop = Math.min(Math.max(0, rawTop), maxTop)
-  queueListRef.value.scrollTo({ top: targetTop, behavior: 'auto' })
-  // 同步虚拟窗口状态，避免个别环境下 programmatic scroll 漏事件导致晚一帧空白
-  queueScrollTop.value = targetTop
 }
 
 
@@ -2113,19 +2128,23 @@ watch(currentTime, (time) => {
   syncLyricIndex(time)
 })
 
-// 监听当前队列索引变化，自动滚动到当前播放的歌曲
+// 监听当前队列索引变化，瞬时跳到当前播放的歌曲（随机模式跨度大时尤其需要）
 watch(currentQueueIndex, () => {
   if (rightPanelMode.value === 'queue') {
     void scrollToCurrentQueueItem()
   }
 })
 
-// 切换到队列 → 滚到当前曲；切回歌词 → 按当前进度对齐并滚到可见区
-watch(rightPanelMode, (mode) => {
+// 切换到队列 → 先定位再显示；切回歌词 → 按当前进度对齐并滚到可见区
+watch(rightPanelMode, async (mode) => {
   closeQueueContextMenu()
   if (mode === 'queue') {
-    void scrollToCurrentQueueItem()
+    queuePositioning.value = true
+    await nextTick()
+    await scrollToCurrentQueueItem()
+    queuePositioning.value = false
   } else if (mode === 'lyrics') {
+    queuePositioning.value = false
     syncLyricIndex(currentTime.value, true)
   }
 })
@@ -2702,9 +2721,15 @@ watch(
   overflow: hidden;
 }
 
+.queue-panel.is-positioning .queue-list {
+  visibility: hidden;
+}
+
 .queue-list {
   height: 100%;
   overflow-y: auto;
+  scroll-behavior: auto;
+  overflow-anchor: none;
   scrollbar-width: thin;
   scrollbar-color: var(--np-scroll-thumb) transparent;
 }
