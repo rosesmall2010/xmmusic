@@ -748,20 +748,24 @@ export default class FileScanner {
 
   /**
    * 解析音频元数据：扩展名与真实编码不符时按魔数指定 mimeType，
-   * 避免 music-metadata 把 FLAC/Ogg 假 .mp3 误判成 AAC/损坏。
+   * 并跳过伪 ID3 前缀，避免 music-metadata 误判。
    */
   private async parseAudioFile(filePath: string): Promise<any> {
     const sniff = sniffLocalAudio(filePath)
     const nameExt = extname(filePath).replace(/^\./, '').toLowerCase()
+    const needForcedMime = !!(sniff && sniff.ext !== nameExt)
+    const needSkipPrefix = !!(sniff && sniff.dataOffset > 0 && sniff.mime !== 'audio/mpeg')
 
-    if (sniff && sniff.ext !== nameExt && sniff.mime !== 'audio/mpeg') {
+    if (sniff && (needForcedMime || needSkipPrefix)) {
       const parseStream = await getParseStream()
       const fileSize = statSync(filePath).size
-      const stream = createReadStream(filePath)
+      const start = needSkipPrefix ? sniff.dataOffset : 0
+      const logicalSize = Math.max(0, fileSize - start)
+      const stream = createReadStream(filePath, start > 0 ? { start } : undefined)
       try {
         return await parseStream(
           stream,
-          { mimeType: sniff.mime, size: fileSize, path: filePath },
+          { mimeType: sniff.mime, size: logicalSize, path: filePath },
           { duration: true }
         )
       } finally {

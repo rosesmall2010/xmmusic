@@ -22,6 +22,7 @@
 - 批量封面进行中/取消后关窗与设置无响应：多路并发同步写 ID3 与 nativeImage 转码卡住主进程事件循环；现串行化重活并在任务间让出循环，取消后跳过未开始的写盘，进度 IPC 节流
 - 审核跟进：取消统一为 `skipped_cancelled`（不再误计 failed / 伪 low_similarity）；用 `CoverMatchCancelledError` 传递取消；本地封面转码亦入重活队列；进度定时器 `finally` 清理；已入队的单次 node-id3 写盘仍无法中途打断（取消后可能短暂占住主线程至该次结束）
 - GitHub Actions 多平台构建不再在 `main` 分支 push 时触发，仅保留打 `v*` tag 与手动 `workflow_dispatch`
+- 审核跟进：扫描解析在扩展名不符时一律强制 mime，并跳过伪 ID3 前缀；清不可播标记在原生/Howler 成功播放时共用，且派发 `music-metadata-updated` 刷新列表图标
 
 ## [1.2.5] - 2026-09-18
 

@@ -119,6 +119,32 @@ export function usePlayer() {
     return String(raw).replace(/^\./, '').toLowerCase() || 'mp3'
   }
 
+  /**
+   * 误标不可播/损坏的曲目：实际播出且时长可信后清库标记，并通知列表刷新图标。
+   */
+  const clearUnplayableIfRecovered = (music: MusicItem, durationSec: number) => {
+    if (music.isPlayable !== false) return
+    if (!Number.isFinite(durationSec) || durationSec < 1) return
+    void window.electronAPI
+      .updateMusicPlayStatus(music.id, true)
+      .then(() => {
+        music.isPlayable = true
+        music.playErrorReason = undefined
+        music.isCorrupted = false
+        window.dispatchEvent(
+          new CustomEvent('music-metadata-updated', {
+            detail: {
+              id: music.id,
+              isPlayable: true,
+              playErrorReason: null,
+              isCorrupted: false
+            }
+          })
+        )
+      })
+      .catch(() => {})
+  }
+
   const clearHowlLockTimer = () => {
     if (howlLockTimer) {
       clearTimeout(howlLockTimer)
@@ -219,16 +245,7 @@ export function usePlayer() {
         loadTimeout = null
       }
       // 曾被误标损坏的假扩展名文件：真正播起来（时长可信）后再清不可播标记
-      if (music.isPlayable === false) {
-        const dur = audioElement?.duration ?? 0
-        if (Number.isFinite(dur) && dur >= 1) {
-          void window.electronAPI.updateMusicPlayStatus(music.id, true).then(() => {
-            music.isPlayable = true
-            music.playErrorReason = undefined
-            music.isCorrupted = false
-          }).catch(() => {})
-        }
-      }
+      clearUnplayableIfRecovered(music, audioElement?.duration ?? 0)
       // 音效开启：强制挂滤波链；仅特效需要频谱时旁路挂图即可
       if (equalizer.enabled.value) {
         equalizer.ensureCapturedForEq()
@@ -363,6 +380,7 @@ export function usePlayer() {
             console.log('▶️ Howler 开始播放')
             playerStore.isPlaying = true
             startProgressUpdate()
+            clearUnplayableIfRecovered(music, howl?.duration() ?? playerStore.duration ?? 0)
             resolvePlay()
           },
           onpause: () => {
