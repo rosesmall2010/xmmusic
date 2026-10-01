@@ -13,6 +13,15 @@
 - 歌单弹窗层级审核跟进：`AppToast` 改用 `var(--z-toast)`；去掉创建/添加歌单弹窗无实质作用的内容区 `z-index:1`；关闭「添加到歌单」时复位 `showCreateModal`，避免再次打开连带弹出创建框
 - 全屏页弹层脱出 isolation / 统一对话框层级：标签/详情/匹配候选/EQ/设置封面等 `Teleport` 到 `#app` 并用 `var(--z-modal)`；队列与歌词右键菜单、SongList 右键菜单用 `var(--z-popover)`；匹配拉取遮罩与 EQ 与对话框同层，避免被播放队列盖住或盖住其它对话框
 - 歌单详情列表只显示前 50 首：已有分页接口但未接 SongList 的 `@load-more`，滚动到底不会继续加载；现对齐收藏页，滚动追加后续页，加载更多时列表不再被整页 loading 遮住
+- 扩展名与真实编码不符的本地文件无法播放（如 FLAC/Ogg 却叫 `.mp3`）：`local-file` 按文件头魔数纠正 `Content-Type`；若 FLAC/Ogg 等前还挂了伪 ID3，跳过该前缀再下发（含 Range），避免 Chromium 按 MP3 解复用失败。注：无有效音频头的损坏/加密文件仍无法播放
+- 审核跟进：空文件整文件响应不再传 `end: -1`（避免 Node 抛错变 500）；Howler 兜底默认不按扩展名强制 `format`，解复用交给嗅探后的 Content-Type
+- 批量匹配封面同步一定数量后卡死只能强杀：结束时对每首成功曲发 `cover-matched`，渲染进程对每次事件整表拷贝队列并触发列表重载；现对齐歌词批量只发 `music-list-refresh` + finished，队列封面一次合并；SongList 不再因 metadata 事件二次整表刷新；写 ID3 后让出事件循环
+- 假扩展名歌曲被标成「文件损坏」无法当正常曲：扫描时 `music-metadata` 按 `.mp3` 误判 FLAC/Ogg；现按文件头嗅探再解析，已标损坏/不可播的条目在重扫时会纠正；播放成功也会清掉误标
+- 损坏判定过宽导致加密/乱数据重扫后失败标志消失：`music-metadata` 会给出 0.03s 级假时长。现改为无容器魔数一律损坏，MPEG 须时长 ≥1s；仅 FLAC/Ogg/WAV/MP4 魔数可信时放行；清不可播标记也要求实际播出时长 ≥1s
+- 审核跟进：普通文件变更重扫不再覆盖用户手改的歌名/歌手；补 APE/WMA 魔数以免误杀；原生+Howler 均失败时写入不可播标记并刷新列表图标
+- 批量封面进行中/取消后关窗与设置无响应：多路并发同步写 ID3 与 nativeImage 转码卡住主进程事件循环；现串行化重活并在任务间让出循环，取消后跳过未开始的写盘，进度 IPC 节流
+- 审核跟进：取消统一为 `skipped_cancelled`（不再误计 failed / 伪 low_similarity）；用 `CoverMatchCancelledError` 传递取消；本地封面转码亦入重活队列；进度定时器 `finally` 清理；已入队的单次 node-id3 写盘仍无法中途打断（取消后可能短暂占住主线程至该次结束）
+- GitHub Actions 多平台构建不再在 `main` 分支 push 时触发，仅保留打 `v*` tag 与手动 `workflow_dispatch`
 
 ## [1.2.5] - 2026-09-18
 

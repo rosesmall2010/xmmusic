@@ -475,6 +475,34 @@ export const usePlayerStore = defineStore('player', () => {
     schedulePlaybackPrefsPersist
   )
 
+  /**
+   * 批量应用封面路径（一次遍历队列，避免 N 次 music-metadata-updated 整表拷贝卡死）
+   */
+  const applyCoverPaths = (updates: Array<{ musicId: number; coverPath: string }>) => {
+    if (!updates.length) return
+    const map = new Map<number, string>()
+    for (const u of updates) {
+      if (u.musicId && u.coverPath) map.set(u.musicId, u.coverPath)
+    }
+    if (map.size === 0) return
+
+    let queueChanged = false
+    const nextQueue = queue.value.map((m) => {
+      const coverPath = map.get(m.id)
+      if (!coverPath || m.coverPath === coverPath) return m
+      queueChanged = true
+      return { ...m, coverPath }
+    })
+    if (queueChanged) queue.value = nextQueue
+
+    if (currentMusic.value) {
+      const coverPath = map.get(currentMusic.value.id)
+      if (coverPath && currentMusic.value.coverPath !== coverPath) {
+        currentMusic.value = { ...currentMusic.value, coverPath }
+      }
+    }
+  }
+
   return {
     currentMusic,
     isPlaying,
@@ -498,6 +526,7 @@ export const usePlayerStore = defineStore('player', () => {
     resumePosition,
     shouldAutoResume,
     saveState: persistState,
-    pruneMissingFromQueue
+    pruneMissingFromQueue,
+    applyCoverPaths
   }
 })

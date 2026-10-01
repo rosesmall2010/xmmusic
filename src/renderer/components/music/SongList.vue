@@ -1438,16 +1438,11 @@ const handleFavoritesUpdated = () => {
   void loadFavoriteStatus()
 }
 
-const handleMetadataUpdated = () => {
-  emit('songs-updated')
-}
-
 // Listen for metadata updates from other parts of the app
 onMounted(() => {
   loadFavoriteStatus()
   updateQueueStatus()
 
-  window.addEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.addEventListener('favorites-updated', handleFavoritesUpdated)
   window.addEventListener('keydown', onContextMenuKeydown)
   window.addEventListener('resize', onContextMenuViewportChange)
@@ -1455,7 +1450,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelClosePlaylistSubmenu()
-  window.removeEventListener('music-metadata-updated', handleMetadataUpdated as EventListener)
   window.removeEventListener('favorites-updated', handleFavoritesUpdated)
   window.removeEventListener('keydown', onContextMenuKeydown)
   window.removeEventListener('resize', onContextMenuViewportChange)

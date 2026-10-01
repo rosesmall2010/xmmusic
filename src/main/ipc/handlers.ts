@@ -1657,16 +1657,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         })
 
         if (!mainWindow.isDestroyed()) {
-          // 逐条通知渲染进程刷新封面（playerStore 仅更新 id 匹配的当前曲/队列项）
-          for (const r of summary.results) {
-            if (r.status === 'matched' && r.coverPath) {
-              mainWindow.webContents.send('cover-matched', {
-                musicId: r.musicId,
-                coverPath: r.coverPath,
-                fileNotUpdated: r.fileNotUpdated === true
-              })
-            }
-          }
+          // 勿对每首成功曲发 cover-matched：App/列表/队列会对每次事件做整表拷贝，
+          // 批量几百上千首时渲染进程会卡死到只能强杀。对齐歌词批量：只刷列表 + finished。
           mainWindow.webContents.send('music-list-refresh')
           mainWindow.webContents.send('cover-match-finished', summary)
         }

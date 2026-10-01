@@ -6,6 +6,7 @@ export type CoverMatchStatus =
   | 'matched'
   | 'skipped_has_cover'
   | 'skipped_low_similarity'
+  | 'skipped_cancelled'
   | 'failed'
 
 export interface CoverMatchResult {

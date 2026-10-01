@@ -1,54 +1,67 @@
 import { readdir, stat, writeFile, mkdir, access, constants } from 'fs/promises'
 import { createHash } from 'crypto'
-import { createReadStream } from 'fs'
+import { createReadStream, statSync } from 'fs'
 import { join, extname, basename } from 'path'
 import { createRequire } from 'module'
 import { app } from 'electron'
 import MusicDatabase from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
 import { parsePath, normalizePath, batchGetOrCreateMusicDir } from '../database/pathUtils'
+import { sniffLocalAudio, TRUSTED_STREAM_CONTAINERS } from './audioFormatSniff'
 
 // 动态加载 music-metadata（解决 Electron 中的 exports 问题）
 // 使用字符串拼接完全隐藏模块名，避免 TypeScript 静态分析
 let parseFileCache: any = null
+let parseStreamCache: any = null
+let mmModuleCache: any = null
 
-const getParseFile = async () => {
-  if (parseFileCache) {
-    return parseFileCache
-  }
+const loadMusicMetadata = async () => {
+  if (mmModuleCache) return mmModuleCache
 
-  // 使用字符串拼接隐藏模块名
   const moduleName = 'music' + '-' + 'metadata'
   const libPath = moduleName + '/lib/index.js'
 
   try {
-    // 方法1: 尝试使用动态导入（ES 模块）
-    const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<any>
-    const mm = await dynamicImport(moduleName)
-    parseFileCache = mm.parseFile
-    return parseFileCache
+    const dynamicImport = new Function('specifier', 'return import(specifier)') as (
+      specifier: string
+    ) => Promise<any>
+    mmModuleCache = await dynamicImport(moduleName)
+    return mmModuleCache
   } catch (error) {
     try {
-      // 方法2: 使用路径解析 + require（完全动态）
       const resolveFunc = eval('require.resolve') as (path: string) => string
       const mmPath = resolveFunc(libPath)
       const requireFunc = eval('require') as NodeRequire
-      const mm = requireFunc(mmPath)
-      parseFileCache = mm.parseFile
-      return parseFileCache
+      mmModuleCache = requireFunc(mmPath)
+      return mmModuleCache
     } catch (requireError: any) {
-      // 方法3: 使用 createRequire（最后的尝试）
       try {
         const requireMM = createRequire(__filename)
-        const mm = requireMM(moduleName)
-        parseFileCache = mm.parseFile
-        return parseFileCache
+        mmModuleCache = requireMM(moduleName)
+        return mmModuleCache
       } catch (finalError: any) {
-        const errorMsg = (error as any)?.message || (requireError as any)?.message || (finalError as any)?.message
+        const errorMsg =
+          (error as any)?.message || (requireError as any)?.message || (finalError as any)?.message
         throw new Error(`无法加载音乐元数据解析库: ${errorMsg}`)
       }
     }
   }
+}
+
+const getParseFile = async () => {
+  if (parseFileCache) return parseFileCache
+  const mm = await loadMusicMetadata()
+  parseFileCache = mm.parseFile
+  parseStreamCache = mm.parseStream
+  return parseFileCache
+}
+
+const getParseStream = async () => {
+  if (parseStreamCache) return parseStreamCache
+  const mm = await loadMusicMetadata()
+  parseFileCache = mm.parseFile
+  parseStreamCache = mm.parseStream
+  return parseStreamCache
 }
 
 export default class FileScanner {
@@ -530,24 +543,80 @@ export default class FileScanner {
       if (existing) {
         // 文件已存在，检查是否需要更新
         const fileStat = await stat(filePath)
-        const existingMusic = this.db.prepareCached('SELECT * FROM all_music WHERE id = ?').get(existing.id) as any
+        const existingMusic = this.db.prepareCached('SELECT * FROM all_music WHERE id = ?').get(
+          existing.id
+        ) as any
 
-        // 如果文件大小或修改时间变化，可能需要重新扫描
-        const needsUpdate = options.forceRescan ||
+        const sizeOrMtimeChanged =
           existingMusic.file_size !== fileStat.size ||
           existingMusic.updated_at < fileStat.mtime.toISOString()
+        const wasUnplayable =
+          existingMusic.is_corrupted === 1 || existingMusic.is_playable === 0
+        // 误标损坏 / 强制重扫 / 文件变更：重新检测可播与技术字段
+        const needsFullReparse =
+          options.forceRescan || wasUnplayable || sizeOrMtimeChanged
+        // 仅强制重扫或修复不可播时覆盖歌名/歌手等标签，避免普通文件变更冲掉用户手改
+        const allowOverwriteTags = options.forceRescan === true || wasUnplayable
 
-        // 写入延后到批量事务里提交，这里只入队
-        this.pendingWrites.push(() => {
-          if (needsUpdate) {
-            // 重新扫描（这里简化处理，只更新文件大小）
-            this.db.updateAllMusic(existing.id, {
-              file_size: fileStat.size,
-              is_exists: 1
+        if (needsFullReparse) {
+          const fileHash = await this.calculateMD5(filePath)
+          const isCorrupted = await this.detectCorruptedFile(filePath)
+          if (isCorrupted) {
+            this.pendingWrites.push(() => {
+              this.db.updateAllMusic(existing.id, {
+                file_size: fileStat.size,
+                file_hash: fileHash,
+                is_exists: 1,
+                is_playable: 0,
+                play_error_reason: '文件损坏',
+                is_corrupted: 1,
+                duration: null,
+                bitrate: null,
+                sample_rate: null,
+                channels: null
+              })
+              if (!this.db.isInLocalMusicByMusicId(existing.id)) {
+                this.db.addToLocalMusicByMusicId(existing.id)
+              }
             })
+            return { success: false, corrupted: true }
           }
 
-          // 确保在 local_music 列表中
+          const metadata = await this.parseMetadata(filePath, fileHash)
+          this.pendingWrites.push(() => {
+            const techUpdate: Parameters<MusicDatabase['updateAllMusic']>[1] = {
+              file_size: fileStat.size,
+              file_hash: fileHash,
+              duration: metadata.duration || null,
+              bitrate: metadata.bitrate || null,
+              sample_rate: metadata.sampleRate || null,
+              channels: metadata.channels || null,
+              is_exists: 1,
+              is_playable: 1,
+              play_error_reason: null,
+              is_corrupted: 0
+            }
+            if (allowOverwriteTags) {
+              techUpdate.title = metadata.title || fileName.replace(/\.[^/.]+$/, '')
+              techUpdate.artist = metadata.artist || '未知艺术家'
+              techUpdate.album = metadata.album || null
+              techUpdate.year = metadata.year || null
+              techUpdate.genre = metadata.genre || null
+              techUpdate.cover_path =
+                metadata.coverPath || existingMusic.cover_path || null
+            } else if (!existingMusic.cover_path && metadata.coverPath) {
+              techUpdate.cover_path = metadata.coverPath
+            }
+            this.db.updateAllMusic(existing.id, techUpdate)
+            if (!this.db.isInLocalMusicByMusicId(existing.id)) {
+              this.db.addToLocalMusicByMusicId(existing.id)
+            }
+          })
+          return { success: true, corrupted: false }
+        }
+
+        // 无需重扫：仅确保在本地列表
+        this.pendingWrites.push(() => {
           if (!this.db.isInLocalMusicByMusicId(existing.id)) {
             this.db.addToLocalMusicByMusicId(existing.id)
           }
@@ -677,16 +746,79 @@ export default class FileScanner {
     })
   }
 
+  /**
+   * 解析音频元数据：扩展名与真实编码不符时按魔数指定 mimeType，
+   * 避免 music-metadata 把 FLAC/Ogg 假 .mp3 误判成 AAC/损坏。
+   */
+  private async parseAudioFile(filePath: string): Promise<any> {
+    const sniff = sniffLocalAudio(filePath)
+    const nameExt = extname(filePath).replace(/^\./, '').toLowerCase()
+
+    if (sniff && sniff.ext !== nameExt && sniff.mime !== 'audio/mpeg') {
+      const parseStream = await getParseStream()
+      const fileSize = statSync(filePath).size
+      const stream = createReadStream(filePath)
+      try {
+        return await parseStream(
+          stream,
+          { mimeType: sniff.mime, size: fileSize, path: filePath },
+          { duration: true }
+        )
+      } finally {
+        stream.destroy()
+      }
+    }
+
+    const parseFile = await getParseFile()
+    return await parseFile(filePath, { duration: true })
+  }
+
   async detectCorruptedFile(filePath: string): Promise<boolean> {
     try {
-      const parseFile = await getParseFile()
-      const metadata = await parseFile(filePath)
-      if (!metadata.format.duration || metadata.format.duration <= 0) {
+      const sniff = sniffLocalAudio(filePath)
+      // music-metadata 会对加密/乱数据给出极短假时长（如 0.03s），不能当有效
+      const MIN_VALID_DURATION_SEC = 1
+
+      // FLAC/Ogg/WAV/MP4：有魔数即可（Chromium 可播；时长可后补）
+      if (sniff && TRUSTED_STREAM_CONTAINERS.has(sniff.mime)) {
+        try {
+          await this.parseAudioFile(filePath)
+        } catch {
+          /* ignore */
+        }
+        return false
+      }
+
+      // APE / WMA：有魔数即文件结构有效（应用内未必能播，但不算「损坏」）
+      if (sniff && (sniff.mime === 'audio/ape' || sniff.mime === 'audio/x-ms-wma')) {
+        return false
+      }
+
+      // 无魔数：加密/截断；对 ape/wma 扩展名再给 metadata 一次机会
+      if (!sniff) {
+        const ext = extname(filePath).replace(/^\./, '').toLowerCase()
+        if (ext === 'ape' || ext === 'wma') {
+          try {
+            const metadata = await this.parseAudioFile(filePath)
+            const dur = Number(metadata.format.duration) || 0
+            return dur < MIN_VALID_DURATION_SEC
+          } catch {
+            return true
+          }
+        }
         return true
       }
-      return false
-    } catch (error) {
-      return true // 解析失败视为损坏
+
+      // MPEG：必须有 ≥1s 时长，排除假 Layer2/AAC 碎片
+      try {
+        const metadata = await this.parseAudioFile(filePath)
+        const dur = Number(metadata.format.duration) || 0
+        return dur < MIN_VALID_DURATION_SEC
+      } catch {
+        return true
+      }
+    } catch {
+      return true
     }
   }
 
@@ -705,8 +837,7 @@ export default class FileScanner {
     codecProfile: string | null
   }> {
     try {
-      const parseFile = await getParseFile()
-      const metadata = await parseFile(filePath)
+      const metadata = await this.parseAudioFile(filePath)
 
       // 提取封面
       let coverPath: string | null = null

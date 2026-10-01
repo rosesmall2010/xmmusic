@@ -689,6 +689,11 @@ export default class MusicDatabase {
     lyrics_path: string | null
     lyrics_offset: number
     file_size: number
+    file_hash: string
+    duration: number | null
+    bitrate: number | null
+    sample_rate: number | null
+    channels: number | null
     is_exists: number
     is_playable: number
     play_error_reason: string | null
@@ -731,6 +736,30 @@ export default class MusicDatabase {
     if (updates.lyrics_offset !== undefined) {
       fields.push('lyrics_offset = ?')
       values.push(updates.lyrics_offset)
+    }
+    if (updates.file_size !== undefined) {
+      fields.push('file_size = ?')
+      values.push(updates.file_size)
+    }
+    if (updates.file_hash !== undefined) {
+      fields.push('file_hash = ?')
+      values.push(updates.file_hash)
+    }
+    if (updates.duration !== undefined) {
+      fields.push('duration = ?')
+      values.push(updates.duration)
+    }
+    if (updates.bitrate !== undefined) {
+      fields.push('bitrate = ?')
+      values.push(updates.bitrate)
+    }
+    if (updates.sample_rate !== undefined) {
+      fields.push('sample_rate = ?')
+      values.push(updates.sample_rate)
+    }
+    if (updates.channels !== undefined) {
+      fields.push('channels = ?')
+      values.push(updates.channels)
     }
     if (updates.is_exists !== undefined) {
       fields.push('is_exists = ?')

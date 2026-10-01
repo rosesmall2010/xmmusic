@@ -48,6 +48,20 @@ const REQUEST_GAP_MS = 120
 /** 批量默认并发（实际由 options.concurrency 覆盖，范围 1–10） */
 const BATCH_CONCURRENCY = DEFAULT_MATCH_CONCURRENCY
 
+/** 批量/单曲封面匹配主动取消（勿用魔法字符串比对 message） */
+class CoverMatchCancelledError extends Error {
+  constructor() {
+    super('已取消')
+    this.name = 'CoverMatchCancelledError'
+  }
+}
+
+const isCoverMatchCancelled = (e: unknown): boolean =>
+  e instanceof CoverMatchCancelledError ||
+  (typeof e === 'object' &&
+    e !== null &&
+    (e as { name?: string }).name === 'CoverMatchCancelledError')
+
 type SearchSong = {
   id: number
   name: string
@@ -182,6 +196,12 @@ export default class CoverMatchService {
   private metadataEditor = new MetadataEditor()
   /** 下载进行中注册的取消回调（cancel() 时触发中断正在进行的网络请求） */
   private cancelListeners = new Set<() => void>()
+  /**
+   * 串行化主进程同步重活（nativeImage 转码 / node-id3 写盘）：
+   * 批量并发时多路同时做会卡死事件循环，取消后界面已空闲但关窗/设置无响应。
+   * 注：已开始执行的那一次 node-id3 写盘无法中途打断，取消后仍可能短暂占住主线程至该次结束。
+   */
+  private heavySyncChain: Promise<void> = Promise.resolve()
 
   cancel() {
     this.cancelled = true
@@ -202,6 +222,36 @@ export default class CoverMatchService {
   /** 批量枚举阶段是否已请求取消 */
   isCancelled() {
     return this.cancelled
+  }
+
+  private yieldEventLoop(): Promise<void> {
+    return new Promise((r) => setImmediate(r))
+  }
+
+  /** 排队执行同步偏重任务，并在前后让出事件循环 */
+  private enqueueHeavySync<T>(fn: () => Promise<T> | T): Promise<T> {
+    const run = this.heavySyncChain.then(async () => {
+      await this.yieldEventLoop()
+      try {
+        return await fn()
+      } finally {
+        await this.yieldEventLoop()
+      }
+    })
+    this.heavySyncChain = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private cancelledResult(music: MusicItem): CoverMatchResult {
+    return {
+      musicId: music.id,
+      title: music.title || music.fileName,
+      status: 'skipped_cancelled',
+      message: '已取消'
+    }
   }
 
   /** 库路径非空且磁盘可读 */
@@ -492,20 +542,23 @@ export default class CoverMatchService {
     }
 
     // 一律用魔数校验，避免错误页冒充 image/*
-    let kind = detectImageKind(buf)
-    if (!kind) {
+    const detectedKind = detectImageKind(buf)
+    if (!detectedKind) {
       throw new Error('下载内容不是有效图片')
     }
 
-    // WebP → JPEG，避免 ID3 MIME 错误 / 播放器不认
-    const friendly = ensureId3FriendlyImage(buf, kind)
-    buf = Buffer.from(friendly.buf)
-    kind = friendly.kind
+    // WebP → JPEG，避免 ID3 MIME 错误 / 播放器不认（nativeImage 同步且吃 CPU，排队）
+    const friendly = await this.enqueueHeavySync(() => {
+      if (this.cancelled) throw new CoverMatchCancelledError()
+      return ensureId3FriendlyImage(buf, detectedKind)
+    })
+    const outBuf = Buffer.from(friendly.buf)
+    const outKind = friendly.kind
 
-    const ext = extForKind(kind)
+    const ext = extForKind(outKind)
     const hash = (music.fileHash || `id${music.id}`).replace(/[^a-zA-Z0-9]/g, '')
     const coverPath = join(this.getCoversDir(), `${hash}_cover_${randomUUID()}${ext}`)
-    await writeFile(coverPath, buf)
+    await writeFile(coverPath, outBuf)
     return coverPath
   }
 
@@ -537,20 +590,38 @@ export default class CoverMatchService {
     const isMp3 = isMp3Path(music.filePath)
     const coversDir = this.getCoversDir()
 
+    // 已取消：不再同步写 ID3（会长时间占住主进程）；丢弃缓存并记为跳过
+    if (this.cancelled) {
+      try {
+        if (existsSync(cachePath)) unlinkSync(cachePath)
+      } catch {
+        /* ignore */
+      }
+      return this.cancelledResult(music)
+    }
+
     if (isMp3) {
       try {
-        await this.metadataEditor.updateMetadata(music.filePath, { coverPath: cachePath })
-      } catch (e: any) {
+        await this.enqueueHeavySync(async () => {
+          if (this.cancelled) throw new CoverMatchCancelledError()
+          // 已入队的写盘无法中断；此处仅拦「排队中尚未开始」的任务
+          await this.metadataEditor.updateMetadata(music.filePath, { coverPath: cachePath })
+        })
+      } catch (e: unknown) {
         try {
           if (existsSync(cachePath)) unlinkSync(cachePath)
         } catch {
           /* ignore */
         }
+        if (this.cancelled || isCoverMatchCancelled(e)) {
+          return this.cancelledResult(music)
+        }
+        const msg = e instanceof Error ? e.message : '写入 MP3 封面失败'
         return {
           musicId: music.id,
           title,
           status: 'failed',
-          message: e?.message || '写入 MP3 封面失败'
+          message: msg
         }
       }
       db.updateAllMusic(music.id, { cover_path: cachePath })
@@ -727,11 +798,18 @@ export default class CoverMatchService {
 
     let kind: ImageKind
     try {
-      const normalized = normalizeLocalCoverImage(buf)
+      const normalized = await this.enqueueHeavySync(() => {
+        if (this.cancelled) throw new CoverMatchCancelledError()
+        return normalizeLocalCoverImage(buf)
+      })
       buf = Buffer.from(normalized.buf)
       kind = normalized.kind
-    } catch (e: any) {
-      return { musicId: music.id, title, status: 'failed', message: e?.message || '图片转换失败' }
+    } catch (e: unknown) {
+      if (this.cancelled || isCoverMatchCancelled(e)) {
+        return this.cancelledResult(music)
+      }
+      const msg = e instanceof Error ? e.message : '图片转换失败'
+      return { musicId: music.id, title, status: 'failed', message: msg }
     }
 
     const ext = extForKind(kind)
@@ -755,12 +833,7 @@ export default class CoverMatchService {
     const force = options.force === true
     const title = music.title || music.fileName
     const isAborted = () => this.cancelled || options.shouldAbort?.() === true
-    const cancelledResult = (): CoverMatchResult => ({
-      musicId: music.id,
-      title,
-      status: 'failed',
-      message: '已取消'
-    })
+    const cancelledResult = () => this.cancelledResult(music)
 
     if (isAborted()) return cancelledResult()
 
@@ -889,13 +962,17 @@ export default class CoverMatchService {
     let cachePath: string
     try {
       cachePath = await this.downloadCoverToCache(coverUrl, music)
-    } catch (e: any) {
+    } catch (e: unknown) {
+      if (isAborted() || isCoverMatchCancelled(e)) {
+        return cancelledResult()
+      }
+      const msg = e instanceof Error ? e.message : '下载封面失败'
       return {
         musicId: music.id,
         title,
         status: 'failed',
         similarity: best.similarity,
-        message: e?.message || '下载封面失败'
+        message: msg
       }
     }
 
@@ -949,6 +1026,9 @@ export default class CoverMatchService {
     let nextIndex = 0
     const results: Array<CoverMatchResult | undefined> = new Array(total)
     let lastDoneTitle = ''
+    let lastProgressEmitAt = 0
+    let pendingProgressStatus: CoverMatchStatus | undefined
+    let progressTimer: ReturnType<typeof setTimeout> | null = null
     const workerCount = Math.min(concurrency, Math.max(total, 1))
     const tasks: CoverMatchWorkerTask[] = Array.from({ length: workerCount }, (_, i) => ({
       workerId: i + 1,
@@ -971,8 +1051,30 @@ export default class CoverMatchService {
       return 'skipped'
     }
 
-    const emitProgress = (lastStatus?: CoverMatchStatus) => {
-      const elapsedMs = Date.now() - startedAt
+    const clearProgressTimer = () => {
+      if (progressTimer != null) {
+        clearTimeout(progressTimer)
+        progressTimer = null
+      }
+    }
+
+    const emitProgress = (lastStatus?: CoverMatchStatus, force = false) => {
+      const now = Date.now()
+      // 节流：高频进度 IPC 会拖垮渲染进程；完成/取消时 force 立即推送
+      if (!force && now - lastProgressEmitAt < 250 && completed < total && !this.cancelled) {
+        pendingProgressStatus = lastStatus
+        if (progressTimer == null) {
+          progressTimer = setTimeout(() => {
+            progressTimer = null
+            emitProgress(pendingProgressStatus, true)
+          }, 250)
+        }
+        return
+      }
+      lastProgressEmitAt = now
+      pendingProgressStatus = undefined
+      clearProgressTimer()
+      const elapsedMs = now - startedAt
       const estimatedRemainingMs =
         completed > 0 && completed < total
           ? Math.round(((total - completed) * elapsedMs) / completed)
@@ -997,117 +1099,104 @@ export default class CoverMatchService {
       })
     }
 
-    if (total === 0) {
-      emitProgress()
-      return {
-        total: 0,
-        success: 0,
-        failed: 0,
-        skipped: 0,
-        writtenToFile: 0,
-        dbOnly: 0,
-        cancelled: false,
-        results: []
+    try {
+      if (total === 0) {
+        emitProgress(undefined, true)
+        return {
+          total: 0,
+          success: 0,
+          failed: 0,
+          skipped: 0,
+          writtenToFile: 0,
+          dbOnly: 0,
+          cancelled: false,
+          results: []
+        }
       }
-    }
 
-    emitProgress()
+      emitProgress(undefined, true)
 
-    const runOne = async (workerSlot: number, index: number) => {
-      if (this.cancelled) return
-      const music = songs[index]
-      const displayTitle = music.title?.trim() || music.fileName
-      lastDoneTitle = displayTitle
-      tasks[workerSlot] = {
-        workerId: workerSlot + 1,
-        musicId: music.id,
-        title: displayTitle,
-        status: 'running'
+      const runOne = async (workerSlot: number, index: number) => {
+        const music = songs[index]
+        const displayTitle = music.title?.trim() || music.fileName
+        lastDoneTitle = displayTitle
+        tasks[workerSlot] = {
+          workerId: workerSlot + 1,
+          musicId: music.id,
+          title: displayTitle,
+          status: 'running'
+        }
+        emitProgress()
+        const result = await this.matchOne(db, music, {
+          force,
+          shouldAbort: () => this.cancelled
+        })
+        // 取消后仍记录本首已得出的结果（含成功写入 / skipped_cancelled），避免摘要与磁盘不符
+        results[index] = result
+        bump(result)
+        completed++
+        lastDoneTitle = displayTitle
+        tasks[workerSlot] = {
+          workerId: workerSlot + 1,
+          musicId: music.id,
+          title: displayTitle,
+          status: mapTaskStatus(result.status),
+          message: result.message
+        }
+        emitProgress(result.status, this.cancelled || completed >= total)
       }
-      emitProgress()
-      const result = await this.matchOne(db, music, {
-        force,
-        shouldAbort: () => this.cancelled
+
+      const workers = Array.from({ length: workerCount }, async (_, workerSlot) => {
+        while (!this.cancelled) {
+          const index = nextIndex++
+          if (index >= total) {
+            tasks[workerSlot] = {
+              workerId: workerSlot + 1,
+              title: '',
+              status: 'idle'
+            }
+            emitProgress(undefined, true)
+            break
+          }
+          await runOne(workerSlot, index)
+          if (!this.cancelled && nextIndex < total) {
+            await sleep(REQUEST_GAP_MS)
+          }
+        }
+        if (this.cancelled) {
+          tasks[workerSlot] = {
+            workerId: workerSlot + 1,
+            title: '',
+            status: 'idle'
+          }
+          emitProgress(undefined, true)
+        }
       })
-      // 取消后：进行中任务若已成功写入仍计入，避免摘要低于磁盘实际
-      if (this.cancelled) {
-        if (result.status === 'matched') {
-          results[index] = result
-          bump(result)
-          completed++
-          lastDoneTitle = displayTitle
-          tasks[workerSlot] = {
-            workerId: workerSlot + 1,
-            musicId: music.id,
-            title: displayTitle,
-            status: mapTaskStatus(result.status),
-            message: result.message
-          }
-          emitProgress(result.status)
-        } else {
-          tasks[workerSlot] = {
-            workerId: workerSlot + 1,
-            title: '',
-            status: 'idle'
-          }
-          emitProgress()
-        }
-        return
-      }
-      results[index] = result
-      bump(result)
-      completed++
-      lastDoneTitle = displayTitle
-      tasks[workerSlot] = {
-        workerId: workerSlot + 1,
-        musicId: music.id,
-        title: displayTitle,
-        status: mapTaskStatus(result.status),
-        message: result.message
-      }
-      emitProgress(result.status)
-    }
 
-    const workers = Array.from({ length: workerCount }, async (_, workerSlot) => {
-      while (!this.cancelled) {
-        const index = nextIndex++
-        if (index >= total) {
-          tasks[workerSlot] = {
-            workerId: workerSlot + 1,
-            title: '',
-            status: 'idle'
-          }
-          emitProgress()
-          break
-        }
-        await runOne(workerSlot, index)
-        if (!this.cancelled && nextIndex < total) {
-          await sleep(REQUEST_GAP_MS)
+      await Promise.all(workers)
+      for (const t of tasks) {
+        if (t.status === 'running') {
+          t.status = 'idle'
+          t.title = ''
+          delete t.musicId
+          delete t.message
         }
       }
-    })
-
-    await Promise.all(workers)
-    for (const t of tasks) {
-      if (t.status === 'running') {
-        t.status = 'idle'
-        t.title = ''
-        delete t.musicId
-        delete t.message
+      emitProgress(undefined, true)
+      // 取消标志生命周期由调用方管理：handler 入口 resetCancel，结束不清，
+      // 避免「批量已取消 → 下一个单曲匹配被残留标志误中止」的尾部竞态
+      return {
+        total,
+        success,
+        failed,
+        skipped,
+        writtenToFile,
+        dbOnly,
+        cancelled: this.cancelled,
+        results: results.filter((r): r is CoverMatchResult => !!r)
       }
-    }
-    emitProgress()
-    // 取消标志生命周期由调用方管理：handler 入口 resetCancel，结束不清，
-    // 避免「批量已取消 → 下一个单曲匹配被残留标志误中止」的尾部竞态
-    return {
-      total,
-      success,
-      failed,
-      skipped,
-      writtenToFile,
-      dbOnly,
-      cancelled: this.cancelled,
-      results: results.filter((r): r is CoverMatchResult => !!r)
+    } finally {
+      clearProgressTimer()
     }
   }
 }

@@ -218,6 +218,17 @@ export function usePlayer() {
         clearTimeout(loadTimeout)
         loadTimeout = null
       }
+      // 曾被误标损坏的假扩展名文件：真正播起来（时长可信）后再清不可播标记
+      if (music.isPlayable === false) {
+        const dur = audioElement?.duration ?? 0
+        if (Number.isFinite(dur) && dur >= 1) {
+          void window.electronAPI.updateMusicPlayStatus(music.id, true).then(() => {
+            music.isPlayable = true
+            music.playErrorReason = undefined
+            music.isCorrupted = false
+          }).catch(() => {})
+        }
+      }
       // 音效开启：强制挂滤波链；仅特效需要频谱时旁路挂图即可
       if (equalizer.enabled.value) {
         equalizer.ensureCapturedForEq()
@@ -326,7 +337,6 @@ export function usePlayer() {
       }
 
       const localFileUrl = toLocalFileUrl(music.filePath)
-      const format = resolveAudioFormat(music)
       console.log('🔗 Howler 使用协议:', localFileUrl)
       console.log('📁 原始路径:', music.filePath)
 
@@ -336,10 +346,11 @@ export function usePlayer() {
           return
         }
 
-        howl = new Howl({
+        // html5 下真实解复用靠 local-file 的 Content-Type（文件头嗅探）；
+        // 默认不按扩展名强制 format，避免 FLAC/Ogg 伪装成 .mp3 时预检误导
+        const howlOpts: ConstructorParameters<typeof Howl>[0] = {
           src: [localFileUrl],
           html5: true,
-          format: [format],
           volume: playerStore.volume / 100,
           onload: () => {
             if (isStale() || !howl) return
@@ -393,7 +404,15 @@ export function usePlayer() {
             console.error('❌ Howler 播放失败', error)
             rejectPlay(new Error(String(error) || 'Howler 播放失败'))
           }
-        })
+        }
+
+        // URL 路径无扩展名时 Howler 无法做 codec 预检，再回退传 format
+        const pathForExt = localFileUrl.split('?', 1)[0]
+        if (!/\.[a-z0-9]+$/i.test(pathForExt)) {
+          howlOpts.format = [resolveAudioFormat(music)]
+        }
+
+        howl = new Howl(howlOpts)
 
         // 15s 内既无 onplay 也无错误则释放，避免锁死
         howlLockTimer = setTimeout(() => {
@@ -419,6 +438,27 @@ export function usePlayer() {
 
       playerStore.isPlaying = false
       stopProgressUpdate()
+
+      const reason =
+        error instanceof Error ? error.message : String(error || '播放失败')
+      try {
+        await window.electronAPI.updateMusicPlayStatus(music.id, false, reason)
+        music.isPlayable = false
+        music.playErrorReason = reason
+        music.isCorrupted = true
+        window.dispatchEvent(
+          new CustomEvent('music-metadata-updated', {
+            detail: {
+              id: music.id,
+              isPlayable: false,
+              playErrorReason: reason,
+              isCorrupted: true
+            }
+          })
+        )
+      } catch (err) {
+        console.error('❌ 更新播放失败状态失败:', err)
+      }
 
       const next = playerStore.getNextSkippingCurrent()
       if (next) {

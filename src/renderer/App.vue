@@ -182,7 +182,7 @@ onMounted(async () => {
   // 初始化完成后若歌词窗已开，再推一次完整状态（初始化前可能 music 仍为空）
   if (desktopLyricsOpen) sendDesktopLyricsState()
 
-  // 封面匹配成功（单曲 / 批量）→ 同步播放栏与队列封面
+  // 封面匹配成功（单曲）→ 同步播放栏与队列封面
   window.electronAPI.onCoverMatched(({ musicId, coverPath }) => {
     if (!coverPath) return
     window.dispatchEvent(
@@ -190,6 +190,15 @@ onMounted(async () => {
         detail: { id: musicId, coverPath }
       })
     )
+  })
+
+  // 批量封面结束：一次合并队列封面，避免逐条 music-metadata-updated 卡死
+  window.electronAPI.onCoverMatchFinished((summary) => {
+    const updates =
+      summary?.results
+        ?.filter((r) => r.status === 'matched' && r.coverPath)
+        .map((r) => ({ musicId: r.musicId, coverPath: r.coverPath as string })) ?? []
+    if (updates.length) playerStore.applyCoverPaths(updates)
   })
 
   // 保留 IPC 通道（托盘等）

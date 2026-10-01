@@ -6,6 +6,7 @@ import MusicDatabase from './database/db'
 import { setupIPC } from './ipc/handlers'
 import ShortcutManager from './services/shortcutManager'
 import TrayService from './services/trayService'
+import { sniffLocalAudio } from './services/audioFormatSniff'
 
 // 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
 app.name = 'xmmusic'
@@ -94,7 +95,7 @@ if (app.isPackaged) {
 }
 
 /** 根据扩展名返回媒体/图片 MIME，缺省用 octet-stream */
-function getLocalFileContentType(filePath: string): string {
+function contentTypeFromExtension(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || ''
   const map: Record<string, string> = {
     mp3: 'audio/mpeg',
@@ -114,6 +115,49 @@ function getLocalFileContentType(filePath: string): string {
     bmp: 'image/bmp'
   }
   return map[ext] || 'application/octet-stream'
+}
+
+/** local-file 实际下发计划：正确 MIME + 可选跳过伪 ID3 前缀 */
+interface LocalFileServePlan {
+  contentType: string
+  /** 音频数据起始偏移；非 MP3 却挂了 ID3 时需跳过，否则 Chromium/Ogg 无法解码 */
+  dataOffset: number
+}
+
+const localFileServePlanCache = new Map<
+  string,
+  { plan: LocalFileServePlan; size: number; mtimeMs: number }
+>()
+
+/**
+ * 嗅探真实编码：扩展名骗人时（FLAC/Ogg 却叫 .mp3）按魔数纠正 Content-Type；
+ * 若 FLAC/Ogg/WAV/MP4 前还挂了 ID3，跳过该前缀再喂给解码器。
+ */
+function planLocalFileServe(filePath: string, size: number, mtimeMs: number): LocalFileServePlan {
+  const cached = localFileServePlanCache.get(filePath)
+  if (cached && cached.size === size && cached.mtimeMs === mtimeMs) {
+    return cached.plan
+  }
+
+  const extType = contentTypeFromExtension(filePath)
+  const fallback: LocalFileServePlan = { contentType: extType, dataOffset: 0 }
+
+  // 封面等图片只看扩展名
+  if (extType.startsWith('image/')) {
+    localFileServePlanCache.set(filePath, { plan: fallback, size, mtimeMs })
+    return fallback
+  }
+
+  const sniffed = sniffLocalAudio(filePath, size)
+  const plan: LocalFileServePlan = sniffed
+    ? { contentType: sniffed.mime, dataOffset: sniffed.dataOffset }
+    : fallback
+
+  if (localFileServePlanCache.size > 500) {
+    localFileServePlanCache.clear()
+  }
+  localFileServePlanCache.set(filePath, { plan, size, mtimeMs })
+  return plan
 }
 
 /** 路径是否落在允许根目录下（Windows 忽略大小写） */
@@ -500,55 +544,73 @@ app.whenReady().then(async () => {
         return new Response('Not Found', { status: 404 })
       }
 
-      const { size } = statSync(filePath)
+      const { size, mtimeMs } = statSync(filePath)
       const rangeHeader = request.headers.get('range')
-      const contentType = getLocalFileContentType(filePath)
+      const plan = planLocalFileServe(filePath, size, mtimeMs)
+      const dataOffset = plan.dataOffset
+      const logicalSize = size - dataOffset
 
       // CORS 必须放开：页面源是 http://localhost / file，媒体源是 local-file://media，
       // 属于跨域。均衡器 createMediaElementSource 在跨域且无 CORS 时会输出全 0 静音，
       // 而元素本身的输出已被 MediaElementSource 接管，结果就是「进度在走但没声音」。
       const commonHeaders: Record<string, string> = {
-        'Content-Type': contentType,
+        'Content-Type': plan.contentType,
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Range',
         'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges'
       }
 
-      // 无 Range：整文件返回
+      // 无 Range：按逻辑视图返回（可跳过伪 ID3 前缀）
       if (!rangeHeader) {
-        const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream
+        if (logicalSize <= 0) {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              ...commonHeaders,
+              'Content-Length': '0'
+            }
+          })
+        }
+        const stream = Readable.toWeb(
+          createReadStream(filePath, { start: dataOffset, end: size - 1 })
+        ) as ReadableStream
         return new Response(stream, {
           status: 200,
           headers: {
             ...commonHeaders,
-            'Content-Length': String(size)
+            'Content-Length': String(logicalSize)
           }
         })
       }
 
       // 有 Range：返回 206 分段内容（拖动进度条时媒体解码器依赖这个）
+      // Range 作用在「逻辑文件」（已跳过 dataOffset）上
       const match = rangeHeader.match(/bytes=(\d*)-(\d*)/)
       let start = match && match[1] ? parseInt(match[1], 10) : 0
-      let end = match && match[2] ? parseInt(match[2], 10) : size - 1
+      let end = match && match[2] ? parseInt(match[2], 10) : logicalSize - 1
       if (isNaN(start) || start < 0) start = 0
-      if (isNaN(end) || end >= size) end = size - 1
-      if (start > end) {
+      if (isNaN(end) || end >= logicalSize) end = logicalSize - 1
+      if (start > end || logicalSize <= 0) {
         return new Response(null, {
           status: 416,
           headers: {
             ...commonHeaders,
-            'Content-Range': `bytes */${size}`
+            'Content-Range': `bytes */${logicalSize}`
           }
         })
       }
 
-      const stream = Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream
+      const physicalStart = dataOffset + start
+      const physicalEnd = dataOffset + end
+      const stream = Readable.toWeb(
+        createReadStream(filePath, { start: physicalStart, end: physicalEnd })
+      ) as ReadableStream
       return new Response(stream, {
         status: 206,
         headers: {
           ...commonHeaders,
-          'Content-Range': `bytes ${start}-${end}/${size}`,
+          'Content-Range': `bytes ${start}-${end}/${logicalSize}`,
           'Content-Length': String(end - start + 1)
         }
       })
