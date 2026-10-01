@@ -25,7 +25,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "generate:icon": "node scripts/generate-icon.js"
+    "generate:icon": "node scripts/generate-icon.js",
+    "check:pagination": "cross-env NODE_ENV=production electron scripts/check-cursor-pagination.js"
   },
   "keywords": [
     "音乐",

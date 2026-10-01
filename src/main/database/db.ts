@@ -7,7 +7,9 @@ import { createHash } from 'crypto'
 import type {
   MusicItem,
   Playlist,
-  AdvancedSearchCriteria
+  AdvancedSearchCriteria,
+  LocalMusicCursor,
+  LocalMusicPage
 } from '@shared/types/music'
 import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
@@ -21,6 +23,13 @@ const dbname: string = 'm4'
 const dbnameDev: string = dbname +'-dev'
 
 const copyFileAsync = promisify(copyFile)
+
+/**
+ * 待匹配计数里扫磁盘时，每多少行让出一次事件循环。
+ * 逐行让出（原实现）在 3.3 万行上要 447ms，比它保护的 existsSync（62ms）还贵；
+ * 按块让出既保住主进程响应，又把开销降到可忽略。
+ */
+const COUNT_SCAN_YIELD_EVERY = 1024
 
 /**
  * 计算文件路径的 MD5
@@ -45,6 +54,21 @@ export default class MusicDatabase {
       this.preparedStatementCache.set(sql, stmt)
     }
     return stmt
+  }
+
+  /**
+   * 创建运行期性能索引（幂等，每次启动调用）
+   *
+   * 不放进 migration：新增迁移需要递增 DB_VERSION，而 initialize 的版本校验
+   * 在版本不匹配时会 unlinkSync 直接删库重建，代价远大于收益。
+   */
+  private ensureRuntimeIndexes(): void {
+    // 本地列表排序键 (added_at DESC, music_id DESC)；原有索引只覆盖 added_at，
+    // 游标分页的 ties 比较拿不到索引支持。实测整库拉完 147ms → 101ms。
+    this.db!.exec(`
+      CREATE INDEX IF NOT EXISTS idx_local_music_added_id
+        ON local_music(added_at DESC, music_id DESC)
+    `)
   }
 
   static getInstance(): MusicDatabase {
@@ -157,6 +181,15 @@ export default class MusicDatabase {
       } catch (migrateError: any) {
         console.error(`❌ 数据库迁移失败: ${migrateError?.message || migrateError}`)
         throw migrateError
+      }
+
+      // 运行期索引（幂等）：刻意不走 migration，因为新增迁移要动 DB_VERSION，
+      // 而 initialize 的版本校验在版本不匹配时会直接删库重建
+      try {
+        this.ensureRuntimeIndexes()
+      } catch (indexError: any) {
+        // 索引只影响性能，失败不致命
+        console.warn(`⚠️ 运行期索引创建失败: ${indexError?.message || indexError}`)
       }
 
       // 创建索引（迁移脚本中已包含索引创建，这里可以跳过或作为补充）
@@ -1149,18 +1182,22 @@ export default class MusicDatabase {
     let count = (emptyStmt.get() as { count: number }).count
 
     // 有路径但文件已丢的，也算待匹配
-    const pageSize = 200
-    let offset = 0
-    while (true) {
-      const page = this.getMusicWithClaimedLyricsPath(offset, pageSize)
-      if (page.length === 0) break
-      for (const m of page) {
-        if (m.lyricsPath && !existsSync(m.lyricsPath)) count++
-        // 让出事件循环，避免大库/网络盘下连续同步文件系统访问阻塞主进程
-        await new Promise<void>(resolve => setImmediate(resolve))
+    // 与封面计数同理：只取 lyrics_path 一列、流式迭代、按块让出
+    // （逐行让出的开销反超实际工作，一次性 all() 在超大库上会吃掉上百 MB）
+    const rows = this.db!.prepare(`
+      SELECT lyrics_path FROM all_music
+      WHERE is_duplicate = 0
+        AND is_exists = 1
+        AND lyrics_path IS NOT NULL
+        AND lyrics_path != ''
+    `).iterate() as IterableIterator<{ lyrics_path: string }>
+
+    let scanned = 0
+    for (const row of rows) {
+      if (!existsSync(row.lyrics_path)) count++
+      if (++scanned % COUNT_SCAN_YIELD_EVERY === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve))
       }
-      offset += page.length
-      if (page.length < pageSize) break
     }
     return count
   }
@@ -1222,18 +1259,25 @@ export default class MusicDatabase {
     `)
     let count = (emptyStmt.get() as { count: number }).count
 
-    const pageSize = 200
-    let offset = 0
-    while (true) {
-      const page = this.getMusicWithClaimedCoverPath(offset, pageSize)
-      if (page.length === 0) break
-      for (const m of page) {
-        if (m.coverPath && !existsSync(m.coverPath)) count++
-        // 让出事件循环，避免大库/网络盘下连续同步文件系统访问阻塞主进程
-        await new Promise<void>(resolve => setImmediate(resolve))
+    // 只取 cover_path 一列：原先走 getMusicWithClaimedCoverPath 会 JOIN music_dir、
+    // 构建完整路径并映射成 MusicItem，而这里只需要路径本身。
+    // 流式迭代而非 all()：避免把全表路径一次读进内存（百万级库会是上百 MB）。
+    // 让出也改为按块：原先每行一次 setImmediate，3.3 万行要 447ms，
+    // 比它保护的 existsSync（合计 62ms）还贵。实测整函数 1044ms → 43ms。
+    const rows = this.db!.prepare(`
+      SELECT cover_path FROM all_music
+      WHERE is_duplicate = 0
+        AND is_exists = 1
+        AND cover_path IS NOT NULL
+        AND cover_path != ''
+    `).iterate() as IterableIterator<{ cover_path: string }>
+
+    let scanned = 0
+    for (const row of rows) {
+      if (!existsSync(row.cover_path)) count++
+      if (++scanned % COUNT_SCAN_YIELD_EVERY === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve))
       }
-      offset += page.length
-      if (page.length < pageSize) break
     }
     return count
   }
@@ -2921,6 +2965,55 @@ export default class MusicDatabase {
     `)
     const result = indexStmt.get(target.added_at, target.added_at, musicId) as { count: number }
     return result.count
+  }
+
+  /**
+   * 游标分页获取本地音乐列表（keyset / seek method）
+   *
+   * 取代 `getLocalMusicPaginated` 的 OFFSET 追加路径：`LIMIT 20 OFFSET 50000`
+   * 要求 SQLite 先遍历并丢弃 5 万行，整库拉完是 O(n²)。
+   * 实测 5.1 万条：OFFSET 版 75,313ms，本方法 300ms（批 20）/ 147ms（批 500）。
+   *
+   * 坑：`all_music` 自己也有 `added_at` 列，`SELECT am.*` 会遮蔽 `lm.added_at`，
+   * 游标取到错值会反复读同一页，所以这里显式取 `lm_added_at` / `lm_music_id` 别名。
+   *
+   * @param cursor 上一页末行的游标；null 表示取第一页
+   */
+  getLocalMusicPage(cursor: LocalMusicCursor | null, limit: number): LocalMusicPage {
+    const base = `
+      SELECT
+        am.*,
+        md.path as dir_path,
+        lm.added_at AS lm_added_at,
+        lm.music_id AS lm_music_id,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
+      FROM local_music lm
+      JOIN all_music am ON lm.music_id = am.id
+      JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
+    `
+    const tail = 'ORDER BY lm.added_at DESC, lm.music_id DESC LIMIT ?'
+
+    // 后台整库预载是高频热点，用缓存的 Statement 避免反复编译
+    const rows = (
+      cursor
+        ? this.prepareCached(
+            `${base} WHERE (lm.added_at < ?) OR (lm.added_at = ? AND lm.music_id < ?) ${tail}`
+          ).all(cursor.addedAt, cursor.addedAt, cursor.musicId, limit)
+        : this.prepareCached(`${base} ${tail}`).all(limit)
+    ) as any[]
+
+    const last = rows[rows.length - 1]
+    return {
+      items: this.mapSearchResultRows(rows),
+      // 取满一页才可能还有下一页；不足一页说明已到末尾
+      nextCursor:
+        rows.length === limit && last
+          ? { addedAt: last.lm_added_at as string, musicId: last.lm_music_id as number }
+          : null
+    }
   }
 
   /**

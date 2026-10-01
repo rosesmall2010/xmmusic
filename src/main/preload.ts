@@ -4,7 +4,9 @@ import type {
   ScanProgress,
   ScanResult,
   ScanState,
-  AdvancedSearchCriteria
+  AdvancedSearchCriteria,
+  LocalMusicCursor,
+  LocalMusicPage
 } from '@shared/types/music'
 import type { ShortcutConfig } from '@shared/types/settings'
 import type {
@@ -68,6 +70,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 数据库操作
   getMusicList: (offset: number, limit: number) =>
     ipcRenderer.invoke('get-music-list', offset, limit),
+  getLocalMusicPage: (cursor: LocalMusicCursor | null, limit: number) =>
+    ipcRenderer.invoke('get-local-music-page', cursor, limit),
   getMusicTotalCount: () => ipcRenderer.invoke('get-music-total-count'),
   getLocalMusicIndex: (musicId: number) => ipcRenderer.invoke('get-local-music-index', musicId),
   searchMusic: (query: string) => ipcRenderer.invoke('search-music', query),
@@ -376,6 +380,7 @@ declare global {
       openInFileExplorer: (filePath: string) => Promise<void>
       scanMusicFolder: (path: string) => Promise<ScanResult>
       getMusicList: (offset: number, limit: number) => Promise<MusicItem[]>
+      getLocalMusicPage: (cursor: LocalMusicCursor | null, limit: number) => Promise<LocalMusicPage>
       getMusicTotalCount: () => Promise<number>
       getLocalMusicIndex: (musicId: number) => Promise<number | null>
       searchMusic: (query: string) => Promise<MusicItem[]>

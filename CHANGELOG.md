@@ -7,7 +7,17 @@
 
 ## [1.2.6] - 2026-09-30
 
+### 性能
+- **几万条库启动卡顿数秒**：本地列表的后台整库预载用 `LIMIT 20 OFFSET n` 分页，而 OFFSET 要求 SQLite 先遍历并丢弃前 n 行，整库拉完是 O(n²)。5.1 万条实测纯 SQL 75 秒、2552 批，每批把主进程卡住 10–60ms，启动后几分钟内所有 IPC（含界面交互）都在排队。现改为游标（keyset）分页并把批大小从 20 提到 500：103 批 / 0.3 秒，墙钟从 4 分多钟降到约 5 秒
+- 启动时的「待匹配封面数」统计从 1044ms 降到约 50ms：原实现分页 JOIN `music_dir` 并映射成完整 `MusicItem`，而只用得到 `cover_path` 一列；且为「避免阻塞」给每一行加了 `await setImmediate`，3.3 万次让出耗时 447ms，比它保护的 `existsSync`（合计 62ms）还贵。现改为单条 SQL 只取路径列、流式迭代（`Statement.iterate`，内存 O(1)）、每 1024 行让出一次。待匹配歌词数同样处理
+- 后台分页不再每批重复查询总数（原先每批一次 IPC，整库 2552 次）；`hasMore` 改由游标判定而非 `currentOffset < totalCount` —— 总数只在首屏查一次，扫描期间库增长会让它偏小，导致预载提前停住、全选漏歌
+- 后台预载撞上别处的整表刷新时改为下一拍重试，不再直接退出循环（原逻辑一次撞车就永久停住）
+- 新增运行期索引 `local_music(added_at DESC, music_id DESC)`：原索引只覆盖 `added_at`，游标分页的 ties 比较拿不到索引支持。刻意不走 migration —— 新增迁移要递增 `DB_VERSION`，而 `initialize` 的版本校验在不匹配时会直接删库重建
+- 新增 `npm run check:pagination`：在真实 Electron 进程里跑真实 `getLocalMusicPage`，校验游标序列与全量排序逐行一致、无重复。守的是 `SELECT am.*` 会遮蔽 `lm.added_at` 这个坑（漏写别名会让翻页断在第一页）
+
 ### 修复
+- **扫描卡在最后一个文件、永远停在「扫描中」**：读取会阻塞的普通文件（失联的网络盘、下载不下来的 iCloud/OneDrive 占位文件、坏道）会让 `music-metadata` 与 MD5 读流**双双永不 settle** —— 既不抛错也不结束，并发池里那一路就此永久挂起。`current++` 在 `finally` 里，所以进度停在「总数 − 1」不动，日志里也看不出是哪个文件。现给单文件处理加 120s 超时护栏：超时文件记为失败、控制台打出完整路径、扫描继续走完。注意超时只是放行扫描，并不能真正中断底层读取，挂住的 fd 会留到进程退出（需 music-metadata 支持 AbortSignal 才能根治）
+- 扫描结果里的 `failed` / `errors` 原先被整个丢弃，失败或超时的文件静默不入库，用户只会发现「某首歌没进来」却不知为何。现在扫描结束若有失败项会提示数量并指向控制台日志
 - 扫描中途切到「本地音乐」页看不到任何进度：进度监听加了 `isScanning` 门，但该标志只由本页 `handleScan` 或 `scan-state-changed` 的「开始」事件点亮；从设置页/目录对话框发起扫描后再切过来，开始事件早已错过，整轮扫描一条进度都显示不出。现挂载时经已有的 `get-scan-state` 回填状态与进度（带代际校验，避免 await 期间扫描已结束又被点亮）
 - 批量匹配歌词把文件已丢失的歌曲也算进来：`getMusicWithoutLyricsCount` / `getMusicWithoutLyrics` / `getMusicWithClaimedLyricsPath` 三个查询都缺 `is_exists = 1`（封面侧三个都有），导致确认框待匹配数虚高、这些歌每首走到 `existsSync` 失败计为「失败」、摘要失败数虚高且白跑
 - 扫描收尾提示「正在同步数据库…」被迟到进度覆盖回 99.x%：`updateProgress` 经 `setImmediate` 延迟推送，最后一次回调会排在收尾提示之后；现加 `progressFinalized` 标志让延迟回调自行放弃

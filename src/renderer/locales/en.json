@@ -630,6 +630,7 @@
     "songRemoveError": "Failed to remove",
     "tagsSaved": "Tags saved successfully",
     "tagsSaveError": "Failed to save tags",
-    "operationFailed": "Operation failed: {error}"
+    "operationFailed": "Operation failed: {error}",
+    "scanSkippedFiles": "{count} file(s) failed or timed out and were skipped (see console log). Rescan to retry"
   }
 }

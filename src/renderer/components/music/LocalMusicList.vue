@@ -673,21 +673,32 @@ const refreshListAfterMatch = async () => {
   }
 }
 
+/**
+ * 后台把整库预载进列表（供全选 / 快速滚动）
+ *
+ * 用游标分页而非 OFFSET：实测 5.1 万条，OFFSET 版纯 SQL 75 秒（且每批都卡主线程
+ * 10–60ms，启动后几分钟内所有 IPC 都在排队），游标版 0.3 秒。
+ * 批大小同时从 20 提到 500，批数 2552 → 103，墙钟从 4 分多钟降到数秒。
+ *
+ * 续跑条件只看 musicStore.hasMore（由游标判定）：store 暂时在跑别的加载时
+ * 下一拍重试而不是直接退出，否则一次撞车就会让预载永久停住、全选漏歌。
+ */
+const BACKGROUND_PAGE_SIZE = 500
+const BACKGROUND_PAGE_GAP_MS = 50
+
 const startBackgroundLoading = async () => {
   const token = backgroundLoadToken
-  // Check if there are more items to load
-  if (musicStore.hasMore) {
-    // Use requestIdleCallback or setTimeout to avoid blocking main thread
-    setTimeout(async () => {
+  if (!musicStore.hasMore) return
+  setTimeout(async () => {
+    if (token !== backgroundLoadToken) return
+    if (!musicStore.hasMore) return
+    // 别处正在加载（如匹配结束后的整表刷新）：这一拍跳过，不退出循环
+    if (!musicStore.loading) {
+      await musicStore.loadMore(BACKGROUND_PAGE_SIZE)
       if (token !== backgroundLoadToken) return
-      if (musicStore.hasMore && !musicStore.loading) {
-        await musicStore.loadMusic(musicStore.currentOffset, 20)
-        if (token !== backgroundLoadToken) return
-        // Continue loading next batch
-        startBackgroundLoading()
-      }
-    }, 100) // Small delay between batches
-  }
+    }
+    startBackgroundLoading()
+  }, BACKGROUND_PAGE_GAP_MS)
 }
 
 const stopBackgroundLoading = () => {
@@ -695,9 +706,9 @@ const stopBackgroundLoading = () => {
 }
 
 const loadMore = async () => {
-  // This is now handled by background loading, but we keep it for manual trigger if needed
+  // 滚动到底的手动追加；与后台预载共用游标，store 内有 loading 互斥
   if (!musicStore.loading && musicStore.hasMore) {
-    await musicStore.loadMusic(musicStore.currentOffset, 20)
+    await musicStore.loadMore(BACKGROUND_PAGE_SIZE)
   }
 }
 
@@ -845,7 +856,7 @@ const handleScan = async () => {
   scanStateEpoch++
   isScanning.value = true
   try {
-      await window.electronAPI.scanAllDirectories({
+      const scanResult = await window.electronAPI.scanAllDirectories({
         concurrency: 10,
         fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
         excludePaths: [],
@@ -855,6 +866,11 @@ const handleScan = async () => {
       // 扫描完成后刷新列表
       await musicStore.loadMusic(0, 20, true)
       startBackgroundLoading()
+
+      // 失败/超时的文件原先被静默丢弃，用户只会发现「某首歌没进来」却不知为何
+      if (scanResult?.failed > 0) {
+        alert(t('message.scanSkippedFiles', { count: scanResult.failed }))
+      }
   } catch (error: any) {
     if (error.message !== '扫描已取消') {
       alert(t('message.scanError') + ': ' + error.message)

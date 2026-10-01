@@ -74,6 +74,14 @@ export class Statement {
     return this.stmt.all(...params)
   }
 
+  /**
+   * 流式逐行迭代，不把整个结果集读进内存。
+   * 用于「扫全表某一列」这类大结果集（如统计待匹配封面/歌词时核对磁盘路径）。
+   */
+  iterate(...params: any[]): IterableIterator<any> {
+    return this.stmt.iterate(...params)
+  }
+
   finalize(): void {
     // better-sqlite3 不需要显式 finalize，语句会自动清理
     // 保留空方法以保持 API 兼容

@@ -630,6 +630,7 @@
     "songRemoveError": "移除失败",
     "tagsSaved": "标签保存成功",
     "tagsSaveError": "标签保存失败",
-    "operationFailed": "操作失败: {error}"
+    "operationFailed": "操作失败: {error}",
+    "scanSkippedFiles": "{count} 个文件处理失败或超时，已跳过（详见控制台日志）。可重新扫描重试"
   }
 }

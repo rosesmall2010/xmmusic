@@ -16,7 +16,7 @@ import scanManager from '../services/scanManager'
 import * as desktopLyrics from '../windows/desktopLyrics'
 import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/metadataSync'
 import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playlistCover'
-import type { ScanProgress, MusicItem } from '../../shared/types/music'
+import type { ScanProgress, MusicItem, LocalMusicCursor } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
 import type {
   LyricsData,
@@ -512,6 +512,15 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     // 使用 getLocalMusicPaginated 从 local_music 表读取
     return db.getLocalMusicPaginated(offset, limit)
   })
+
+  /** 游标分页：顺序追加走这条，避免大库下 OFFSET 分页的 O(n²) */
+  ipcMain.handle(
+    'get-local-music-page',
+    async (_, cursor: LocalMusicCursor | null, limit: number) => {
+      if (!db) return { items: [], nextCursor: null }
+      return db.getLocalMusicPage(cursor ?? null, limit)
+    }
+  )
 
   ipcMain.handle('get-music-total-count', () => {
     if (!db) return 0

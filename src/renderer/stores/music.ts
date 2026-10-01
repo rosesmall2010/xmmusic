@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef, triggerRef } from 'vue'
-import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
+import type { MusicItem, Playlist, AdvancedSearchCriteria, LocalMusicCursor } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
   // State
@@ -29,11 +29,19 @@ export const useMusicStore = defineStore('music', () => {
   let locateCacheEpoch = 0
   /** 列表加载世代：清空/强制重置时递增，丢弃进行中的过期分页结果 */
   let loadEpoch = 0
+  /** 游标分页的续接位置；null 表示无法/无需续接 */
+  const listCursor = ref<LocalMusicCursor | null>(null)
+  /** 游标已到末页 */
+  const reachedEnd = ref(false)
 
   // Getters
-  const hasMore = computed(() => {
-    return currentOffset.value < totalCount.value
-  })
+  /**
+   * 还能继续追加吗
+   *
+   * 由游标判定，不再用 currentOffset < totalCount：totalCount 只在首屏查一次，
+   * 扫描期间库增长会让它偏小，导致后台预载提前停住、列表残缺。
+   */
+  const hasMore = computed(() => !reachedEnd.value && listCursor.value != null)
   const isAdvancedMode = computed(() => !!advancedCriteria.value)
   const currentInLocalList = computed(
     () => cachedLocateMusicId.value != null && cachedLocateIndex.value != null && cachedLocateIndex.value >= 0
@@ -46,9 +54,17 @@ export const useMusicStore = defineStore('music', () => {
     totalCount.value = 0
     currentOffset.value = 0
     loading.value = false
+    listCursor.value = null
+    reachedEnd.value = false
   }
 
   // Actions
+  /**
+   * 加载列表首屏
+   *
+   * 走游标 API 以便顺带拿到 nextCursor；OFFSET 0 不产生遍历开销，与原实现同样快。
+   * offset 参数仅为兼容既有调用点保留 —— 全部调用方都传 0，顺序追加请用 loadMore()。
+   */
   async function loadMusic(offset: number = 0, limit: number = pageSize.value, force: boolean = false) {
     // If not forcing refresh and we already have data (and asking for first page), skip
     if (!force && offset === 0 && musicList.value.length > 0) {
@@ -59,22 +75,50 @@ export const useMusicStore = defineStore('music', () => {
 
     loading.value = true
     try {
-      const items = await window.electronAPI.getMusicList(offset, limit)
+      const page = await window.electronAPI.getLocalMusicPage(null, limit)
       if (epoch !== loadEpoch) return
+      musicList.value = page.items
+      currentOffset.value = page.items.length
+      listCursor.value = page.nextCursor
+      reachedEnd.value = page.nextCursor == null
 
-      if (offset === 0) {
-        musicList.value = items
-        currentOffset.value = items.length
-      } else {
-        // 并发分页时若 offset 已错位（重复拉同一页/跳跃），丢弃避免列表出现重复或错位歌曲
-        if (offset !== musicList.value.length) return
-        musicList.value.push(...items)
-        triggerRef(musicList)
-        currentOffset.value = musicList.value.length
-      }
       const count = await window.electronAPI.getMusicTotalCount()
       if (epoch !== loadEpoch) return
       totalCount.value = count
+    } finally {
+      if (epoch === loadEpoch) {
+        loading.value = false
+      }
+    }
+  }
+
+  /**
+   * 顺序追加下一页（游标 / keyset 分页）
+   *
+   * 不要用 loadMusic(currentOffset, n) 做追加：OFFSET 分页在大库下是 O(n²)，
+   * 实测 5.1 万条整库预载纯 SQL 要 75 秒，游标版 0.3 秒。
+   * 总数只在首屏取一次，这里不再每批重复查询（原先每批都发一次 IPC）。
+   *
+   * 返回值只表示「本次是否真的追加了数据」。调用方要判断能否继续，请看 hasMore：
+   * 返回 false 可能只是当前有别的加载在跑，并不代表已到底。
+   */
+  async function loadMore(limit: number = pageSize.value): Promise<boolean> {
+    if (loading.value || reachedEnd.value || !listCursor.value) return false
+    const epoch = loadEpoch
+    loading.value = true
+    try {
+      const page = await window.electronAPI.getLocalMusicPage(listCursor.value, limit)
+      if (epoch !== loadEpoch) return false
+
+      if (page.items.length > 0) {
+        musicList.value.push(...page.items)
+        triggerRef(musicList)
+        currentOffset.value = musicList.value.length
+      }
+      listCursor.value = page.nextCursor
+      // 游标到底即为真·到底
+      reachedEnd.value = page.nextCursor == null
+      return page.items.length > 0
     } finally {
       if (epoch === loadEpoch) {
         loading.value = false
@@ -206,6 +250,7 @@ export const useMusicStore = defineStore('music', () => {
     currentInLocalList,
     hasMore,
     loadMusic,
+    loadMore,
     searchMusic,
     runAdvancedSearch,
     clearAdvancedSearch,

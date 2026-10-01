@@ -1,4 +1,4 @@
-import type { MusicItem } from '@shared/types/music'
+import type { MusicItem, LocalMusicCursor, LocalMusicPage } from '@shared/types/music'
 import type { CoverMatchResult, CoverMatchCandidate, CoverMatchProgress, CoverMatchSummary } from '@shared/types/coverMatch'
 import type { LyricsCandidateRef, LyricsMatchResult } from '@shared/types/lyrics'
 
@@ -39,6 +39,7 @@ export interface ElectronAPI {
 
   // 数据库操作
   getMusicList: (offset: number, limit: number) => Promise<any[]>
+  getLocalMusicPage: (cursor: LocalMusicCursor | null, limit: number) => Promise<LocalMusicPage>
   getMusicTotalCount: () => Promise<number>
   getLocalMusicIndex: (musicId: number) => Promise<number | null>
   searchMusic: (query: string) => Promise<any[]>

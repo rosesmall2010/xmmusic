@@ -8,6 +8,19 @@ import MusicDatabase from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
 import { parsePath, normalizePath, batchGetOrCreateMusicDir } from '../database/pathUtils'
 import { sniffLocalAudio, TRUSTED_STREAM_CONTAINERS, SCAN_FALLBACK_EXTENSIONS } from './audioFormatSniff'
+import { withTimeout, isTimeoutError } from '../../shared/utils/withTimeout'
+
+/**
+ * 单个文件的处理超时上限
+ *
+ * 为什么需要：读取会阻塞的文件（FIFO、失联的网络盘、下载不下来的 iCloud 占位文件）
+ * 会让 music-metadata 与 MD5 读流永不 settle，并发池里那一路就此永久挂起，
+ * 整轮扫描停在「还差一个文件」上，且日志里看不出是哪个。实测可复现。
+ *
+ * 取 120s：慢盘上 2GB 文件算 MD5 可能接近 100s，不能误伤；真正不可读的文件
+ * 本来就不会在 120s 内返回。超时的文件记为失败并写进 result.errors。
+ */
+const FILE_PROCESS_TIMEOUT_MS = 120_000
 
 // 动态加载 music-metadata（解决 Electron 中的 exports 问题）
 // 使用字符串拼接完全隐藏模块名，避免 TypeScript 静态分析
@@ -326,7 +339,13 @@ export default class FileScanner {
       }
 
       try {
-        const processed = await this.processFile(file, options, dirIdMap)
+        // 超时护栏：读取会阻塞的文件（FIFO / 卡死的网络盘 / 下不下来的 iCloud 占位文件）
+        // 会让 parseFile 与 MD5 读流双双永不 settle，整轮扫描就此卡死且看不出是哪个文件
+        const processed = await withTimeout(
+          () => this.processFile(file, options, dirIdMap),
+          FILE_PROCESS_TIMEOUT_MS,
+          `处理超时（超过 ${Math.round(FILE_PROCESS_TIMEOUT_MS / 1000)}s，文件可能不可读或位于失联的磁盘）`
+        )
         if (processed.success) {
           result.success++
         } else if (processed.corrupted) {
@@ -347,6 +366,10 @@ export default class FileScanner {
       } catch (error: any) {
         if (error.message === '扫描已取消') {
           throw error
+        }
+        // 超时单独打日志：这是唯一能看出「是哪个文件把扫描卡住」的线索
+        if (isTimeoutError(error)) {
+          console.warn(`⏱️ 跳过处理超时的文件: ${file} —— ${error.message}`)
         }
         result.failed++
         result.errors.push({ file, error: error.message || 'Unknown error' })
