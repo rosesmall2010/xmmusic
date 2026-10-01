@@ -8,6 +8,13 @@
 ## [1.2.6] - 2026-09-30
 
 ### 修复
+- 扫描中途切到「本地音乐」页看不到任何进度：进度监听加了 `isScanning` 门，但该标志只由本页 `handleScan` 或 `scan-state-changed` 的「开始」事件点亮；从设置页/目录对话框发起扫描后再切过来，开始事件早已错过，整轮扫描一条进度都显示不出。现挂载时经已有的 `get-scan-state` 回填状态与进度（带代际校验，避免 await 期间扫描已结束又被点亮）
+- 批量匹配歌词把文件已丢失的歌曲也算进来：`getMusicWithoutLyricsCount` / `getMusicWithoutLyrics` / `getMusicWithClaimedLyricsPath` 三个查询都缺 `is_exists = 1`（封面侧三个都有），导致确认框待匹配数虚高、这些歌每首走到 `existsSync` 失败计为「失败」、摘要失败数虚高且白跑
+- 扫描收尾提示「正在同步数据库…」被迟到进度覆盖回 99.x%：`updateProgress` 经 `setImmediate` 延迟推送，最后一次回调会排在收尾提示之后；现加 `progressFinalized` 标志让延迟回调自行放弃
+- 批量匹配歌词的进度 IPC 无节流（封面批量早有 250ms 节流）：同目录已有 `.lrc` 时 `matchOne` 走 `linked_local` 快路径不发网络，并发 10 路下每秒上百首，实测 60 首会推 132 次、每次都带完整 tasks 数组，足以拖垮渲染进程。现对齐封面加 250ms 节流 + 定时器兜底，完成/取消强制推送保证末态不丢
+- 取消扫描后立即重扫会串台：`scanManager.cancel()` 立刻把 `isScanning` 置 false，新扫描得以启动，但旧扫描 unwind 时的 `finally` 会把新扫描的 `currentScanner` / `isScanning` 清掉，导致暂停取消够不着、状态查询报空闲。现加轮次代际，旧轮次既不清新轮次的状态也不再推进度
+- **把 ID3 读写重活移出主进程**：新增 `tagWorker` 线程独占「读整首 MP3 + 重写」的同步 IO 与 node-id3 计算，主进程只做调度。批量匹配几百首时界面不再假死、取消能立即回执（原先 `metadataEditor.updateMetadata` 在 `async` 壳里跑同步 `nodeID3.read/write`，整个文件读进内存再重写，占满主线程，取消的 IPC 回复排在它后面，用户连点取消只能强杀）。元数据编辑对话框、封面匹配、批量改标签同时受益，对外接口与文案不变
+- 标签写盘改为「临时文件 + `rename` 原子替换」（复刻 node-id3 内部 `write` 流程，产物逐字节一致），任何时刻中断都不会留下写坏一半的 MP3；worker 启动失败或异常时自动退回主线程同步执行，并在应用退出时终止
 - 批量匹配进度成功率改为「成功数 / 已处理数」（不再相对待匹配总数）
 - 创建/编辑歌单名称输入框无法输入：播放队列抽屉 `z-index` 高于对话框，窄窗口下会盖住输入框；全屏播放页 `isolation: isolate` 还会把页内弹窗整层压在抽屉之下。现将全屏页改为 `--z-fullscreen`、对话框 `--z-modal` 高于抽屉，创建/添加到歌单弹窗 `Teleport` 到 `#app` 并显式 `-webkit-app-region: no-drag`
 - 歌单弹窗层级审核跟进：`AppToast` 改用 `var(--z-toast)`；去掉创建/添加歌单弹窗无实质作用的内容区 `z-index:1`；关闭「添加到歌单」时复位 `showCreateModal`，避免再次打开连带弹出创建框
@@ -23,6 +30,12 @@
 - 审核跟进：取消统一为 `skipped_cancelled`（不再误计 failed / 伪 low_similarity）；用 `CoverMatchCancelledError` 传递取消；本地封面转码亦入重活队列；进度定时器 `finally` 清理；已入队的单次 node-id3 写盘仍无法中途打断（取消后可能短暂占住主线程至该次结束）
 - GitHub Actions 多平台构建不再在 `main` 分支 push 时触发，仅保留打 `v*` tag 与手动 `workflow_dispatch`
 - 审核跟进：扫描解析在扩展名不符时一律强制 mime，并跳过伪 ID3 前缀；清不可播标记在原生/Howler 成功播放时共用，且派发 `music-metadata-updated` 刷新列表图标
+- 扫描误标大量正常 MP3 为损坏：无魔数时不再直接判坏，对常见扩展名回退 `music-metadata`（对齐 1.2.4）；ID3 后增加 padding 扫描与更严的 MPEG 帧头校验
+- 手动匹配封面确认应用后不再弹出成功对话框（失败仍提示）；全屏歌词区右键菜单增加「添加到歌单」二级菜单（对齐队列右键）
+- 扫描进度卡在 100%：收尾 `setImmediate` 进度可能晚于结束事件再次把条钉住；改为同步推送进度、结束态放 `finally`，收尾阶段显示「正在同步数据库…」，WAL 改用非阻塞 `PASSIVE`
+- 审核跟进：魔数识别改为跳过 0x00 padding 后再认，强容器带附加校验且不再整窗盲扫 MPEG；更新扫描进度监听注释
+- 从「添加到歌单」弹窗内点「+ 创建歌单」时名称输入框点不进也打不了字：创建弹窗嵌在父弹窗遮罩内，两个遮罩同层（均为 `--z-modal`），父遮罩仍承担命中测试；现把创建弹窗移出父容器的 `v-if` 与遮罩，与父弹窗平级挂到 `#app`
+- 在歌单详情页删除歌单后，左侧歌单列表不同步移除（要重启或切页才更新）：`deletePlaylist` 删完直接 `router.push`，漏发全局事件，侧边栏靠事件重载列表而路由跳转不触发其 `onMounted`；现补发 `playlist-updated`
 
 ## [1.2.5] - 2026-09-18
 

@@ -1078,11 +1078,7 @@ const applyCoverMatchResult = (
       })
     )
     emit('songs-updated')
-    if (result.fileNotUpdated) {
-      alert(t('music.matchCoverDbOnly', { title: music.title }))
-    } else {
-      alert(t('music.matchCoverSuccess', { title: music.title }))
-    }
+    // 手动选图确认后不再弹成功框，封面变化已即时反映
   } else if (result.status === 'skipped_has_cover') {
     alert(t('music.matchCoverAlreadyHas', { title: music.title }))
   } else {

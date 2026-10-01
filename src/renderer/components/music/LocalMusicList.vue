@@ -413,6 +413,31 @@ let unsubMusicListRefresh: (() => void) | undefined
 // 扫描状态
 const isScanning = ref(false)
 const scanProgress = ref<ScanProgress | null>(null)
+/**
+ * 扫描状态代际：onScanStateChanged / 本地 handleScan 变更时递增。
+ * syncScanStateFromMain 的 await 期间若状态已变，丢弃过期快照，
+ * 避免把刚结束的扫描又点亮成进行中。
+ */
+let scanStateEpoch = 0
+
+/**
+ * 从主进程回填扫描状态（挂载时调用）
+ * 扫描可能在本页挂载前就由设置页/目录对话框发起，此时 scan-state-changed 的
+ * 「开始」事件已错过，isScanning 永远为 false，onScanProgress 的门会丢掉全部进度。
+ */
+const syncScanStateFromMain = async () => {
+  const epochAtStart = scanStateEpoch
+  try {
+    const state = await window.electronAPI.getScanState()
+    // await 期间已收到状态变更（含扫描结束）：丢弃这份过期快照
+    if (epochAtStart !== scanStateEpoch) return
+    if (!state?.isScanning) return
+    isScanning.value = true
+    if (state.progress) scanProgress.value = state.progress
+  } catch (e) {
+    console.error('同步扫描状态失败:', e)
+  }
+}
 
 /** 批量匹配无歌词（状态在 store，离开页面再回来仍可见） */
 const isMatchingLyrics = computed(() => lyricsMatchStore.isMatching)
@@ -584,14 +609,15 @@ onMounted(async () => {
   await coverMatchStore.syncFromMain()
   await refreshMissingCoverCount()
 
-  // 监听扫描进度
+  // 监听扫描进度：扫描已结束后忽略迟到进度，避免再次点亮进度条卡在 100%
   window.electronAPI.onScanProgress((progress) => {
-    isScanning.value = true
+    if (!isScanning.value) return
     scanProgress.value = progress
   })
 
   // 监听扫描状态变化
   window.electronAPI.onScanStateChanged((state: { isScanning: boolean; isPaused: boolean }) => {
+    scanStateEpoch++
     isScanning.value = state.isScanning
     if (!state.isScanning) {
       scanProgress.value = null
@@ -599,6 +625,10 @@ onMounted(async () => {
       musicStore.loadMusic(0, 20, true)
     }
   })
+
+  // 监听器就位后再回填：扫描若在本页挂载前就已开始，scan-state-changed 的
+  // 开始事件已经错过，仅靠 onScanProgress 的 isScanning 门会把进度全丢掉
+  await syncScanStateFromMain()
 
   // 监听后端事件
   unsubMusicUpdated = window.electronAPI.on('music-updated', async (_event: any, filePath: string) => {
@@ -812,6 +842,7 @@ const handleScan = async () => {
     }
 
     // 4. 直接开始扫描所有启用的目录
+  scanStateEpoch++
   isScanning.value = true
   try {
       await window.electronAPI.scanAllDirectories({
@@ -829,12 +860,14 @@ const handleScan = async () => {
       alert(t('message.scanError') + ': ' + error.message)
     }
   } finally {
+      scanStateEpoch++
       isScanning.value = false
       scanProgress.value = null
     }
   } catch (error: any) {
     console.error('扫描过程出错:', error)
     alert(t('message.operationFailed', { error: error.message || t('common.unknown') }))
+    scanStateEpoch++
     isScanning.value = false
     scanProgress.value = null
   }

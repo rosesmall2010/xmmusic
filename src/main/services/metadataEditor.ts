@@ -1,13 +1,5 @@
-import { writeFileSync, readFileSync, existsSync } from 'fs'
-import { extname, dirname, basename } from 'path'
-// 动态加载 node-id3
-const getNodeID3 = () => {
-  try {
-    return require('node-id3')
-  } catch (error) {
-    throw new Error('无法加载 node-id3 库')
-  }
-}
+import { basename } from 'path'
+import tagWorkerClient from './tagWorkerClient'
 
 export interface MetadataUpdate {
   title?: string
@@ -18,79 +10,24 @@ export interface MetadataUpdate {
   coverPath?: string | null
 }
 
+/**
+ * 元数据编辑：对外接口不变，内部改为转发给标签 worker
+ *
+ * 原来这里在 `async` 壳里跑同步的 node-id3 读写（整首 MP3 读进内存再重写），
+ * 会占满主线程；批量匹配几百首时界面假死、取消也回不去。
+ * 现在重活交给 worker 线程，本类只负责转发，调用方（handlers / coverMatchService）无需改动。
+ */
 export default class MetadataEditor {
   /**
    * 更新音乐文件的 ID3 标签
    */
   async updateMetadata(filePath: string, updates: MetadataUpdate): Promise<void> {
-    const ext = extname(filePath).toLowerCase()
-
-    // 只支持 MP3 格式
-    if (ext !== '.mp3') {
-      throw new Error(`不支持的文件格式: ${ext}，目前只支持 MP3 格式`)
-    }
-
-    if (!existsSync(filePath)) {
-      throw new Error(`文件不存在: ${filePath}`)
-    }
-
-    try {
-      const nodeID3 = getNodeID3()
-
-      // 读取现有标签
-      const existingTags = nodeID3.read(filePath) || {}
-
-      // 构建新的标签对象
-      const tags: any = {
-        ...existingTags,
-        title: updates.title !== undefined ? updates.title : existingTags.title,
-        artist: updates.artist !== undefined ? updates.artist : existingTags.artist,
-        album: updates.album !== undefined ? updates.album : existingTags.album,
-        year: updates.year !== undefined ? String(updates.year) : existingTags.year,
-        genre: updates.genre !== undefined ? updates.genre : existingTags.genre
-      }
-
-      // 处理封面图片
-      if (updates.coverPath !== undefined) {
-        if (updates.coverPath && existsSync(updates.coverPath)) {
-          const coverBuffer = readFileSync(updates.coverPath)
-          const coverExt = extname(updates.coverPath).toLowerCase()
-          let mimeType = 'image/jpeg'
-
-          if (coverExt === '.png') {
-            mimeType = 'image/png'
-          } else if (coverExt === '.gif') {
-            mimeType = 'image/gif'
-          }
-
-          tags.image = {
-            mime: mimeType,
-            type: {
-              id: 3, // Front cover
-              name: 'Cover (front)'
-            },
-            description: 'Cover',
-            imageBuffer: coverBuffer
-          }
-        } else {
-          // 删除封面
-          tags.image = undefined
-        }
-      }
-
-      // 写入标签
-      const success = nodeID3.write(tags, filePath)
-
-      if (!success) {
-        throw new Error('写入 ID3 标签失败')
-      }
-    } catch (error: any) {
-      throw new Error(`更新元数据失败: ${error.message}`)
-    }
+    await tagWorkerClient.updateMetadata(filePath, updates)
   }
 
   /**
    * 批量更新多个文件的元数据
+   * onProgress 仍在主进程侧回调，UI 进度表现不变
    */
   async batchUpdateMetadata(
     filePaths: string[],
@@ -117,9 +54,6 @@ export default class MetadataEditor {
       if (onProgress) {
         onProgress(i + 1, filePaths.length)
       }
-
-      // 让出事件循环，避免连续同步 IO 阻塞主进程
-      await new Promise<void>(resolve => setImmediate(resolve))
     }
 
     return { success, failed, errors }
@@ -129,28 +63,6 @@ export default class MetadataEditor {
    * 从文件读取封面图片并保存到指定位置
    */
   async extractCover(filePath: string, outputPath: string): Promise<void> {
-    const ext = extname(filePath).toLowerCase()
-
-    if (ext !== '.mp3') {
-      throw new Error(`不支持的文件格式: ${ext}`)
-    }
-
-    try {
-      const nodeID3 = getNodeID3()
-      const tags = nodeID3.read(filePath)
-
-      if (!tags || !tags.image) {
-        throw new Error('文件中没有封面图片')
-      }
-
-      const imageBuffer = tags.image.imageBuffer
-      if (!imageBuffer) {
-        throw new Error('无法读取封面图片数据')
-      }
-
-      writeFileSync(outputPath, imageBuffer)
-    } catch (error: any) {
-      throw new Error(`提取封面失败: ${error.message}`)
-    }
+    await tagWorkerClient.extractCover(filePath, outputPath)
   }
 }

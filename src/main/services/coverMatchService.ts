@@ -197,9 +197,11 @@ export default class CoverMatchService {
   /** 下载进行中注册的取消回调（cancel() 时触发中断正在进行的网络请求） */
   private cancelListeners = new Set<() => void>()
   /**
-   * 串行化主进程同步重活（nativeImage 转码 / node-id3 写盘）：
-   * 批量并发时多路同时做会卡死事件循环，取消后界面已空闲但关窗/设置无响应。
-   * 注：已开始执行的那一次 node-id3 写盘无法中途打断，取消后仍可能短暂占住主线程至该次结束。
+   * 串行化 nativeImage 转码（WebP→JPEG）
+   *
+   * ponytail: nativeImage 只能在主进程用，进不了 worker，这是唯一留在主线程的重活。
+   * 触发面很窄（仅 WebP / 魔数未识别的图，JPEG/PNG 直接透传）、体积也只有几百 KB，
+   * 比 MP3 整文件重写小两个数量级。真正的写盘重活已移到 tagWorker 线程。
    */
   private heavySyncChain: Promise<void> = Promise.resolve()
 
@@ -602,11 +604,10 @@ export default class CoverMatchService {
 
     if (isMp3) {
       try {
-        await this.enqueueHeavySync(async () => {
-          if (this.cancelled) throw new CoverMatchCancelledError()
-          // 已入队的写盘无法中断；此处仅拦「排队中尚未开始」的任务
-          await this.metadataEditor.updateMetadata(music.filePath, { coverPath: cachePath })
-        })
+        // 写 ID3 是整首 MP3 的重写，已交给标签 worker 线程执行，不再占主线程；
+        // 因此这里也不再需要 enqueueHeavySync 串行化（worker 内部自带队列）
+        if (this.cancelled) throw new CoverMatchCancelledError()
+        await this.metadataEditor.updateMetadata(music.filePath, { coverPath: cachePath })
       } catch (e: unknown) {
         try {
           if (existsSync(cachePath)) unlinkSync(cachePath)

@@ -59,12 +59,14 @@
           </button>
         </div>
       </div>
-
-      <CreatePlaylistModal
-        v-model="showCreateModal"
-        @confirm="handleCreatePlaylist"
-      />
     </div>
+
+    <!-- 创建弹窗必须与父弹窗平级：嵌套在父遮罩内会共用同一层级，输入框拿不到焦点 -->
+    <CreatePlaylistModal
+      v-if="modelValue"
+      v-model="showCreateModal"
+      @confirm="handleCreatePlaylist"
+    />
   </Teleport>
 </template>
 

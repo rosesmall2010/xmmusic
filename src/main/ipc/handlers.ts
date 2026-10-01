@@ -385,17 +385,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         forceRescan: options?.forceRescan || false,
         onProgress: (progress: any) => {
           scanManager.setProgress(progress)
-          // 使用 setImmediate 确保不阻塞主线程（better-sqlite3 是同步的）
-          setImmediate(() => {
-            if (!mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('scan-progress', progress)
-            }
-          })
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan-progress', progress)
+          }
         }
       })
-
-      // 发送扫描完成事件
-      mainWindow.webContents.send('scan-state-changed', { isScanning: false, isPaused: false })
 
       return result
     } catch (error: any) {
@@ -403,6 +397,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         throw error
       }
       throw error
+    } finally {
+      // 无论成功/失败/取消，都通知渲染进程结束，避免进度条卡在 100%
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('scan-state-changed', { isScanning: false, isPaused: false })
+      }
     }
   })
 
@@ -451,27 +450,25 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         excludePaths: [],
         onProgress: (progress: ScanProgress) => {
           scanManager.setProgress(progress)
-          // 使用 setImmediate 确保不阻塞主线程
-          setImmediate(() => {
-            if (!mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('scan-progress', progress)
-            }
-          })
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('scan-progress', progress)
+          }
         }
       })
 
-      scanManager.setScanning(false)
-      currentScanner = null
-      scanManager.setScanner(null)
       return result
     } catch (error: any) {
-      scanManager.setScanning(false)
-      currentScanner = null
-      scanManager.setScanner(null)
       if (error.message === '扫描已取消') {
         throw error
       }
       throw error
+    } finally {
+      scanManager.setScanning(false)
+      currentScanner = null
+      scanManager.setScanner(null)
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('scan-state-changed', { isScanning: false, isPaused: false })
+      }
     }
   })
 

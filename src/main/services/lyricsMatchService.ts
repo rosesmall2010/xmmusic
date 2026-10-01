@@ -57,6 +57,8 @@ const MIN_TITLE_RELEVANCE = 30
 const FAIL_STREAK_ROTATE = 3
 /** 批量每处理这么多首强制轮转一次镜像，避免长跑粘死 */
 const BATCH_ROTATE_EVERY = 25
+/** 批量进度 IPC 节流间隔（与封面批量一致） */
+const PROGRESS_EMIT_INTERVAL_MS = 250
 /** 视为「无歌手」的占位/广告标签（小写比较；部分下载站写入「为您精心打造」） */
 const JUNK_ARTISTS = new Set([
   '未知艺术家',
@@ -1178,6 +1180,16 @@ export default class LyricsMatchService {
     let failStreak = 0
     const results: Array<LyricsMatchResult | undefined> = new Array(total)
     let lastDoneTitle = ''
+    let lastProgressEmitAt = 0
+    let pendingProgressStatus: LyricsMatchStatus | undefined
+    let progressTimer: ReturnType<typeof setTimeout> | null = null
+
+    const clearProgressTimer = () => {
+      if (progressTimer != null) {
+        clearTimeout(progressTimer)
+        progressTimer = null
+      }
+    }
     const workerCount = Math.min(concurrency, Math.max(total, 1))
     const tasks: LyricsMatchWorkerTask[] = Array.from({ length: workerCount }, (_, i) => ({
       workerId: i + 1,
@@ -1214,7 +1226,24 @@ export default class LyricsMatchService {
       return 'skipped'
     }
 
-    const emitProgress = (lastStatus?: LyricsMatchStatus) => {
+    const emitProgress = (lastStatus?: LyricsMatchStatus, force = false) => {
+      const now = Date.now()
+      // 节流：同目录已有 .lrc 时 matchOne 走 linked_local 快路径不发网络，
+      // 并发 10 路下每秒可完成上百首，不节流会用进度 IPC 淹掉渲染进程。
+      // 完成/取消时 force 立即推送，保证末态不丢。
+      if (!force && now - lastProgressEmitAt < PROGRESS_EMIT_INTERVAL_MS && completed < total && !this.cancelled) {
+        pendingProgressStatus = lastStatus
+        if (progressTimer == null) {
+          progressTimer = setTimeout(() => {
+            progressTimer = null
+            emitProgress(pendingProgressStatus, true)
+          }, PROGRESS_EMIT_INTERVAL_MS)
+        }
+        return
+      }
+      lastProgressEmitAt = now
+      pendingProgressStatus = undefined
+      clearProgressTimer()
       const elapsedMs = Date.now() - startedAt
       const estimatedRemainingMs =
         completed > 0 && completed < total
@@ -1240,7 +1269,7 @@ export default class LyricsMatchService {
 
     // 空列表也推一次，方便 UI 拿到 startedAt / concurrency
     if (total === 0) {
-      emitProgress()
+      emitProgress(undefined, true)
       return {
         total: 0,
         success: 0,
@@ -1251,7 +1280,7 @@ export default class LyricsMatchService {
       }
     }
 
-    emitProgress()
+    emitProgress(undefined, true)
 
     const runOne = async (workerSlot: number, index: number) => {
       if (this.cancelled) return
@@ -1286,14 +1315,14 @@ export default class LyricsMatchService {
             status: mapTaskStatus(result.status),
             message: result.message
           }
-          emitProgress(result.status)
+          emitProgress(result.status, true)
         } else {
           tasks[workerSlot] = {
             workerId: workerSlot + 1,
             title: '',
             status: 'idle'
           }
-          emitProgress()
+          emitProgress(undefined, true)
         }
         return
       }
@@ -1309,7 +1338,7 @@ export default class LyricsMatchService {
         status: mapTaskStatus(result.status),
         message: result.message
       }
-      emitProgress(result.status)
+      emitProgress(result.status, this.cancelled || completed >= total)
     }
 
     const workers = Array.from({ length: workerCount }, async (_, workerSlot) => {
@@ -1321,7 +1350,7 @@ export default class LyricsMatchService {
             title: '',
             status: 'idle'
           }
-          emitProgress()
+          emitProgress(undefined, true)
           break
         }
         await runOne(workerSlot, index)
@@ -1342,7 +1371,7 @@ export default class LyricsMatchService {
           delete t.message
         }
       }
-      emitProgress()
+      emitProgress(undefined, true)
       return {
         total,
         success,
@@ -1352,6 +1381,7 @@ export default class LyricsMatchService {
         results: results.filter((r): r is LyricsMatchResult => !!r)
       }
     } finally {
+      clearProgressTimer()
       this.resetSessionState()
     }
   }

@@ -13,6 +13,11 @@ class ScanManager {
 
   private currentScanner: FileScanner | null = null
   private db: MusicDatabase
+  /**
+   * 扫描轮次。cancel() 会立刻把 isScanning 置 false 让界面可以马上再扫，
+   * 但被取消的那一轮还在 unwind，它的 finally 不能把新一轮的状态清掉。
+   */
+  private runGeneration = 0
 
   constructor() {
     this.db = MusicDatabase.getInstance()
@@ -88,6 +93,7 @@ class ScanManager {
       throw new Error('扫描已在进行中')
     }
 
+    const gen = ++this.runGeneration
     this.state.isScanning = true
     this.state.isPaused = false
     this.state.isCancelled = false
@@ -103,6 +109,9 @@ class ScanManager {
         concurrency: options.concurrency || 10,
         forceRescan: options.forceRescan || false,
         onProgress: (progress) => {
+          // 被取代的旧轮次（已取消但仍在 unwind）不得再推进度，
+          // 否则会覆盖新一轮的状态、界面出现回跳
+          if (this.runGeneration !== gen) return
           this.state.progress = progress
           if (options.onProgress) {
             options.onProgress(progress as any)
@@ -112,10 +121,13 @@ class ScanManager {
 
       return result
     } finally {
-      this.state.isScanning = false
-      this.currentScanner = null
-      this.state.progress = null
-      this.state.currentPath = null
+      // 本轮若已被更新的一轮取代（取消后立刻重扫），不要清对方的状态
+      if (this.runGeneration === gen) {
+        this.state.isScanning = false
+        this.currentScanner = null
+        this.state.progress = null
+        this.state.currentPath = null
+      }
     }
   }
 

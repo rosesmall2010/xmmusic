@@ -1143,6 +1143,7 @@ export default class MusicDatabase {
     const emptyStmt = this.db!.prepare(`
       SELECT COUNT(*) as count FROM all_music
       WHERE is_duplicate = 0
+        AND is_exists = 1
         AND (lyrics_path IS NULL OR lyrics_path = '')
     `)
     let count = (emptyStmt.get() as { count: number }).count
@@ -1173,6 +1174,7 @@ export default class MusicDatabase {
       FROM all_music am
       JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
+        AND am.is_exists = 1
         AND (am.lyrics_path IS NULL OR am.lyrics_path = '')
       ORDER BY am.id ASC
       LIMIT ? OFFSET ?
@@ -1194,6 +1196,7 @@ export default class MusicDatabase {
       FROM all_music am
       JOIN music_dir md ON am.dir_id = md.id
       WHERE am.is_duplicate = 0
+        AND am.is_exists = 1
         AND am.lyrics_path IS NOT NULL
         AND am.lyrics_path != ''
       ORDER BY am.id ASC

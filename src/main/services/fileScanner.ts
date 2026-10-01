@@ -7,7 +7,7 @@ import { app } from 'electron'
 import MusicDatabase from '../database/db'
 import type { ScanOptions, ScanResult, MusicItem } from '@shared/types/music'
 import { parsePath, normalizePath, batchGetOrCreateMusicDir } from '../database/pathUtils'
-import { sniffLocalAudio, TRUSTED_STREAM_CONTAINERS } from './audioFormatSniff'
+import { sniffLocalAudio, TRUSTED_STREAM_CONTAINERS, SCAN_FALLBACK_EXTENSIONS } from './audioFormatSniff'
 
 // 动态加载 music-metadata（解决 Electron 中的 exports 问题）
 // 使用字符串拼接完全隐藏模块名，避免 TypeScript 静态分析
@@ -223,6 +223,12 @@ export default class FileScanner {
     let current = 0
     let lastProgressUpdate = 0
     const PROGRESS_UPDATE_INTERVAL = 100 // 每100ms最多更新一次进度
+    /**
+     * 文件循环已结束，进入收尾（落盘 / is_exists 同步）。
+     * updateProgress 走 setImmediate 延迟推送，最后一次回调可能排在收尾提示之后，
+     * 把「正在同步数据库…」覆盖回 99.x%，看着像卡住。置位后延迟回调自行放弃。
+     */
+    let progressFinalized = false
 
     // 发送初始进度（total > 0 时）
     if (total > 0 && options.onProgress) {
@@ -271,12 +277,14 @@ export default class FileScanner {
     }
     // 进度更新函数（节流）
     const updateProgress = (file: string, force: boolean = false) => {
+      if (progressFinalized) return
       const now = Date.now()
       if (force || now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
         lastProgressUpdate = now
         if (options.onProgress && !this.isCancelled) {
           // 使用 setImmediate 让出控制权，避免阻塞
           setImmediate(() => {
+            if (progressFinalized) return
             if (options.onProgress && !this.isCancelled) {
               const elapsed = (Date.now() - startTime) / 1000
               options.onProgress({
@@ -393,8 +401,24 @@ export default class FileScanner {
       }
     }
 
+    // 文件已处理完：先把进度钉在 100% 并提示收尾，避免用户以为卡死
+    // 置位 progressFinalized，拦住 updateProgress 里排队中的延迟回调
+    progressFinalized = true
+    if (options.onProgress && !this.isCancelled && total > 0) {
+      const elapsed = (Date.now() - startTime) / 1000
+      options.onProgress({
+        current: total,
+        total,
+        currentFile: '正在同步数据库…',
+        speed: elapsed > 0 ? current / elapsed : 0,
+        percentage: 100
+      })
+      await new Promise<void>((r) => setImmediate(r))
+    }
+
     // 正常扫描完成：把剩余未落盘的写入批量提交
     this.flushPendingWrites()
+    await new Promise<void>((r) => setImmediate(r))
 
     // 3.2 扫描结束后：同步该根目录下的缺失文件状态（is_exists）
     // 规则：对 scannedDirIds（数据库中属于该根目录的目录）逐个更新：
@@ -418,8 +442,9 @@ export default class FileScanner {
 
         const CHUNK_SIZE = 800 // 避免 SQLite 绑定参数过多（999 限制）
 
-        const tx = sqlite.transaction(() => {
-          for (const dirId of scannedDirIds) {
+        for (const dirId of scannedDirIds) {
+          if (this.isCancelled) break
+          const tx = sqlite.transaction(() => {
             // 递归扫描：这里统一做“先置 0，再置 1”
             // 非递归扫描：已经在扫描开始前置 0，这里只需要把存在的置回 1（减少不必要的抖动）
             if (options.recursive) {
@@ -432,7 +457,7 @@ export default class FileScanner {
 
             const found = foundFileNamesByDirId.get(dirId)
             if (!found || found.size === 0) {
-              continue
+              return
             }
 
             const names = Array.from(found)
@@ -441,20 +466,21 @@ export default class FileScanner {
               const stmt = getMarkExistsStmt(chunk.length)
               stmt.run(dirId, ...chunk)
             }
-          }
-        })
-
-        tx()
+          })
+          tx()
+          // 每个目录提交后让出事件循环，避免大批量库卡死界面
+          await new Promise<void>((r) => setImmediate(r))
+        }
       } catch (e: any) {
         // 不影响扫描主流程：仅记录错误
         console.warn('⚠️ 同步缺失文件状态失败:', e?.message || e)
       }
     }
 
-    // 扫描完成后，执行 WAL checkpoint 确保数据持久化
+    // 扫描完成后做非阻塞 checkpoint（TRUNCATE 可能长时间锁库，表现为进度卡在 100%）
     try {
-      this.db.getDatabase().pragma('wal_checkpoint(TRUNCATE)')
-      console.log('✅ 目录扫描完成，WAL checkpoint 已执行，数据已同步到主数据库文件')
+      this.db.getDatabase().pragma('wal_checkpoint(PASSIVE)')
+      console.log('✅ 目录扫描完成，WAL checkpoint(PASSIVE) 已执行')
     } catch (checkpointError: any) {
       console.warn('⚠️  扫描完成后的 WAL checkpoint 失败:', checkpointError?.message || checkpointError)
     }
@@ -462,12 +488,12 @@ export default class FileScanner {
     // 确保最后更新一次进度（完成时）
     if (options.onProgress && !this.isCancelled && total > 0) {
       const elapsed = (Date.now() - startTime) / 1000
-          options.onProgress({
-            current,
-            total,
-            currentFile: '',
+      options.onProgress({
+        current,
+        total,
+        currentFile: '',
         speed: elapsed > 0 ? current / elapsed : 0,
-            percentage: 100
+        percentage: 100
       })
     }
 
@@ -798,10 +824,11 @@ export default class FileScanner {
         return false
       }
 
-      // 无魔数：加密/截断；对 ape/wma 扩展名再给 metadata 一次机会
+      // 无魔数：对齐 1.2.4，对常见音频扩展名回退 music-metadata，
+      // 避免 ID3 尺寸不准 / padding 导致「误标损坏、歌名全变文件名」
       if (!sniff) {
         const ext = extname(filePath).replace(/^\./, '').toLowerCase()
-        if (ext === 'ape' || ext === 'wma') {
+        if (SCAN_FALLBACK_EXTENSIONS.has(ext)) {
           try {
             const metadata = await this.parseAudioFile(filePath)
             const dur = Number(metadata.format.duration) || 0

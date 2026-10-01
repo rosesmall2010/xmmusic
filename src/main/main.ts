@@ -7,6 +7,7 @@ import { setupIPC } from './ipc/handlers'
 import ShortcutManager from './services/shortcutManager'
 import TrayService from './services/trayService'
 import { sniffLocalAudio } from './services/audioFormatSniff'
+import tagWorkerClient from './services/tagWorkerClient'
 
 // 设置应用名称（修复 macOS 菜单栏和进程名称显示为 Electron 的问题）
 app.name = 'xmmusic'
@@ -727,6 +728,12 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+  // 标签 worker 是长驻线程，不主动终止会拖住进程退出
+  try {
+    tagWorkerClient.terminate()
+  } catch (error) {
+    console.error('终止标签 worker 时出错:', error)
+  }
   if (db) {
     try {
       db.close()

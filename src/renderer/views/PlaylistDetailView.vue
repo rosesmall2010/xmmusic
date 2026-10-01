@@ -346,6 +346,8 @@ const deletePlaylist = async () => {
 
   try {
     await window.electronAPI.deletePlaylist(playlist.value.id)
+    // 通知侧边栏等外部列表同步移除，路由跳转不会触发其 onMounted
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
     router.push('/playlists')
   } catch (error) {
     console.error('Failed to delete playlist:', error)

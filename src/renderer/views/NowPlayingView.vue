@@ -466,6 +466,51 @@
       </div>
       <div class="menu-divider"></div>
       <div
+        class="menu-item has-submenu"
+        :class="{ 'submenu-open': playlistSubmenuOpen, disabled: !currentMusic }"
+        @mouseenter="currentMusic && openPlaylistSubmenu()"
+        @mouseleave="scheduleClosePlaylistSubmenu"
+      >
+        <div class="menu-item-main" @click="openAddToPlaylistFromLyricsMenu">
+          <Music :size="16" class="icon" />
+          <span class="menu-item-label">{{ $t('music.addToPlaylist') }}</span>
+          <button
+            type="button"
+            class="submenu-chevron-btn"
+            :title="$t('music.addToPlaylist')"
+            :disabled="!currentMusic"
+            @click.stop="currentMusic && togglePlaylistSubmenu()"
+          >
+            <ChevronRight :size="14" class="submenu-chevron" />
+          </button>
+        </div>
+        <div
+          v-if="playlistSubmenuOpen && currentMusic"
+          ref="playlistSubmenuRef"
+          class="context-submenu"
+          :class="{ 'open-left': playlistSubmenuOpenLeft }"
+          :style="{ top: `${playlistSubmenuTop}px` }"
+          @mouseenter="cancelClosePlaylistSubmenu"
+          @mouseleave="scheduleClosePlaylistSubmenu"
+        >
+          <div
+            v-for="pl in recentPlaylists"
+            :key="pl.id"
+            class="menu-item"
+            :title="pl.name"
+            @click="quickAddToPlaylistFromLyricsMenu(pl)"
+          >
+            {{ pl.name }}
+          </div>
+          <div v-if="recentPlaylists.length > 0" class="menu-divider"></div>
+          <div class="menu-item" @click="openAddToPlaylistFromLyricsMenu">
+            <Music :size="16" class="icon" />
+            {{ $t('music.addToPlaylist') }}
+          </div>
+        </div>
+      </div>
+      <div class="menu-divider"></div>
+      <div
         class="menu-item"
         :class="{ disabled: !currentMusic || matchingLyrics || showLyricsPick || applyingLyricsCandidate || matchingCover || showCoverPick || applyingCoverCandidate }"
         @click="matchLyricsFromMenu"
@@ -1061,6 +1106,7 @@ const adjustQueueContextMenuPosition = () => {
 
 const showQueueContextMenu = async (event: MouseEvent, music: MusicItem, index: number) => {
   event.stopPropagation()
+  closeLyricsContextMenu()
   const targetId = music.id
   playlistSubmenuOpen.value = false
   playlistSubmenuOpenLeft.value = false
@@ -1105,6 +1151,10 @@ const lyricsContextMenu = reactive({ visible: false, x: 0, y: 0 })
 
 const closeLyricsContextMenu = () => {
   lyricsContextMenu.visible = false
+  playlistSubmenuOpen.value = false
+  playlistSubmenuOpenLeft.value = false
+  playlistSubmenuTop.value = 0
+  cancelClosePlaylistSubmenu()
 }
 
 const adjustLyricsContextMenuPosition = () => {
@@ -1131,11 +1181,59 @@ const adjustLyricsContextMenuPosition = () => {
 
 const showLyricsContextMenu = async (event: MouseEvent) => {
   event.stopPropagation()
+  closeQueueContextMenu()
+  playlistSubmenuOpen.value = false
+  playlistSubmenuOpenLeft.value = false
+  playlistSubmenuTop.value = 0
+  recentPlaylists.value = []
   lyricsContextMenu.visible = true
   lyricsContextMenu.x = event.clientX
   lyricsContextMenu.y = event.clientY
   await nextTick()
   adjustLyricsContextMenuPosition()
+  const targetId = currentMusic.value?.id
+  if (targetId == null) return
+  try {
+    const list = await window.electronAPI.getRecentPlaylistsByLastAdd(10)
+    if (!lyricsContextMenu.visible || currentMusic.value?.id !== targetId) return
+    recentPlaylists.value = list
+    if (playlistSubmenuOpen.value) {
+      await adjustPlaylistSubmenuPosition()
+    }
+  } catch (e) {
+    console.error('Failed to load recent playlists', e)
+    if (lyricsContextMenu.visible && currentMusic.value?.id === targetId) {
+      recentPlaylists.value = []
+    }
+  }
+}
+
+/** 歌词区：打开「添加到歌单」对话框（当前播放曲） */
+const openAddToPlaylistFromLyricsMenu = () => {
+  if (!currentMusic.value) return
+  playlistMusic.value = currentMusic.value
+  showAddToPlaylist.value = true
+  closeLyricsContextMenu()
+}
+
+/** 歌词区二级菜单：快捷加入指定歌单 */
+const quickAddToPlaylistFromLyricsMenu = async (playlist: Playlist) => {
+  const music = currentMusic.value
+  if (!music?.id) return
+  closeLyricsContextMenu()
+  try {
+    await window.electronAPI.addToPlaylist(playlist.id, music.id)
+    showToast(t('playlist.addedToPlaylist', { name: playlist.name }))
+    window.dispatchEvent(new CustomEvent('song-added-to-playlist'))
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
+  } catch (error: any) {
+    const msg = error?.message || ''
+    if (msg.includes('UNIQUE') || msg.includes('已存在')) {
+      showToast(t('playlist.songAlreadyExists', { name: playlist.name }))
+    } else {
+      showToast(t('playlist.addError'))
+    }
+  }
 }
 
 /** 前进/后退：按固定步进调整偏移，正数=歌词提前、负数=歌词延后，与原滑块共用同一套持久化逻辑 */
@@ -1221,10 +1319,7 @@ const pickLocalCoverFromMenu = async () => {
     const result = await window.electronAPI.applyLocalCover(targetId, file, { force: true })
     if (result.status === 'matched') {
       afterCoverMatched(targetId, result.coverPath)
-      // 提示仅在仍播目标曲时弹出，与在线应用封面一致
-      if (currentMusic.value?.id === targetId) {
-        alert(t(result.fileNotUpdated ? 'music.matchCoverDbOnly' : 'music.matchCoverSuccess', { title: targetTitle }))
-      }
+      // 手动确认后不再弹成功框
     } else {
       alert(t('music.matchCoverFailed', { title: targetTitle, reason: result.message || '' }))
     }
@@ -1753,12 +1848,7 @@ const applyCoverSongId = async (
     if (result.status === 'matched') {
       closeCoverPick()
       afterCoverMatched(targetMusicId, result.coverPath)
-      if (!stillOnTarget) return
-      if (result.fileNotUpdated) {
-        alert(t('music.matchCoverDbOnly', { title: targetTitle }))
-      } else {
-        alert(t('music.matchCoverSuccess', { title: targetTitle }))
-      }
+      // 手动确认后不再弹成功框
     } else if (!stillOnTarget) {
       closeCoverPick()
       return
@@ -1807,12 +1897,7 @@ const onSelectLocalCover = async (localPath: string) => {
     if (result.status === 'matched') {
       closeCoverPick()
       afterCoverMatched(targetMusicId, result.coverPath)
-      if (!stillOnTarget) return
-      if (result.fileNotUpdated) {
-        alert(t('music.matchCoverDbOnly', { title: targetTitle }))
-      } else {
-        alert(t('music.matchCoverSuccess', { title: targetTitle }))
-      }
+      // 手动确认后不再弹成功框
     } else if (!stillOnTarget) {
       closeCoverPick()
       return
