@@ -16,3 +16,11 @@
 - 对全部 claimed cover_path 同步 existsSync 可能堵主进程 — 性能优化后续
 - 发起页卸载后结束 alert 丢失 — 与歌词批量同模式
 - `list-cover-candidates` 未进 lock — 与歌词候选同模式
+
+## Deferred from: code review (2026-09-30) — 创建歌单弹窗层级修复
+
+- ~~**全屏页内其它弹窗未 Teleport**~~：已于 2026-10-01 修复（标签/详情/匹配/EQ/设置封面等）
+- ~~**硬编码 z-index 遗留**~~：已于 2026-10-01 统一为 `--z-modal` / `--z-popover`
+- ~~**队列右键菜单仍困在 isolate**~~：已于 2026-10-01 Teleport + `--z-popover`
+- ~~**关闭「添加到歌单」未复位 `showCreateModal`**~~：已于 2026-10-01 修复
+- ~~**EQ `--z-popover` 高于 modal**~~：已于 2026-10-01 改为 `--z-modal` 并 Teleport

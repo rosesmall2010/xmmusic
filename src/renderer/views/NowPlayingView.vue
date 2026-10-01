@@ -325,28 +325,31 @@
       @select-local="onSelectLocalCover"
     />
 
-    <!-- 全屏匹配：搜索候选期间的明确加载提示 -->
-    <div
-      v-if="fetchMatchKind"
-      class="match-fetch-overlay"
-      @click.stop
-      @contextmenu.prevent
-    >
-      <div class="match-fetch-card">
-        <Loader2 :size="22" class="spin" />
-        <div class="match-fetch-text">
-          <div class="match-fetch-title">
-            {{ fetchMatchKind === 'lyrics' ? $t('music.fetchingLyricsCandidates') : $t('music.fetchingCoverCandidates') }}
+    <!-- 全屏匹配：搜索候选期间的明确加载提示（Teleport 脱出 isolation，避免被队列抽屉盖住） -->
+    <Teleport to="#app">
+      <div
+        v-if="fetchMatchKind"
+        class="match-fetch-overlay"
+        @click.stop
+        @contextmenu.prevent
+      >
+        <div class="match-fetch-card">
+          <Loader2 :size="22" class="spin" />
+          <div class="match-fetch-text">
+            <div class="match-fetch-title">
+              {{ fetchMatchKind === 'lyrics' ? $t('music.fetchingLyricsCandidates') : $t('music.fetchingCoverCandidates') }}
+            </div>
+            <div v-if="fetchMatchSongTitle" class="match-fetch-sub">{{ fetchMatchSongTitle }}</div>
           </div>
-          <div v-if="fetchMatchSongTitle" class="match-fetch-sub">{{ fetchMatchSongTitle }}</div>
+          <button type="button" class="match-fetch-cancel" @click="cancelFetchMatchCandidates">
+            {{ $t('common.cancel') }}
+          </button>
         </div>
-        <button type="button" class="match-fetch-cancel" @click="cancelFetchMatchCandidates">
-          {{ $t('common.cancel') }}
-        </button>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 队列右键菜单（不含批量操作） -->
+    <Teleport to="#app">
     <div
       v-if="queueContextMenu.visible && queueContextMenu.music"
       ref="queueContextMenuRef"
@@ -428,8 +431,10 @@
         {{ $t('music.removeFromQueue') }}
       </div>
     </div>
+    </Teleport>
 
     <!-- 歌词区右键菜单：偏移校准 + 在线匹配歌词 -->
+    <Teleport to="#app">
     <div
       v-if="lyricsContextMenu.visible"
       class="np-context-menu np-lyrics-menu"
@@ -498,6 +503,7 @@
         {{ showLyricsTime ? $t('nowPlaying.hideLyricsTime') : $t('nowPlaying.showLyricsTime') }}
       </div>
     </div>
+    </Teleport>
 
     <AddToPlaylistModal
       v-model="showAddToPlaylist"
@@ -2200,7 +2206,7 @@ watch(
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: var(--z-modal);
+  z-index: var(--z-fullscreen);
   display: flex;
   flex-direction: column;
   padding: var(--spacing-xl) 0;
@@ -2886,7 +2892,7 @@ watch(
   text-shadow: var(--np-text-outline);
 }
 
-/* 队列右键菜单：用全局 elevated 底，保证深/浅主题可读；z-index 高于全屏页 */
+/* 队列/歌词右键菜单：Teleport 到 #app，高于抽屉；用全局 elevated 底保证深/浅主题可读 */
 .np-context-menu {
   position: fixed;
   background: var(--bg-elevated);
@@ -2895,7 +2901,8 @@ watch(
   box-shadow: var(--shadow-lg);
   padding: var(--spacing-xs);
   min-width: 180px;
-  z-index: calc(var(--z-modal) + 10);
+  z-index: var(--z-popover);
+  -webkit-app-region: no-drag;
   color: var(--text-color);
 }
 
@@ -3251,7 +3258,8 @@ watch(
 .match-fetch-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10001;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;

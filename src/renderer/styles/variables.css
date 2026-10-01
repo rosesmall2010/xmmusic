@@ -81,17 +81,19 @@
   --sidebar-width: 200px;
   --sidebar-width-collapsed: 60px;
 
-  /* Z-index */
+  /* Z-index
+   * 全屏播放页 < 播放队列抽屉 < 对话框/遮罩（含 EQ） < 右键菜单等弹出层 < 提示
+   * 对话框必须高于抽屉；全屏页内弹层须 Teleport 到 #app，否则 isolation 会整层压在抽屉下 */
   --z-dropdown: 1000;
   --z-sticky: 1020;
   --z-fixed: 1030;
-  --z-modal-backdrop: 1040;
-  --z-modal: 1050;
+  --z-fullscreen: 1050;
   --z-drawer: 1055;
-  /* 高于modal，确保在NowPlayingView之上 */
-  --z-popover: 1060;
-  --z-tooltip: 1070;
-  --z-toast: 1080;
+  --z-modal-backdrop: 1060;
+  --z-modal: 1065;
+  --z-popover: 1070;
+  --z-tooltip: 1080;
+  --z-toast: 1090;
 }
 
 /* ==================== 浅色主题 ==================== */

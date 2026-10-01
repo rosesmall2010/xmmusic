@@ -44,9 +44,9 @@
     </div>
 
     <div class="content">
-      <div v-if="loading" class="loading-container">
+      <div v-if="loading && songs.length === 0" class="loading-container">
         <div class="loading-spinner"></div>
-        <p>{{ $t('common.loading') }} ({{ songs.length }} / {{ totalSongs }})</p>
+        <p>{{ $t('common.loading') }}</p>
       </div>
 
       <SongList
@@ -56,7 +56,8 @@
         :playlist-id="playlist.id"
         @play="playMusic"
         @remove-from-playlist="removeSong"
-        @songs-updated="loadPlaylist"
+        @songs-updated="reloadPlaylist"
+        @load-more="loadMore"
       >
         <template #empty>
           <div class="empty-placeholder">
@@ -166,9 +167,7 @@ onUnmounted(() => {
 })
 
 const handleSongAddedToPlaylist = () => {
-  currentOffset = 0
-  hasMore = true
-  loadPlaylist()
+  void reloadPlaylist()
 }
 
 const handleMetadataUpdate = (event: CustomEvent) => {
@@ -186,30 +185,39 @@ const handleMetadataUpdate = (event: CustomEvent) => {
 watch(() => route.params.id as string, async (newId: string, oldId: string) => {
   if (newId !== oldId) {
     playlist.value = null
-    songs.value = []
     totalSongs.value = 0
-    currentOffset = 0
-    hasMore = true
     coverBroken.value = false
-    await loadPlaylist()
+    await reloadPlaylist()
   }
 })
 
 let currentLoadId = 0
 
+/** 重置并重新加载歌单（首页起） */
+const reloadPlaylist = async () => {
+  songs.value = []
+  currentOffset = 0
+  hasMore = true
+  await loadPlaylist()
+}
+
+/** SongList 滚动到底时追加下一页 */
+const loadMore = () => {
+  void loadPlaylist()
+}
+
 const loadPlaylist = async () => {
   const id = route.params.id as string
   if (!id) return
+  if (loading.value || !hasMore) return
 
   const playlistId = Number(id)
   currentLoadId++
   const thisLoadId = currentLoadId
 
+  loading.value = true
   try {
     if (currentOffset === 0) {
-      loading.value = true
-      songs.value = []
-      hasMore = true
       coverBroken.value = false
 
       const playlists = await window.electronAPI.getPlaylists()
@@ -218,7 +226,6 @@ const loadPlaylist = async () => {
       playlist.value = playlists.find((p: any) => p.id === playlistId)
 
       if (!playlist.value) {
-        loading.value = false
         hasMore = false
         return
       }
@@ -226,17 +233,10 @@ const loadPlaylist = async () => {
       totalSongs.value = await window.electronAPI.getPlaylistSongsCount(playlistId)
 
       if (totalSongs.value === 0) {
-        loading.value = false
         hasMore = false
         return
       }
-
-      loading.value = false
     }
-
-    if (!hasMore || loading.value) return
-
-    loading.value = true
 
     const newSongs = await window.electronAPI.getPlaylistSongsPaginated(playlistId, currentOffset, PAGE_SIZE)
     if (thisLoadId !== currentLoadId) return
@@ -250,7 +250,9 @@ const loadPlaylist = async () => {
   } catch (error) {
     console.error('加载歌单失败:', error)
   } finally {
-    loading.value = false
+    if (thisLoadId === currentLoadId) {
+      loading.value = false
+    }
   }
 }
 
@@ -297,9 +299,7 @@ const handleRename = async (newName: string) => {
   if (!playlist.value) return
   try {
     await window.electronAPI.updatePlaylist(playlist.value.id, { name: newName })
-    currentOffset = 0
-    hasMore = true
-    await loadPlaylist()
+    await reloadPlaylist()
   } catch (error) {
     console.error('Failed to rename playlist:', error)
   }
@@ -317,9 +317,7 @@ const removeSong = async (music: MusicItem) => {
   if (!playlist.value) return
   try {
     await window.electronAPI.removeFromPlaylistByPath(playlist.value.id, music.id)
-    currentOffset = 0
-    hasMore = true
-    await loadPlaylist()
+    await reloadPlaylist()
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to remove song:', error)
@@ -335,11 +333,8 @@ const clearPlaylist = async () => {
 
   try {
     await window.electronAPI.clearPlaylist(playlist.value.id)
-    songs.value = []
     totalSongs.value = 0
-    currentOffset = 0
-    hasMore = true
-    await loadPlaylist()
+    await reloadPlaylist()
     window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('清空歌单失败:', error)

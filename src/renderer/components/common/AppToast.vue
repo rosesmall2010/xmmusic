@@ -18,7 +18,7 @@ const { message, visible } = useToastState()
   left: 50%;
   bottom: 100px;
   transform: translateX(-50%);
-  z-index: 1080;
+  z-index: var(--z-toast);
   max-width: min(480px, calc(100vw - 48px));
   padding: 10px 18px;
   border-radius: var(--radius-base, 8px);

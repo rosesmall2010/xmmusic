@@ -1,69 +1,71 @@
 <template>
-  <div v-if="modelValue" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>{{ $t('playlist.addSongs') }}</h3>
-        <button class="close-btn" @click="close" :title="$t('common.close')"><X :size="24" /></button>
-      </div>
-
-      <div class="modal-body">
-        <!-- 进度显示（只在批量添加时显示） -->
-        <div v-if="isProcessing && musicListToAd && musicListToAd.length > 0" class="progress-container">
-          <div class="progress-text">{{ $t('playlist.batchAdding') }}</div>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-          </div>
-          <div class="progress-info">
-            {{ progress.current }} / {{ progress.total }} ({{ $t('playlist.success') }}{{ progress.added }}，{{ $t('playlist.skipped') }}{{ progress.skipped }})
-          </div>
+  <Teleport to="#app">
+    <div v-if="modelValue" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>{{ $t('playlist.addSongs') }}</h3>
+          <button class="close-btn" @click="close" :title="$t('common.close')"><X :size="24" /></button>
         </div>
 
-        <!-- 单个添加时的加载提示 -->
-        <div v-else-if="isProcessing && musicToAd" class="progress-container">
-          <div class="progress-text">{{ $t('playlist.adding') }}</div>
-        </div>
-
-        <!-- 歌单列表 -->
-        <div v-else-if="playlists.length > 0" class="playlist-list">
-          <div
-            v-for="playlist in playlists"
-            :key="playlist.id"
-            class="playlist-item"
-            @click="selectPlaylist(playlist)"
-          >
-            <div class="playlist-icon">
-              <img
-                v-if="playlist.firstSongCover"
-                :src="playlist.firstSongCover"
-                class="playlist-cover-image"
-                @error="handleCoverError(playlist)"
-              />
-              <ListMusic v-else :size="20" />
+        <div class="modal-body">
+          <!-- 进度显示（只在批量添加时显示） -->
+          <div v-if="isProcessing && musicListToAd && musicListToAd.length > 0" class="progress-container">
+            <div class="progress-text">{{ $t('playlist.batchAdding') }}</div>
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
             </div>
-            <div class="playlist-info">
-              <div class="playlist-name">{{ playlist.name }}</div>
-              <div class="playlist-count">{{ $t('playlist.songs', { count: playlist.songCount }) }}</div>
+            <div class="progress-info">
+              {{ progress.current }} / {{ progress.total }} ({{ $t('playlist.success') }}{{ progress.added }}，{{ $t('playlist.skipped') }}{{ progress.skipped }})
             </div>
           </div>
+
+          <!-- 单个添加时的加载提示 -->
+          <div v-else-if="isProcessing && musicToAd" class="progress-container">
+            <div class="progress-text">{{ $t('playlist.adding') }}</div>
+          </div>
+
+          <!-- 歌单列表 -->
+          <div v-else-if="playlists.length > 0" class="playlist-list">
+            <div
+              v-for="playlist in playlists"
+              :key="playlist.id"
+              class="playlist-item"
+              @click="selectPlaylist(playlist)"
+            >
+              <div class="playlist-icon">
+                <img
+                  v-if="playlist.firstSongCover"
+                  :src="playlist.firstSongCover"
+                  class="playlist-cover-image"
+                  @error="handleCoverError(playlist)"
+                />
+                <ListMusic v-else :size="20" />
+              </div>
+              <div class="playlist-info">
+                <div class="playlist-name">{{ playlist.name }}</div>
+                <div class="playlist-count">{{ $t('playlist.songs', { count: playlist.songCount }) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="empty-state">
+            <p>{{ $t('playlist.noPlaylists') }}</p>
+          </div>
         </div>
 
-        <div v-else class="empty-state">
-          <p>{{ $t('playlist.noPlaylists') }}</p>
+        <div class="modal-footer">
+          <button class="btn-create" @click="showCreateModal = true">
+            + {{ $t('playlist.create') }}
+          </button>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn-create" @click="showCreateModal = true">
-          + {{ $t('playlist.create') }}
-        </button>
-      </div>
+      <CreatePlaylistModal
+        v-model="showCreateModal"
+        @confirm="handleCreatePlaylist"
+      />
     </div>
-
-    <CreatePlaylistModal
-      v-model="showCreateModal"
-      @confirm="handleCreatePlaylist"
-    />
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -131,6 +133,9 @@ const handleCoverError = (playlist: any) => {
 watch(() => props.modelValue, (val) => {
   if (val) {
     loadPlaylists()
+  } else {
+    // 父弹窗关闭时复位，避免再次打开时连带弹出「创建歌单」
+    showCreateModal.value = false
   }
 })
 
@@ -147,6 +152,7 @@ onUnmounted(() => {
 const close = () => {
   // 如果正在处理，不允许关闭
   if (isProcessing.value) return
+  showCreateModal.value = false
   emit('update:modelValue', false)
 }
 
@@ -258,6 +264,8 @@ const handleCreatePlaylist = async (name: string) => {
   justify-content: center;
   z-index: var(--z-modal);
   backdrop-filter: blur(4px);
+  /* 无边框/隐藏标题栏窗口：拖拽区会吞点击，浮层须显式 no-drag */
+  -webkit-app-region: no-drag;
 }
 
 .modal-content {

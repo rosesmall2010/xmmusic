@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="dialog-overlay">
+  <Teleport to="#app">
+<div v-if="show" class="dialog-overlay">
     <div class="dialog lyrics-match-dialog" role="dialog" aria-modal="true">
       <h3>{{ $t('nowPlaying.selectLyricsTitle') }}</h3>
       <p class="hint">{{ $t('nowPlaying.selectLyricsHint', { title: musicTitle }) }}</p>
@@ -52,6 +53,7 @@
       </div>
     </div>
   </div>
+</Teleport>
 </template>
 
 <script setup lang="ts">
@@ -168,7 +170,8 @@ const confirmSelect = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   padding: 24px;
 }
 

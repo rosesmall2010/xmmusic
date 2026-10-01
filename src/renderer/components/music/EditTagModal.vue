@@ -1,5 +1,6 @@
 <template>
-  <!-- 编辑标签含表单，禁止点遮罩关闭，避免误触丢失未保存内容 -->
+  <Teleport to="#app">
+<!-- 编辑标签含表单，禁止点遮罩关闭，避免误触丢失未保存内容 -->
   <div v-if="show" class="dialog-overlay">
     <div class="dialog edit-tag-dialog" :class="{ 'has-id3': rawID3Tags }">
       <div class="dialog-header">
@@ -207,6 +208,7 @@
       </div>
     </div>
   </div>
+</Teleport>
 </template>
 
 <script setup lang="ts">
@@ -548,7 +550,8 @@ const close = () => {
   padding: 24px;
   box-sizing: border-box;
   overflow: auto;
-  z-index: 1050;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   animation: fadeIn 0.2s ease-out;
 }
 

@@ -1,5 +1,6 @@
 <template>
-  <transition name="eq-fade">
+  <Teleport to="#app">
+<transition name="eq-fade">
     <div class="eq-overlay" v-if="modelValue">
       <div class="equalizer-panel">
         <!-- 头部 -->
@@ -110,6 +111,7 @@
       </div>
     </div>
   </transition>
+</Teleport>
 </template>
 
 <script setup lang="ts">
@@ -244,7 +246,7 @@ watch(gains, () => {
 .eq-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-popover);
+  z-index: var(--z-modal);
   /* Windows 无边框窗口：标题栏 drag 区在系统层吞点击，浮层须显式 no-drag */
   -webkit-app-region: no-drag;
   display: flex;

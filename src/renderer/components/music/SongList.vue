@@ -156,7 +156,8 @@
       </div>
     </div>
 
-    <!-- Context Menu -->
+    <!-- Context Menu：Teleport 脱出列表 overflow / 全屏 isolation -->
+    <Teleport to="#app">
     <div
       v-if="contextMenu.visible && contextMenu.music"
       ref="contextMenuRef"
@@ -280,6 +281,7 @@
         {{ $t('music.removeFromPlaylist') }}
       </div>
     </div>
+    </Teleport>
 
     <AddToPlaylistModal
       v-model="showAddToPlaylist"
@@ -303,6 +305,7 @@
       :music="detailsMusic"
       @close="showDetailsDialog = false"
     />
+
     <LyricsMatchSelectModal
       :show="showLyricsPick"
       :music-title="lyricsPickTarget?.title?.trim() || lyricsPickTarget?.fileName || ''"
@@ -1797,7 +1800,7 @@ defineExpose({ scrollToIndex })
   box-shadow: var(--shadow-lg);
   padding: var(--spacing-xs);
   min-width: 180px;
-  z-index: 1000;
+  z-index: var(--z-popover);
 }
 
 .menu-divider {
@@ -1934,7 +1937,8 @@ defineExpose({ scrollToIndex })
 .match-fetch-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   justify-content: center;

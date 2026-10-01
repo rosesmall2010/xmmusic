@@ -1,70 +1,72 @@
 <template>
-  <div v-if="show" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>{{ $t('playlist.setCover') }}</h3>
-        <button class="close-btn" @click="close" :title="$t('common.close')">×</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="option-row">
-          <button class="btn-primary" @click="pickImage" :disabled="saving">
-            {{ $t('playlist.coverFromImage') }}
-          </button>
-          <button class="btn-secondary" @click="resetDefault" :disabled="saving">
-            {{ $t('playlist.coverDefault') }}
-          </button>
+  <Teleport to="#app">
+    <div v-if="show" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>{{ $t('playlist.setCover') }}</h3>
+          <button class="close-btn" @click="close" :title="$t('common.close')">×</button>
         </div>
 
-        <div class="section-title">{{ $t('playlist.coverFromSong') }}</div>
+        <div class="modal-body">
+          <div class="option-row">
+            <button class="btn-primary" @click="pickImage" :disabled="saving">
+              {{ $t('playlist.coverFromImage') }}
+            </button>
+            <button class="btn-secondary" @click="resetDefault" :disabled="saving">
+              {{ $t('playlist.coverDefault') }}
+            </button>
+          </div>
 
-        <div v-if="loadingCandidates && candidates.length === 0 && page <= 1" class="empty-hint">
-          {{ $t('common.loading') }}
+          <div class="section-title">{{ $t('playlist.coverFromSong') }}</div>
+
+          <div v-if="loadingCandidates && candidates.length === 0 && page <= 1" class="empty-hint">
+            {{ $t('common.loading') }}
+          </div>
+          <template v-else>
+            <div v-if="candidates.length === 0" class="empty-hint">
+              {{ page > 1 ? $t('playlist.coverPageEmpty') : $t('playlist.coverNoSongCovers') }}
+            </div>
+            <div v-else class="candidate-grid">
+              <button
+                v-for="item in candidates"
+                :key="item.musicId + '-' + item.coverPath"
+                class="candidate-item"
+                :disabled="saving"
+                @click="pickSongCover(item)"
+              >
+                <img :src="toLocalFileUrl(item.coverPath)" :alt="item.title" />
+                <div class="candidate-meta">
+                  <div class="title">{{ item.title }}</div>
+                  <div class="artist">{{ item.artist }}</div>
+                </div>
+              </button>
+            </div>
+
+            <div v-if="page > 1 || hasMore" class="pager">
+              <button
+                class="pager-btn"
+                :disabled="saving || loadingCandidates || page <= 1"
+                @click="goPage(page - 1)"
+              >
+                {{ $t('playlist.coverPrevPage') }}
+              </button>
+              <span class="pager-info">
+                {{ $t('playlist.coverPageInfo', { page }) }}
+                <span v-if="loadingCandidates" class="pager-loading">{{ $t('common.loading') }}</span>
+              </span>
+              <button
+                class="pager-btn"
+                :disabled="saving || loadingCandidates || !hasMore"
+                @click="goPage(page + 1)"
+              >
+                {{ $t('playlist.coverNextPage') }}
+              </button>
+            </div>
+          </template>
         </div>
-        <template v-else>
-          <div v-if="candidates.length === 0" class="empty-hint">
-            {{ page > 1 ? $t('playlist.coverPageEmpty') : $t('playlist.coverNoSongCovers') }}
-          </div>
-          <div v-else class="candidate-grid">
-            <button
-              v-for="item in candidates"
-              :key="item.musicId + '-' + item.coverPath"
-              class="candidate-item"
-              :disabled="saving"
-              @click="pickSongCover(item)"
-            >
-              <img :src="toLocalFileUrl(item.coverPath)" :alt="item.title" />
-              <div class="candidate-meta">
-                <div class="title">{{ item.title }}</div>
-                <div class="artist">{{ item.artist }}</div>
-              </div>
-            </button>
-          </div>
-
-          <div v-if="page > 1 || hasMore" class="pager">
-            <button
-              class="pager-btn"
-              :disabled="saving || loadingCandidates || page <= 1"
-              @click="goPage(page - 1)"
-            >
-              {{ $t('playlist.coverPrevPage') }}
-            </button>
-            <span class="pager-info">
-              {{ $t('playlist.coverPageInfo', { page }) }}
-              <span v-if="loadingCandidates" class="pager-loading">{{ $t('common.loading') }}</span>
-            </span>
-            <button
-              class="pager-btn"
-              :disabled="saving || loadingCandidates || !hasMore"
-              @click="goPage(page + 1)"
-            >
-              {{ $t('playlist.coverNextPage') }}
-            </button>
-          </div>
-        </template>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -202,7 +204,8 @@ const resetDefault = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
 }
 
 .modal-content {

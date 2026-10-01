@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="modal-overlay">
+  <Teleport to="#app">
+<div v-if="show" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
         <h2>{{ $t('music.details') }}</h2>
@@ -103,6 +104,7 @@
       </div>
     </div>
   </div>
+</Teleport>
 </template>
 
 <script setup lang="ts">
@@ -236,7 +238,8 @@ ${t('music.fileSize')}: ${formatFileSize(props.music.fileSize)} (${props.music.f
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   backdrop-filter: blur(4px);
 }
 

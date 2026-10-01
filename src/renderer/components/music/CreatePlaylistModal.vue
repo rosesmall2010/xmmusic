@@ -1,34 +1,36 @@
 <template>
-  <div v-if="modelValue" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>{{ isEdit ? $t('playlist.edit') : $t('playlist.create') }}</h3>
-        <button class="close-btn" @click="close" :title="$t('common.close')">
-          <X :size="24" />
-        </button>
-      </div>
+  <Teleport to="#app">
+    <div v-if="modelValue" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>{{ isEdit ? $t('playlist.edit') : $t('playlist.create') }}</h3>
+          <button class="close-btn" @click="close" :title="$t('common.close')">
+            <X :size="24" />
+          </button>
+        </div>
 
-      <div class="modal-body">
-        <div class="form-group">
-          <label>{{ $t('playlist.name') }}</label>
-          <input
-            v-model="name"
-            type="text"
-            :placeholder="$t('playlist.namePlaceholder')"
-            ref="inputRef"
-            @keyup.enter="confirm"
-          />
+        <div class="modal-body">
+          <div class="form-group">
+            <label>{{ $t('playlist.name') }}</label>
+            <input
+              v-model="name"
+              type="text"
+              :placeholder="$t('playlist.namePlaceholder')"
+              ref="inputRef"
+              @keyup.enter="confirm"
+            />
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="close">{{ $t('common.cancel') }}</button>
+          <button class="btn-confirm" @click="confirm" :disabled="!name.trim()">
+            {{ $t('common.confirm') }}
+          </button>
         </div>
       </div>
-
-      <div class="modal-footer">
-        <button class="btn-cancel" @click="close">{{ $t('common.cancel') }}</button>
-        <button class="btn-confirm" @click="confirm" :disabled="!name.trim()">
-          {{ $t('common.confirm') }}
-        </button>
-      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -54,6 +56,7 @@ watch(() => props.modelValue, (val) => {
     name.value = props.initialName || ''
     nextTick(() => {
       inputRef.value?.focus()
+      inputRef.value?.select()
     })
   }
 })
@@ -82,6 +85,8 @@ const confirm = () => {
   justify-content: center;
   z-index: var(--z-modal);
   backdrop-filter: blur(4px);
+  /* 无边框/隐藏标题栏窗口：拖拽区会吞点击，浮层须显式 no-drag */
+  -webkit-app-region: no-drag;
 }
 
 .modal-content {

@@ -1,20 +1,21 @@
 <template>
   <!-- 三栏标签对比编辑，禁止点遮罩关闭，避免误触丢失未保存内容 -->
-  <div v-if="show" class="dialog-overlay">
-    <div class="dialog new-tag-dialog">
-      <div class="dialog-header">
-        <h3 class="dialog-title">{{ $t('tagInfoEditor.title') }}</h3>
-        <button
-          type="button"
-          class="close-btn"
-          :disabled="loading"
-          :title="$t('common.close')"
-          :aria-label="$t('common.close')"
-          @click="close"
-        >
-          <X :size="20" />
-        </button>
-      </div>
+  <Teleport to="#app">
+    <div v-if="show" class="dialog-overlay">
+      <div class="dialog new-tag-dialog">
+        <div class="dialog-header">
+          <h3 class="dialog-title">{{ $t('tagInfoEditor.title') }}</h3>
+          <button
+            type="button"
+            class="close-btn"
+            :disabled="loading"
+            :title="$t('common.close')"
+            :aria-label="$t('common.close')"
+            @click="close"
+          >
+            <X :size="20" />
+          </button>
+        </div>
 
       <!-- 中间可滚动，避免内容过长把底部按钮顶出视口 -->
       <div class="dialog-body">
@@ -188,7 +189,8 @@
         <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('tagInfoEditor.cancel') }}</button>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -447,7 +449,8 @@ const close = () => {
   padding: 24px;
   box-sizing: border-box;
   overflow: auto;
-  z-index: 1050;
+  z-index: var(--z-modal);
+  -webkit-app-region: no-drag;
   animation: fadeIn 0.2s ease-out;
 }
 
