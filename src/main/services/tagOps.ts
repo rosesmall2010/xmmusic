@@ -111,7 +111,19 @@ function writeTagsAtomically(nodeID3: any, filePath: string, tags: any): void {
 
   try {
     writeFileSync(tmpPath, updated, { mode })
-    renameSync(tmpPath, filePath)
+    // Windows 不支持 rename 覆盖已存在的目标文件（macOS/Linux 的 rename(2) 是原子覆盖，Windows 不是）。
+    // 先乐观尝试 rename；若报 EPERM/EEXIST（Windows 的覆盖限制），则删原文件再 rename。
+    // 删与 rename 之间有极窄时间窗，但比让用户看到 EPERM 报错好得多。
+    try {
+      renameSync(tmpPath, filePath)
+    } catch (renameErr: any) {
+      if (renameErr.code === 'EPERM' || renameErr.code === 'EEXIST') {
+        unlinkSync(filePath)
+        renameSync(tmpPath, filePath)
+      } else {
+        throw renameErr
+      }
+    }
   } catch (error) {
     // 失败时清掉临时文件，别在用户音乐目录里留垃圾
     try {
