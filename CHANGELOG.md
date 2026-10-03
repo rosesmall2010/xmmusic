@@ -16,6 +16,7 @@
 - 新增 `npm run check:pagination`：在真实 Electron 进程里跑真实 `getLocalMusicPage`，校验游标序列与全量排序逐行一致、无重复。守的是 `SELECT am.*` 会遮蔽 `lm.added_at` 这个坑（漏写别名会让翻页断在第一页）
 
 ### 修复
+- **第一次手动匹配封面成功、第二次点「匹配封面」毫无反应**：`libraryBusy` 与 `manualMatchUiBusy` 闭合成自引用环 —— SongList 用 `isMatchFlowBusy()`（内含 `props.libraryBusy`）的结果回写 `manualMatchUiBusy`，而传进去的 `libraryBusy` 又由 `isLibraryBusy` 推出、后者含 `manualMatchUiBusy`。于是第一次匹配成功后在 `finally` 里清标志时，读到的 `libraryBusy` 正是由那个还没清掉的标志推出来的，永远清不回 false；此后每次右键都在 `if (isMatchFlowBusy()) return` 被静默吞掉。现新增 `isExternalLibraryBusy`（排除 `manualMatchUiBusy`，仅含歌词/封面批量、扫描、清理）传给 SongList，工具栏禁用仍用 `isLibraryBusy`。此环与平台无关，macOS 同样会中招，只是需要连续匹配两次才暴露
 - **扫描卡在最后一个文件、永远停在「扫描中」**：读取会阻塞的普通文件（失联的网络盘、下载不下来的 iCloud/OneDrive 占位文件、坏道）会让 `music-metadata` 与 MD5 读流**双双永不 settle** —— 既不抛错也不结束，并发池里那一路就此永久挂起。`current++` 在 `finally` 里，所以进度停在「总数 − 1」不动，日志里也看不出是哪个文件。现给单文件处理加 120s 超时护栏：超时文件记为失败、控制台打出完整路径、扫描继续走完。注意超时只是放行扫描，并不能真正中断底层读取，挂住的 fd 会留到进程退出（需 music-metadata 支持 AbortSignal 才能根治）
 - 扫描结果里的 `failed` / `errors` 原先被整个丢弃，失败或超时的文件静默不入库，用户只会发现「某首歌没进来」却不知为何。现在扫描结束若有失败项会提示数量并指向控制台日志
 - 扫描中途切到「本地音乐」页看不到任何进度：进度监听加了 `isScanning` 门，但该标志只由本页 `handleScan` 或 `scan-state-changed` 的「开始」事件点亮；从设置页/目录对话框发起扫描后再切过来，开始事件早已错过，整轮扫描一条进度都显示不出。现挂载时经已有的 `get-scan-state` 回填状态与进度（带代际校验，避免 await 期间扫描已结束又被点亮）

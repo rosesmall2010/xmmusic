@@ -179,7 +179,7 @@
         ref="songListRef"
         :songs="musicList"
         :show-lyrics-match="true"
-        :library-busy="isLibraryBusy"
+        :library-busy="isExternalLibraryBusy"
         @play="playMusic"
         @load-more="loadMore"
         @songs-updated="handleSongsUpdated"
@@ -543,6 +543,18 @@ const isCleaningMissing = ref(false)
 /** 扫描/匹配/清理任一进行中：互斥禁用工具栏 */
 const isLibraryBusy = computed(
   () => isMatchingBusy.value || isScanning.value || isCleaningMissing.value
+)
+/**
+ * 传给 SongList 的「库外部忙碌」标志：**必须排除 manualMatchUiBusy**
+ *
+ * manualMatchUiBusy 是 SongList 自己通过 syncManualMatchUiBusy() 回写的，
+ * 而它的入参 isMatchFlowBusy() 又读 libraryBusy —— 若这里包含 manualMatchUiBusy
+ * 就形成自引用：第一次匹配成功后在 finally 里清标志时，读到的 libraryBusy
+ * 正是由这个还没清掉的标志推出来的，于是永远清不掉，第二次右键被静默吞掉。
+ * 工具栏禁用仍用 isLibraryBusy（含 manualMatchUiBusy）。
+ */
+const isExternalLibraryBusy = computed(
+  () => isMatchingLyrics.value || isMatchingCovers.value || isScanning.value || isCleaningMissing.value
 )
 /** 无有效封面歌曲数（用于禁用批量按钮） */
 const missingCoverCount = ref(0)
