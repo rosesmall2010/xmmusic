@@ -75,7 +75,9 @@ export const useMusicStore = defineStore('music', () => {
 
     loading.value = true
     try {
-      const page = await window.electronAPI.getLocalMusicPage(null, limit)
+      // 首屏至少取 pageSize 条；performLocateScroll 会传 index+50，保留该行为
+      const firstPageLimit = Math.max(limit, pageSize.value)
+      const page = await window.electronAPI.getLocalMusicPage(null, firstPageLimit)
       if (epoch !== loadEpoch) return
       musicList.value = page.items
       currentOffset.value = page.items.length
