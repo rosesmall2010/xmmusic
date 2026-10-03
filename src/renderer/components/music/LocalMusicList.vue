@@ -545,13 +545,9 @@ const isLibraryBusy = computed(
   () => isMatchingBusy.value || isScanning.value || isCleaningMissing.value
 )
 /**
- * 传给 SongList 的「库外部忙碌」标志：**必须排除 manualMatchUiBusy**
- *
- * manualMatchUiBusy 是 SongList 自己通过 syncManualMatchUiBusy() 回写的，
- * 而它的入参 isMatchFlowBusy() 又读 libraryBusy —— 若这里包含 manualMatchUiBusy
- * 就形成自引用：第一次匹配成功后在 finally 里清标志时，读到的 libraryBusy
- * 正是由这个还没清掉的标志推出来的，于是永远清不掉，第二次右键被静默吞掉。
- * 工具栏禁用仍用 isLibraryBusy（含 manualMatchUiBusy）。
+ * 传给 SongList 的「库外部忙碌」标志：必须排除 manualMatchUiBusy。
+ * manualMatchUiBusy 由 SongList 回写，isMatchFlowBusy() 又读 libraryBusy，
+ * 若包含 manualMatchUiBusy 则闭合成自引用环，第一次匹配成功后标志永远清不回 false。
  */
 const isExternalLibraryBusy = computed(
   () => isMatchingLyrics.value || isMatchingCovers.value || isScanning.value || isCleaningMissing.value
@@ -685,32 +681,21 @@ const refreshListAfterMatch = async () => {
   }
 }
 
-/**
- * 后台把整库预载进列表（供全选 / 快速滚动）
- *
- * 用游标分页而非 OFFSET：实测 5.1 万条，OFFSET 版纯 SQL 75 秒（且每批都卡主线程
- * 10–60ms，启动后几分钟内所有 IPC 都在排队），游标版 0.3 秒。
- * 批大小同时从 20 提到 500，批数 2552 → 103，墙钟从 4 分多钟降到数秒。
- *
- * 续跑条件只看 musicStore.hasMore（由游标判定）：store 暂时在跑别的加载时
- * 下一拍重试而不是直接退出，否则一次撞车就会让预载永久停住、全选漏歌。
- */
-const BACKGROUND_PAGE_SIZE = 500
-const BACKGROUND_PAGE_GAP_MS = 50
-
 const startBackgroundLoading = async () => {
   const token = backgroundLoadToken
-  if (!musicStore.hasMore) return
-  setTimeout(async () => {
-    if (token !== backgroundLoadToken) return
-    if (!musicStore.hasMore) return
-    // 别处正在加载（如匹配结束后的整表刷新）：这一拍跳过，不退出循环
-    if (!musicStore.loading) {
-      await musicStore.loadMore(BACKGROUND_PAGE_SIZE)
+  // Check if there are more items to load
+  if (musicStore.hasMore) {
+    // Use requestIdleCallback or setTimeout to avoid blocking main thread
+    setTimeout(async () => {
       if (token !== backgroundLoadToken) return
-    }
-    startBackgroundLoading()
-  }, BACKGROUND_PAGE_GAP_MS)
+      if (musicStore.hasMore && !musicStore.loading) {
+        await musicStore.loadMusic(musicStore.currentOffset, 20)
+        if (token !== backgroundLoadToken) return
+        // Continue loading next batch
+        startBackgroundLoading()
+      }
+    }, 100) // Small delay between batches
+  }
 }
 
 const stopBackgroundLoading = () => {
@@ -718,9 +703,9 @@ const stopBackgroundLoading = () => {
 }
 
 const loadMore = async () => {
-  // 滚动到底的手动追加；与后台预载共用游标，store 内有 loading 互斥
+  // This is now handled by background loading, but we keep it for manual trigger if needed
   if (!musicStore.loading && musicStore.hasMore) {
-    await musicStore.loadMore(BACKGROUND_PAGE_SIZE)
+    await musicStore.loadMusic(musicStore.currentOffset, 20)
   }
 }
 
@@ -868,7 +853,7 @@ const handleScan = async () => {
   scanStateEpoch++
   isScanning.value = true
   try {
-      const scanResult = await window.electronAPI.scanAllDirectories({
+      await window.electronAPI.scanAllDirectories({
         concurrency: 10,
         fileTypes: ['.mp3', '.flac', '.aac', '.wav', '.ogg', '.m4a', '.ape', '.wma'],
         excludePaths: [],
@@ -878,11 +863,6 @@ const handleScan = async () => {
       // 扫描完成后刷新列表
       await musicStore.loadMusic(0, 20, true)
       startBackgroundLoading()
-
-      // 失败/超时的文件原先被静默丢弃，用户只会发现「某首歌没进来」却不知为何
-      if (scanResult?.failed > 0) {
-        alert(t('message.scanSkippedFiles', { count: scanResult.failed }))
-      }
   } catch (error: any) {
     if (error.message !== '扫描已取消') {
       alert(t('message.scanError') + ': ' + error.message)
