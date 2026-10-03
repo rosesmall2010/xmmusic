@@ -380,9 +380,13 @@ const parseYearForSave = (): number | null => {
 }
 
 const buildUpdates = () => ({
-  artist: editedData.artist.trim(),
+  // 空字符串统一转 undefined/null：artist/title 是必填字段，空值交给 DB 层兜底「未知」；
+  // album/genre 本就可空；year 已经通过 parseYearForSave 处理成 number | null。
+  // 若不做此转换，保存空 artist 后 music.artist = ''，下次打开 dbSnapshot.artist = '' 与
+  // editedData.artist = '' 相等，hasChanges 永远 false，保存按钮永远灰。
+  artist: editedData.artist.trim() || undefined,
   album: editedData.album.trim() || null,
-  title: editedData.title.trim(),
+  title: editedData.title.trim() || undefined,
   year: parseYearForSave(),
   genre: editedData.genre.trim() || null
 })
@@ -401,6 +405,11 @@ const save = async (dbOnly = false) => {
         updatedMusic = {
           ...props.music,
           ...updates,
+          // 空字符串统一转 undefined：与 buildUpdates 的处理保持一致，
+          // 防止派发出去的 music-metadata-updated 携带空字符串覆盖列表对象，
+          // 导致下次打开弹窗时 dbSnapshot 与 editedData 都是 ''，hasChanges 永远 false
+          artist: updates.artist || undefined,
+          title: updates.title || undefined,
           album: updates.album || undefined,
           genre: updates.genre || undefined,
           year: updates.year ?? undefined

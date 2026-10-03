@@ -1971,9 +1971,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
       await metadataEditor.updateMetadata(music.filePath, updates)
 
       // 更新数据库（使用 all_music 表）
+      // 更新数据库（使用 all_music 表）
       const dbUpdates: any = {}
-      if (updates.title !== undefined) dbUpdates.title = updates.title
-      if (updates.artist !== undefined) dbUpdates.artist = updates.artist
+      // artist/title 是 NOT NULL 列：空字符串回退到默认值，防止 UI 清空后写入空
+      if (updates.title !== undefined) dbUpdates.title = updates.title || '未知标题'
+      if (updates.artist !== undefined) dbUpdates.artist = updates.artist || '未知艺术家'
       if (updates.album !== undefined) dbUpdates.album = updates.album
       if (updates.year !== undefined) dbUpdates.year = updates.year
       if (updates.genre !== undefined) dbUpdates.genre = updates.genre
@@ -2011,9 +2013,11 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
       })
 
       // 更新数据库（使用 all_music 表）
+      // 更新数据库（使用 all_music 表）
       const dbUpdates: any = {}
-      if (updates.title !== undefined) dbUpdates.title = updates.title
-      if (updates.artist !== undefined) dbUpdates.artist = updates.artist
+      // artist/title 是 NOT NULL 列：空字符串回退到默认值，防止 UI 清空后写入空
+      if (updates.title !== undefined) dbUpdates.title = updates.title || '未知标题'
+      if (updates.artist !== undefined) dbUpdates.artist = updates.artist || '未知艺术家'
       if (updates.album !== undefined) dbUpdates.album = updates.album
       if (updates.year !== undefined) dbUpdates.year = updates.year
       if (updates.genre !== undefined) dbUpdates.genre = updates.genre
