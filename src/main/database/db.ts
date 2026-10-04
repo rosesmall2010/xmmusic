@@ -1329,7 +1329,7 @@ export default class MusicDatabase {
    * - fts：仅走 FTS5；失败回退 LIKE
    * - mixed：FTS → 拼音 → LIKE，按 id 去重直至 limit
    */
-  searchMusic(query: string, limit: number = 50): MusicItem[] {
+  searchMusic(query: string, limit: number = 10000): MusicItem[] {
     if (!query || query.trim() === '') {
       return []
     }
