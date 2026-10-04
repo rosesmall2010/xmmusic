@@ -933,7 +933,7 @@ const handleCleanupMissing = async () => {
     window.dispatchEvent(new Event('favorites-updated'))
     window.dispatchEvent(new Event('recent-plays-updated'))
 
-    if (result.removed === 0) {
+    if (result.removed === 0 && result.removedUnplayable === 0) {
       alert(
         t('localMusic.cleanupMissingNone', {
           checked: result.checked,
@@ -945,6 +945,7 @@ const handleCleanupMissing = async () => {
       alert(
         t('localMusic.cleanupMissingDone', {
           removed: result.removed,
+          removedUnplayable: result.removedUnplayable,
           checked: result.checked,
           favorites: result.related.favorites,
           playlistItems: result.related.playlistItems,

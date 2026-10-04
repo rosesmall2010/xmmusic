@@ -869,6 +869,7 @@ export default class MusicDatabase {
   async cleanupMissingLocalMusic(): Promise<{
     checked: number
     removed: number
+    removedUnplayable: number
     playlistsUpdated: number
     related: {
       localMusic: number
@@ -890,15 +891,7 @@ export default class MusicDatabase {
     /** 单批 IN 参数上限（留余量，低于 SQLite 默认 ~32766） */
     const IN_CHUNK = 500
 
-    const emptyRelated = {
-      localMusic: 0,
-      favorites: 0,
-      playlistItems: 0,
-      recentPlays: 0,
-      playQueue: 0,
-      discover: 0
-    }
-
+    // ── 第一步：收集文件已不在磁盘上的记录 ──────────────────────────────────
     const rows = this.db.prepare(`
       SELECT am.id, am.dir_id, am.file_name
       FROM local_music lm
@@ -966,10 +959,35 @@ export default class MusicDatabase {
       }
     }
 
-    if (missingIds.length === 0) {
+    // ── 第二步：收集感叹号（is_playable = 0）记录 ───────────────────────────
+    // 这些文件扫描时可识别但播放失败（格式不支持、编码损坏等），不需要目录可达性检查
+    const missingSet = new Set(missingIds)
+    const unplayableRows = this.db.prepare(`
+      SELECT am.id
+      FROM local_music lm
+      JOIN all_music am ON lm.music_id = am.id
+      WHERE am.is_playable = 0
+    `).all() as Array<{ id: number }>
+    // 与文件不存在的记录合并，避免重复删除
+    const unplayableIds = unplayableRows.map(r => r.id).filter(id => !missingSet.has(id))
+
+    // 要删除的全部 id
+    const allDeleteIds = [...missingIds, ...unplayableIds]
+
+    const emptyRelated = {
+      localMusic: 0,
+      favorites: 0,
+      playlistItems: 0,
+      recentPlays: 0,
+      playQueue: 0,
+      discover: 0
+    }
+
+    if (allDeleteIds.length === 0) {
       return {
         checked: rows.length,
         removed: 0,
+        removedUnplayable: 0,
         playlistsUpdated: 0,
         related: emptyRelated,
         skippedUnreachable,
@@ -998,16 +1016,16 @@ export default class MusicDatabase {
     }
 
     const related = {
-      localMusic: countRelatedChunked('local_music', missingIds),
-      favorites: countRelatedChunked('favorites', missingIds),
-      playlistItems: countRelatedChunked('playlist_item', missingIds),
-      recentPlays: countRelatedChunked('recent_plays', missingIds),
-      playQueue: countRelatedChunked('play_queue', missingIds),
-      discover: countRelatedChunked('discover_music', missingIds)
+      localMusic: countRelatedChunked('local_music', allDeleteIds),
+      favorites: countRelatedChunked('favorites', allDeleteIds),
+      playlistItems: countRelatedChunked('playlist_item', allDeleteIds),
+      recentPlays: countRelatedChunked('recent_plays', allDeleteIds),
+      playQueue: countRelatedChunked('play_queue', allDeleteIds),
+      discover: countRelatedChunked('discover_music', allDeleteIds)
     }
 
     const affectedPlaylistSet = new Set<number>()
-    for (const chunk of chunkIds(missingIds)) {
+    for (const chunk of chunkIds(allDeleteIds)) {
       const ph = chunk.map(() => '?').join(',')
       const rowsPl = this.db.prepare(`
         SELECT DISTINCT playlist_id as id
@@ -1036,11 +1054,12 @@ export default class MusicDatabase {
         this.updatePlaylistStats(playlistId)
       }
     })
-    tx(missingIds)
+    tx(allDeleteIds)
 
     return {
       checked: rows.length,
       removed: missingIds.length,
+      removedUnplayable: unplayableIds.length,
       playlistsUpdated: affectedPlaylists.length,
       related,
       skippedUnreachable,
