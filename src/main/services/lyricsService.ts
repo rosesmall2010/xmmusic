@@ -17,51 +17,26 @@ export interface LyricsData {
 
 export default class LyricsService {
   /**
-   * 自动查找歌词文件
-   * 查找顺序：
-   * 1. 同目录下同名的 .lrc/.txt 文件（精确匹配）
-   * 2. 同目录下同名的文件（忽略大小写和 Unicode 编码差异）
+   * 自动查找同目录歌词文件（只认 .lrc）
+   *
+   * Windows / macOS 默认文件系统不区分大小写，`.LRC` 与 `.lrc` 是同一个文件，
+   * 逐个扩展名 existsSync 是白费（原本还多试了 .LRC/.txt/.TXT 共 4 次）。
+   * Linux 区分大小写，交给目录索引的小写归一兜住。
    */
   findLyricsFile(musicFilePath: string): string | null {
     try {
-      if (!musicFilePath) {
-        console.warn('⚠️ 查找歌词文件：音乐文件路径为空')
-        return null
-      }
+      if (!musicFilePath) return null
 
       const dir = dirname(musicFilePath)
-      const ext = extname(musicFilePath)
-      
-      // 获取不带扩展名的文件名（使用 basename 更可靠）
-      const { basename: pathBasename } = require('path')
-      const baseName = pathBasename(musicFilePath, ext)
+      const baseName = basename(musicFilePath, extname(musicFilePath))
+      if (!baseName) return null
 
-      if (!baseName) {
-        console.warn('⚠️ 查找歌词文件：无法提取文件名', musicFilePath)
-        return null
-      }
+      // 1. 精确同名 .lrc：一次 stat（命中即免去目录遍历）
+      const exact = join(dir, `${baseName}.lrc`)
+      if (existsSync(exact)) return exact
 
-      console.log(`🔍 查找歌词文件：目录=${dir}, 文件名=${baseName}`)
-
-      // 1. 精确匹配（尝试常见扩展名）
-      const extensions = ['.lrc', '.LRC', '.txt', '.TXT']
-      for (const lrcExt of extensions) {
-        // 重新构建路径，确保路径分隔符正确
-        const path = join(dir, baseName + lrcExt)
-        if (existsSync(path)) {
-          console.log(`✅ 找到歌词文件（精确匹配）: ${path}`)
-          return path
-        }
-      }
-
-      // 2. 走目录索引模糊匹配（忽略大小写与 NFC/NFD 差异），避免逐首 readdirSync
-      const found = this.lyricIndexFor(dir).get(baseName.toLowerCase().normalize('NFC'))
-      if (found) {
-        console.log(`✅ 找到歌词文件（模糊匹配）: ${found}`)
-        return found
-      }
-
-      console.log(`⚠️ 未找到歌词文件：目录=${dir}, 目标文件名=${baseName}`)
+      // 2. 目录索引：兜住大小写与 NFC/NFD 差异
+      return this.lyricIndexFor(dir).get(baseName.toLowerCase().normalize('NFC')) ?? null
     } catch (error) {
       console.error('❌ 查找歌词文件出错:', error)
     }
@@ -73,8 +48,7 @@ export default class LyricsService {
    * 同目录已有的歌词路径（无则 null）
    *
    * 只查目录索引，**不做 stat、不打日志**：批量枚举要逐首判断几万次，
-   * 用 findLyricsFile（4 次 existsSync + 多条 console.log）会把主进程卡住。
-   * 索引已按小写 NFC 归一，等价覆盖 findLyricsFile 的大小写/规范差异匹配。
+   * 逐首 stat 会把主进程卡住。索引已按小写 NFC 归一。
    */
   findSidecarLyrics(musicFilePath: string): string | null {
     if (!musicFilePath) return null
@@ -84,12 +58,7 @@ export default class LyricsService {
     return this.lyricIndexFor(dir).get(base) ?? null
   }
 
-  /**
-   * 曲目同目录是否已有同名 .lrc / .txt（忽略大小写与 NFC/NFD 差异）
-   *
-   * 与 findLyricsFile 的差别：只查索引，不做逐扩展名 existsSync，
-   * 供「整库逐首判断有无歌词」的批量场景使用（大库上省下数十万次同步 stat）。
-   */
+  /** 曲目同目录是否已有同名 .lrc（忽略大小写与 NFC/NFD 差异） */
   hasSidecarLyrics(musicFilePath: string): boolean {
     return this.findSidecarLyrics(musicFilePath) !== null
   }
@@ -99,7 +68,7 @@ export default class LyricsService {
     this.dirLyricIndex.clear()
   }
 
-  /** 目录内歌词文件索引（小写 NFC basename → 完整路径），按目录缓存复用 */
+  /** 目录内 .lrc 索引（小写 NFC basename → 完整路径），按目录缓存复用 */
   private dirLyricIndex = new Map<string, Map<string, string>>()
 
   private lyricIndexFor(dir: string): Map<string, string> {
@@ -109,8 +78,7 @@ export default class LyricsService {
     const index = new Map<string, string>()
     try {
       for (const name of readdirSync(dir)) {
-        const ext = extname(name).toLowerCase()
-        if (ext !== '.lrc' && ext !== '.txt') continue
+        if (extname(name).toLowerCase() !== '.lrc') continue
         const base = basename(name, extname(name)).toLowerCase().normalize('NFC')
         if (!index.has(base)) index.set(base, join(dir, name))
       }

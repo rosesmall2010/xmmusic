@@ -1194,7 +1194,7 @@ export default class MusicDatabase {
   /**
    * 待匹配歌词数
    *
-   * @param hasSidecar 判断「同目录是否已有同名 .lrc/.txt」；
+   * @param hasSidecar 判断「同目录是否已有同名 .lrc」；
    *   由调用方注入（目录索引属于歌词领域，放 service 层），
    *   避免把「用户已在目录里放好歌词」的歌算成待匹配
    */

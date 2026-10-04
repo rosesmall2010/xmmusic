@@ -870,18 +870,20 @@ export default class LyricsMatchService {
       return fail(e?.message || '读取歌词文件失败')
     }
 
-    const sameDir = resolve(dirname(src)) === resolve(dirname(music.filePath))
-    // 同目录且补零未改内容：直接关联原文件
-    if (sameDir && normalized === rawContent) {
-      db.updateAllMusic(music.id, { lyrics_path: src })
-      return { musicId: music.id, title, status: 'linked_local', lyricsPath: src, message: '已关联本地歌词' }
+    const target = this.resolveLrcPath(music)
+    // 源文件本身就是目标 .lrc（同目录同名）：直接关联，免去无谓重写
+    if (resolve(src) === resolve(target)) {
+      db.updateAllMusic(music.id, { lyrics_path: target })
+      return { musicId: music.id, title, status: 'linked_local', lyricsPath: target, message: '已关联本地歌词' }
     }
 
-    const target = this.resolveLrcPath(music)
+    // 其余一律规范化写成同名 .lrc：源为 .txt / 异目录 / 时间轴补零改动过，
+    // 统一落成 .lrc，避免库里混着 .txt 路径
     try {
       writeFileSync(target, normalized, 'utf8')
     } catch (e: any) {
       console.warn(`[lyricsMatch] 写入规范化歌词到 ${target} 失败`, e?.message || e)
+      // 目录不可写时的兜底：能解析就直接关联原文件，总好过丢歌词
       try {
         if (this.lyricsService.parseLyrics(src).lines.length > 0) {
           db.updateAllMusic(music.id, { lyrics_path: src })
