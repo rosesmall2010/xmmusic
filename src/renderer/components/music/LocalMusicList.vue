@@ -731,7 +731,7 @@ const stopBackgroundLoading = () => {
 const loadMore = async () => {
   // This is now handled by background loading, but we keep it for manual trigger if needed
   if (!musicStore.loading && musicStore.hasMore) {
-    await musicStore.loadMusic(musicStore.currentOffset, 20)
+    await musicStore.loadMusic(musicStore.currentOffset, 100)
   }
 }
 
