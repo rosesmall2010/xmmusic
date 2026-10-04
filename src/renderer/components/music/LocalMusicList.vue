@@ -174,6 +174,17 @@
       <button class="btn-link cancel-match" @click="cancelBatchMatchCovers">{{ $t('common.cancel') }}</button>
     </div>
 
+    <!-- 后台加载进度 -->
+    <div v-if="isBackgroundLoading" class="scan-progress-bar bg-load-progress">
+      <div class="progress-info">
+        <span class="current-file">{{ $t('localMusic.backgroundLoading') }}</span>
+        <span class="progress-stats">{{ musicStore.currentOffset }} / {{ musicStore.totalCount }} ({{ bgLoadPercent }}%)</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" :style="{ width: `${bgLoadPercent}%` }"></div>
+      </div>
+    </div>
+
     <div class="music-list-container">
       <SongList
         ref="songListRef"
@@ -375,6 +386,17 @@ const { play, pause, stopAndUnload, getAudioElement } = usePlayer()
 
 const musicList = computed(() => musicStore.musicList)
 const totalCount = computed(() => musicStore.totalCount)
+
+/** 后台正在续载剩余曲目（首屏已显示，但库里还有更多） */
+const isBackgroundLoading = computed(
+  () => musicStore.hasMore && musicStore.totalCount > 0
+)
+/** 后台加载进度百分比（0–100） */
+const bgLoadPercent = computed(() => {
+  const total = musicStore.totalCount
+  if (!total) return 0
+  return Math.min(100, Math.round((musicStore.currentOffset / total) * 100))
+})
 const songListRef = ref<{ scrollToIndex: (index: number) => Promise<void> } | null>(null)
 
 /** 一次性加载到目标下标并 instant 居中显示 */
@@ -1401,6 +1423,13 @@ const selectDirPath = async () => {
   padding: var(--spacing-md) var(--spacing-xl);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+}
+
+/* 后台加载进度：比扫描进度条更轻量 */
+.bg-load-progress {
+  opacity: 0.7;
+  padding-top: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
 }
 
 .progress-info {

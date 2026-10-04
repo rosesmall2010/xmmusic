@@ -562,7 +562,8 @@
     "locateCurrent": "Locate Current",
     "locatingCurrent": "Locating…",
     "locateCurrentTip": "Scroll the list to the currently playing song",
-    "currentNotInList": "The currently playing song is not in the local music list"
+    "currentNotInList": "The currently playing song is not in the local music list",
+    "backgroundLoading": "Loading library"
   },
   "desktopLyrics": {
     "lock": "Lock",

@@ -562,7 +562,8 @@
     "locateCurrent": "定位当前",
     "locatingCurrent": "定位中…",
     "locateCurrentTip": "将列表滚动到正在播放的歌曲",
-    "currentNotInList": "当前播放的歌曲不在本地音乐列表中"
+    "currentNotInList": "当前播放的歌曲不在本地音乐列表中",
+    "backgroundLoading": "后台加载中"
   },
   "desktopLyrics": {
     "lock": "锁定",
