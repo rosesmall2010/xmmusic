@@ -389,7 +389,11 @@ const totalCount = computed(() => musicStore.totalCount)
 
 /** 后台正在续载剩余曲目（首屏已显示，但库里还有更多） */
 const isBackgroundLoading = computed(
-  () => musicStore.hasMore && musicStore.totalCount > 0
+  () =>
+    musicStore.hasMore &&
+    musicStore.totalCount > 0 &&
+    !musicStore.searchQuery &&
+    !musicStore.isAdvancedMode
 )
 /** 后台加载进度百分比（0–100） */
 const bgLoadPercent = computed(() => {
