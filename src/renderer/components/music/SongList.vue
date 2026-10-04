@@ -251,6 +251,15 @@
         <ImageIcon :size="16" class="icon" />
         {{ matchingCoverId === contextMenu.music!.id ? $t('music.matchingCover') : $t('music.matchCover') }}
       </div>
+      <div
+        v-if="showLyricsMatch"
+        class="menu-item"
+        :class="{ disabled: !contextMenu.hasValidCover }"
+        @click="handleExportCover(contextMenu.music!)"
+      >
+        <Download :size="16" class="icon" />
+        {{ $t('music.exportCover') }}
+      </div>
       <div v-if="showLyricsMatch" class="menu-item" @click="handlePickLocalLyrics(contextMenu.music!)">
         <FileText :size="16" class="icon" />
         {{ $t('music.pickLocalLyrics') }}
@@ -353,7 +362,7 @@ import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { getCoverUrl } from '@/utils/media'
-import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2, ChevronRight } from 'lucide-vue-next'
+import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2, ChevronRight, Download } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
 import NewTagInfoModal from '@/components/music/NewTagInfoModal.vue'
@@ -1239,6 +1248,17 @@ const handlePickLocalCover = async (music: MusicItem) => {
   }
 }
 
+/** 右键：把单曲封面另存到用户选择的位置 */
+const handleExportCover = async (music: MusicItem) => {
+  closeContextMenu()
+  try {
+    const savedPath = await window.electronAPI.exportCover(music.id)
+    if (savedPath) showToast(t('music.exportCoverSuccess', { path: savedPath }))
+  } catch (error: any) {
+    alert(t('music.exportCoverFailed', { reason: error?.message || error }))
+  }
+}
+
 const openAddToPlaylist = (music: MusicItem) => {
   selectedMusic.value = music
   showAddToPlaylist.value = true
@@ -1821,6 +1841,12 @@ defineExpose({ scrollToIndex })
 
 .menu-item.has-submenu {
   padding: 0;
+}
+
+.menu-item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .menu-item-main {

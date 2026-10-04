@@ -213,6 +213,7 @@ export interface ElectronAPI {
   // 封面匹配（S1.1）
   matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
   hasValidCoverForMusic: (musicId: number) => Promise<boolean>
+  exportCover: (musicId: number) => Promise<string | null>
   listCoverCandidates: (musicId: number) => Promise<{
     hasValidCover: boolean
     candidates: CoverMatchCandidate[]

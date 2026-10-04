@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { resolve, normalize, sep, join } from 'path'
+import { readFile, writeFile } from 'fs/promises'
+import { resolve, normalize, sep, join, dirname } from 'path'
 import MusicDatabase, { calculateFilePathMD5 } from '../database/db'
 import FileScanner from '../services/fileScanner'
 import ID3Fixer from '../services/id3Fixer'
@@ -8,7 +9,7 @@ import FileExporter from '../services/fileExporter'
 import ShortcutManager from '../services/shortcutManager'
 import LyricsService from '../services/lyricsService'
 import LyricsMatchService from '../services/lyricsMatchService'
-import CoverMatchService from '../services/coverMatchService'
+import CoverMatchService, { detectImageKind } from '../services/coverMatchService'
 import TrayService from '../services/trayService'
 import MetadataEditor from '../services/metadataEditor'
 import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsStore'
@@ -31,6 +32,9 @@ import {
   clampMatchConcurrency,
   DEFAULT_MATCH_CONCURRENCY
 } from '../../shared/utils/matchConcurrency'
+
+/** 设置表 key：最近一次导出封面所在目录 */
+const LAST_COVER_EXPORT_DIR_KEY = 'lastCoverExportDir'
 
 /** 从高级搜索条件生成历史文案；仅排序/limit 等程序化查询返回 null */
 function buildAdvancedSearchHistoryLabel(criteria: Record<string, unknown> | null | undefined): string | null {
@@ -1518,6 +1522,49 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     const music = db.getMusicById(musicId)
     if (!music) throw new Error('音乐不存在')
     return coverMatchService.hasValidCover(music)
+  })
+
+  /** 导出单曲封面到用户选择的位置；返回保存路径，取消返回 null */
+  ipcMain.handle('export-cover', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    const readCover = async () => {
+      const music = db.getMusicById(musicId)
+      if (!music) throw new Error('音乐不存在')
+      if (!coverMatchService.hasValidCover(music)) throw new Error('该歌曲没有有效封面')
+      return { music, buf: await readFile(music.coverPath!.trim()) }
+    }
+    const { music, buf } = await readCover()
+    // 扫描提取的内嵌封面只区分 png/jpg，扩展名不可信，按文件头定
+    const kind = detectImageKind(buf)
+    const ext = kind === 'webp' ? '.webp' : kind === 'png' ? '.png' : kind === 'gif' ? '.gif' : '.jpg'
+    const baseName = [music.artist, music.title || music.fileName]
+      .map((s) => (s || '').trim())
+      .filter(Boolean)
+      .join(' - ')
+      // Windows 保留字符、控制字符非法；末尾的点/空格也非法；限长避免超出文件名上限
+      .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+      .slice(0, 120)
+      .replace(/[. ]+$/, '') || 'cover'
+    // 默认打开上次导出的目录；首次或该目录已不存在时用系统下载目录
+    const lastDir = db.getSetting(LAST_COVER_EXPORT_DIR_KEY)
+    const initialDir = typeof lastDir === 'string' && lastDir && existsSync(lastDir)
+      ? lastDir
+      : app.getPath('downloads')
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: join(initialDir, `${baseName}${ext}`),
+      filters: [{ name: '图片文件', extensions: [ext.slice(1)] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    // 对话框打开期间封面可能被重新匹配（旧文件随之删除），保存前重读最新封面
+    const latest = await readCover()
+    await writeFile(result.filePath, latest.buf)
+    // 文件已保存成功，记录目录失败不能让渲染端误报导出失败
+    try {
+      db.setSetting(LAST_COVER_EXPORT_DIR_KEY, dirname(result.filePath))
+    } catch (error) {
+      console.warn('记录最近导出封面目录失败:', error)
+    }
+    return result.filePath
   })
 
   /** 列出封面候选（不设相似度下限；持锁避免与批量/单曲 apply 并发抢服务） */

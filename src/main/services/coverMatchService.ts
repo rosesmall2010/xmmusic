@@ -133,10 +133,10 @@ const extractCoverUrlFromSongJson = (s: any): string | undefined => {
 
 const isMp3Path = (filePath: string) => /\.mp3$/i.test(filePath)
 
-type ImageKind = 'jpeg' | 'png' | 'gif' | 'webp'
+export type ImageKind = 'jpeg' | 'png' | 'gif' | 'webp'
 
 /** 用文件头识别图片类型（比 Content-Type 更可靠） */
-const detectImageKind = (buf: Buffer): ImageKind | null => {
+export const detectImageKind = (buf: Buffer): ImageKind | null => {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xd8) return 'jpeg'
   if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
     return 'png'

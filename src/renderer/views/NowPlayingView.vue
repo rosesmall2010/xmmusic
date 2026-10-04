@@ -271,7 +271,7 @@
           >
             <FileText :size="20" />
             <span class="btn-tooltip">
-              {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+              {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyrics') }}
             </span>
           </button>
 
@@ -282,7 +282,7 @@
           >
             <ImageIcon :size="20" />
             <span class="btn-tooltip">
-              {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCoverOnline') }}
+              {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCover') }}
             </span>
           </button>
 
@@ -433,7 +433,7 @@
     </div>
     </Teleport>
 
-    <!-- 歌词区右键菜单：偏移校准 + 在线匹配歌词 -->
+    <!-- 歌词区右键菜单：偏移校准 + 匹配歌词 -->
     <Teleport to="#app">
     <div
       v-if="lyricsContextMenu.visible"
@@ -516,7 +516,7 @@
         @click="matchLyricsFromMenu"
       >
         <FileText :size="16" class="icon" />
-        {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyricsOnline') }}
+        {{ matchingLyrics ? $t('nowPlaying.matchingLyrics') : $t('nowPlaying.matchLyrics') }}
       </div>
       <div
         class="menu-item"
@@ -524,7 +524,15 @@
         @click="matchCoverFromMenu"
       >
         <ImageIcon :size="16" class="icon" />
-        {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCoverOnline') }}
+        {{ matchingCover ? $t('nowPlaying.matchingCover') : $t('nowPlaying.matchCover') }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: !currentMusic || !lyricsContextMenu.hasValidCover }"
+        @click="exportCoverFromMenu"
+      >
+        <Download :size="16" class="icon" />
+        {{ $t('music.exportCover') }}
       </div>
       <div
         class="menu-item"
@@ -588,7 +596,7 @@ import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
 import type { MusicItem, Playlist } from '@shared/types/music'
-import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon, Loader2, ChevronRight } from 'lucide-vue-next'
+import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon, Loader2, ChevronRight, Download } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
 import EqualizerPanel from '@/components/music/EqualizerPanel.vue'
 import LyricsMatchSelectModal from '@/components/music/LyricsMatchSelectModal.vue'
@@ -1146,8 +1154,14 @@ const showQueueContextMenu = async (event: MouseEvent, music: MusicItem, index: 
   }
 }
 
-// —— 歌词区右键菜单：偏移校准 + 在线匹配歌词 ——
-const lyricsContextMenu = reactive({ visible: false, x: 0, y: 0 })
+// —— 歌词区右键菜单：偏移校准 + 匹配歌词 ——
+const lyricsContextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  /** 主进程判定：当前曲封面路径存在且可读 */
+  hasValidCover: false
+})
 
 const closeLyricsContextMenu = () => {
   lyricsContextMenu.visible = false
@@ -1186,6 +1200,7 @@ const showLyricsContextMenu = async (event: MouseEvent) => {
   playlistSubmenuOpenLeft.value = false
   playlistSubmenuTop.value = 0
   recentPlaylists.value = []
+  lyricsContextMenu.hasValidCover = false
   lyricsContextMenu.visible = true
   lyricsContextMenu.x = event.clientX
   lyricsContextMenu.y = event.clientY
@@ -1193,6 +1208,13 @@ const showLyricsContextMenu = async (event: MouseEvent) => {
   adjustLyricsContextMenuPosition()
   const targetId = currentMusic.value?.id
   if (targetId == null) return
+  window.electronAPI.hasValidCoverForMusic(targetId)
+    .then((hasCover) => {
+      if (lyricsContextMenu.visible && currentMusic.value?.id === targetId) {
+        lyricsContextMenu.hasValidCover = hasCover
+      }
+    })
+    .catch((e) => console.error('Failed to check cover status', e))
   try {
     const list = await window.electronAPI.getRecentPlaylistsByLastAdd(10)
     if (!lyricsContextMenu.visible || currentMusic.value?.id !== targetId) return
@@ -1265,6 +1287,19 @@ const matchCoverFromMenu = () => {
   if (!currentMusic.value || matchingCover.value || showCoverPick.value || applyingCoverCandidate.value) return
   if (matchingLyrics.value || showLyricsPick.value || applyingLyricsCandidate.value) return
   handleOnlineMatchCover()
+}
+
+/** 歌词区右键：把当前曲封面另存到用户选择的位置 */
+const exportCoverFromMenu = async () => {
+  closeLyricsContextMenu()
+  const music = currentMusic.value
+  if (!music) return
+  try {
+    const savedPath = await window.electronAPI.exportCover(music.id)
+    if (savedPath) showToast(t('music.exportCoverSuccess', { path: savedPath }))
+  } catch (error: any) {
+    alert(t('music.exportCoverFailed', { reason: error?.message || error }))
+  }
 }
 
 /** 歌词区右键：直接选择本地歌词文件应用到当前曲（不走在线搜索） */

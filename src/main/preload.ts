@@ -302,6 +302,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   matchCover: (musicId: number, options?: { force?: boolean }) =>
     ipcRenderer.invoke('match-cover', musicId, options),
   hasValidCoverForMusic: (musicId: number) => ipcRenderer.invoke('has-valid-cover', musicId),
+  exportCover: (musicId: number) => ipcRenderer.invoke('export-cover', musicId),
   listCoverCandidates: (musicId: number) =>
     ipcRenderer.invoke('list-cover-candidates', musicId),
   applyCoverCandidate: (musicId: number, songId: number, options?: { coverUrl?: string; force?: boolean }) =>
@@ -522,6 +523,7 @@ declare global {
       removeLyricsMatchFinished: () => void
       matchCover: (musicId: number, options?: { force?: boolean }) => Promise<CoverMatchResult>
       hasValidCoverForMusic: (musicId: number) => Promise<boolean>
+      exportCover: (musicId: number) => Promise<string | null>
       listCoverCandidates: (musicId: number) => Promise<{
         hasValidCover: boolean
         candidates: CoverMatchCandidate[]
