@@ -1188,10 +1188,6 @@ export default class MusicDatabase {
   }
 
   /**
-   * 统计无歌词（或歌词文件已丢失）的歌曲数
-   * 空路径用 SQL；路径失效需回磁盘核对
-   */
-  /**
    * 待匹配歌词数
    *
    * @param hasSidecar 判断「同目录是否已有同名 .lrc」；

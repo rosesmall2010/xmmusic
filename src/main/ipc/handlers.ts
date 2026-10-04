@@ -1406,17 +1406,21 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           if (page.length < pageSize) break
         }
 
+        if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
+
         // 分页已结束，补写 sidecar 关联（播放入口与右键菜单按 lyrics_path 判断有无歌词）
-        for (const link of sidecarLinks) {
-          db.updateAllMusic(link.id, { lyrics_path: link.path })
-        }
+        // 必须走事务：逐条 updateAllMusic 各自隐式提交，还会逐条触发 all_music 的
+        // FTS 更新触发器，几千首时是几千次 fsync + 几千次 FTS 重写，足以卡住主进程
         if (sidecarLinks.length > 0) {
+          db.runInTransaction(() => {
+            for (const link of sidecarLinks) {
+              db.updateAllMusic(link.id, { lyrics_path: link.path })
+            }
+          })
           console.log(
             `[lyricsMatch] 批量匹配跳过 ${sidecarLinks.length} 首同目录已有歌词的歌，已补写关联`
           )
         }
-
-        if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
 
         // sidecar 关联按 linked_local 计入摘要，渲染端据此原位更新列表
         // （否则这些歌在界面里仍显示「无歌词」，右键还提示「匹配歌词」）
