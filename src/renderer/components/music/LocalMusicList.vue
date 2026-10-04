@@ -598,7 +598,7 @@ onMounted(async () => {
     await performLocateScroll(pendingIndex)
   } else {
     // 回页强制刷新，避免卸载期间批量匹配完成刷新事件丢失导致 lyricsPath 过期
-    await musicStore.loadMusic(0, 20, true)
+    await musicStore.loadMusic(0, 100, true)
     startBackgroundLoading()
   }
 
@@ -642,7 +642,7 @@ onMounted(async () => {
   unsubMusicUpdated = window.electronAPI.on('music-updated', async (_event: any, filePath: string) => {
     const index = musicStore.musicList.findIndex(m => m.filePath === filePath)
     if (index !== -1) {
-      await musicStore.loadMusic(0, 20, true)
+      await musicStore.loadMusic(0, 100, true)
       startBackgroundLoading()
     }
   })
@@ -675,7 +675,7 @@ onUnmounted(() => {
 const refreshListAfterMatch = async () => {
   stopBackgroundLoading()
   try {
-    await musicStore.loadMusic(0, 20, true)
+    await musicStore.loadMusic(0, 100, true)
   } finally {
     startBackgroundLoading()
   }
@@ -689,7 +689,7 @@ const startBackgroundLoading = async () => {
     setTimeout(async () => {
       if (token !== backgroundLoadToken) return
       if (musicStore.hasMore && !musicStore.loading) {
-        await musicStore.loadMusic(musicStore.currentOffset, 20)
+        await musicStore.loadMusic(musicStore.currentOffset, 100)
         if (token !== backgroundLoadToken) return
         // Continue loading next batch
         startBackgroundLoading()
@@ -861,7 +861,7 @@ const handleScan = async () => {
       })
 
       // 扫描完成后刷新列表
-      await musicStore.loadMusic(0, 20, true)
+      await musicStore.loadMusic(0, 100, true)
       startBackgroundLoading()
   } catch (error: any) {
     if (error.message !== '扫描已取消') {
@@ -918,7 +918,7 @@ const handleCleanupMissing = async () => {
 
     musicStore.clearSearchCaches()
     stopBackgroundLoading()
-    await musicStore.loadMusic(0, Math.max(20, musicStore.musicList.length || 20), true)
+    await musicStore.loadMusic(0, Math.max(100, musicStore.musicList.length || 100), true)
     if (musicStore.hasMore) {
       startBackgroundLoading()
     }
@@ -1048,7 +1048,7 @@ const handleClearAll = async () => {
     }
 
     try {
-      await musicStore.loadMusic(0, 20, true)
+      await musicStore.loadMusic(0, 100, true)
       // 清空后若仍有目录可扫，不自动续载空页；有数据时再后台加载
       if (musicStore.hasMore) {
         startBackgroundLoading()

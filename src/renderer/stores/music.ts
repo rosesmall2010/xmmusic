@@ -7,7 +7,7 @@ export const useMusicStore = defineStore('music', () => {
   const musicList = shallowRef<MusicItem[]>([])
   const totalCount = ref(0)
   const currentOffset = ref(0)
-  const pageSize = ref(50)
+  const pageSize = ref(100)
   const loading = ref(false)
   const searchQuery = ref('')
   const searchResults = ref<MusicItem[]>([])
