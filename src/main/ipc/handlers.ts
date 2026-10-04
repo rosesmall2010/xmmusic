@@ -1348,6 +1348,10 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         // 必须等分页走完再写——否则 lyrics_path 被填上后这些行会掉出
         // getMusicWithoutLyrics 的过滤条件，OFFSET 分页会漏掉后续的行。
         const sidecarLinks: Array<{ id: number; path: string }> = []
+        // 每处理若干首让出一次事件循环：枚举阶段是纯同步循环，
+        // 几万首连跑会把主进程（含界面）卡住
+        const ENUM_YIELD_EVERY = 500
+        let enumerated = 0
 
         let offset = 0
         while (true) {
@@ -1356,15 +1360,20 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           if (page.length === 0) break
           for (const m of page) {
             if (seen.has(m.id)) continue
-            // 用户在目录里放好的歌词：不算待匹配，也不该被再匹配一遍
-            const sidecar = m.filePath ? lyricsService.findLyricsFile(m.filePath) : null
+            // 用户在目录里放好的歌词：不算待匹配，也不该被再匹配一遍。
+            // 用只查索引的接口（每目录一次 readdirSync），否则逐首 stat + 打日志会卡住枚举
+            const sidecar = lyricsService.findSidecarLyrics(m.filePath)
             if (sidecar) {
               seen.add(m.id)
               sidecarLinks.push({ id: m.id, path: sidecar })
-              continue
+            } else {
+              seen.add(m.id)
+              songs.push(m)
             }
-            seen.add(m.id)
-            songs.push(m)
+            if (++enumerated % ENUM_YIELD_EVERY === 0) {
+              await new Promise<void>((resolve) => setImmediate(resolve))
+              if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
+            }
           }
           offset += page.length
           if (page.length < pageSize) break
@@ -1378,15 +1387,19 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           if (page.length === 0) break
           for (const m of page) {
             if (seen.has(m.id)) continue
+            // 本循环逐行 existsSync 判断路径是否失效，同样需要让出事件循环
             if (m.lyricsPath && !existsSync(m.lyricsPath)) {
-              const sidecar = m.filePath ? lyricsService.findLyricsFile(m.filePath) : null
-              if (sidecar) {
-                seen.add(m.id)
-                sidecarLinks.push({ id: m.id, path: sidecar })
-                continue
-              }
+              const sidecar = lyricsService.findSidecarLyrics(m.filePath)
               seen.add(m.id)
-              songs.push(m)
+              if (sidecar) {
+                sidecarLinks.push({ id: m.id, path: sidecar })
+              } else {
+                songs.push(m)
+              }
+            }
+            if (++enumerated % ENUM_YIELD_EVERY === 0) {
+              await new Promise<void>((resolve) => setImmediate(resolve))
+              if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
             }
           }
           offset += page.length

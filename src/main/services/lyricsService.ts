@@ -70,17 +70,28 @@ export default class LyricsService {
   }
 
   /**
+   * 同目录已有的歌词路径（无则 null）
+   *
+   * 只查目录索引，**不做 stat、不打日志**：批量枚举要逐首判断几万次，
+   * 用 findLyricsFile（4 次 existsSync + 多条 console.log）会把主进程卡住。
+   * 索引已按小写 NFC 归一，等价覆盖 findLyricsFile 的大小写/规范差异匹配。
+   */
+  findSidecarLyrics(musicFilePath: string): string | null {
+    if (!musicFilePath) return null
+    const dir = dirname(musicFilePath)
+    const base = basename(musicFilePath, extname(musicFilePath)).toLowerCase().normalize('NFC')
+    if (!base) return null
+    return this.lyricIndexFor(dir).get(base) ?? null
+  }
+
+  /**
    * 曲目同目录是否已有同名 .lrc / .txt（忽略大小写与 NFC/NFD 差异）
    *
    * 与 findLyricsFile 的差别：只查索引，不做逐扩展名 existsSync，
    * 供「整库逐首判断有无歌词」的批量场景使用（大库上省下数十万次同步 stat）。
    */
   hasSidecarLyrics(musicFilePath: string): boolean {
-    if (!musicFilePath) return false
-    const dir = dirname(musicFilePath)
-    const base = basename(musicFilePath, extname(musicFilePath)).toLowerCase().normalize('NFC')
-    if (!base) return false
-    return this.lyricIndexFor(dir).has(base)
+    return this.findSidecarLyrics(musicFilePath) !== null
   }
 
   /** 清空目录索引缓存（目录内容变化后调用） */
