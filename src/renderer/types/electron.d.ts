@@ -89,6 +89,7 @@ export interface ElectronAPI {
   cleanupMissingLocalMusic: () => Promise<{
     checked: number
     removed: number
+    removedUnplayable: number
     playlistsUpdated: number
     related: {
       localMusic: number

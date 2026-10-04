@@ -10,10 +10,13 @@
 ### 改善
 - **清理失效记录** 同时删除标记为感叹号（`is_playable = 0`）的无法播放曲目，不再只清理物理丢失的文件；播放队列、收藏、歌单、最近播放、发现列表同步清理；提示文案区分「物理丢失」与「无法播放」两类数量
 - **搜索结果不再限 50 条**，一次性全部返回（原 `db.searchMusic` 默认 `limit = 50` 的硬编码上限去掉）
-- **本地列表分页批大小**从 20 条提升到 100 条（首屏加载与后台续载批次统一）
+- **本地列表分页批大小**从 20 条提升到 100 条（首屏加载、后台续载、扫描结束后刷新统一）
 - **后台加载进度条**：本地列表后台续载剩余曲目时在页面顶部显示「后台加载中 x / total (xx%)」，加载完成后自动消失；搜索模式或高级搜索模式下不显示
 
 ### 修复
+- **批量匹配歌词/封面后整表重载**：批量结束原先发 `music-list-refresh` 触发 `loadMusic(0, 100, true)` 全量重拉列表，几万首库要重跑一次查询、重建整个列表对象。现改为只按 `summary.results` 里每首成功曲的 `musicId` 与 `lyricsPath`/`coverPath` 原位合并到内存对象，值未变则不复制、不触发重渲染
+- **单个匹配歌词/封面后整表重载**：单曲匹配成功后原先 `emit('songs-updated')` 触发 `loadMusic(0, N, true)` 全量重拉；主进程单曲封面匹配（`match-cover` / `apply-cover-candidate` / `apply-local-cover`）成功时还额外发 `music-list-refresh`，同样触发整表重拉。现统一改为只派发 `music-metadata-updated`（携带 `id` 与 `lyricsPath`/`coverPath`），本地列表、播放队列、当前播放、歌单/收藏/最近/发现各自按 id 原位合并那一首，**正在显示的封面或歌词同步刷新**；`music-list-refresh` 不再由单曲匹配发出（ID3 批量修复、批量删除/同步等结构性操作仍保留）
+- **工具栏「待匹配封面数」匹配后不更新**：单曲 / 批量封面匹配都不再发 `music-list-refresh`，计数失去刷新触发点；现单曲封面匹配由列表的 `music-metadata-updated` 处理补刷，批量封面由结束摘要的 watch 补刷
 - **切换到本地音乐页每次都重新加载**：`onMounted` 用 `force: true` 强制重载，导致每次从其他页面切回来都触发一次完整的数据加载。现改为 `force: false`（默认），已有数据时直接复用；批量匹配、扫描完成时各自调用 `force: true` 刷新，保持数据及时性
 - **编辑标签清空艺术家/标题后二次打开无法输入**：`buildUpdates()` 对 `artist`/`title` 只做 `.trim()` 不做空字符串 fallback，保存空值后 `dbSnapshot` 与 `editedData` 都是 `''`，`hasChanges` 永远 false，保存按钮灰掉；表现为「能输入但按钮不亮，按一下 Backspace 才解禁」。现 `artist`/`title` 空字符串转 `undefined`，主进程写库前兜底「未知艺术家」/「未知标题」，防止写入空值违反 `NOT NULL` 约束
 - **Windows 下写入 ID3 标签报 EPERM**：Windows 不支持 `rename(2)` 原子覆盖已存在目标文件；现乐观先 rename，遇 `EPERM`/`EEXIST` 时先 `unlink` 再 rename，与 macOS/Linux 行为对齐
@@ -24,9 +27,6 @@
 - 后台预载撞上别处的整表刷新时改为下一拍重试，不再直接退出循环（原逻辑一次撞车就永久停住）
 - 新增运行期索引 `local_music(added_at DESC, music_id DESC)`：原索引只覆盖 `added_at`，游标分页的 ties 比较拿不到索引支持。刻意不走 migration —— 新增迁移要递增 `DB_VERSION`，而 `initialize` 的版本校验在不匹配时会直接删库重建
 - 新增 `npm run check:pagination`：在真实 Electron 进程里跑真实 `getLocalMusicPage`，校验游标序列与全量排序逐行一致、无重复。守的是 `SELECT am.*` 会遮蔽 `lm.added_at` 这个坑（漏写别名会让翻页断在第一页）
-
-### 修复
-- **第一次手动匹配封面成功、第二次点「匹配封面」毫无反应**：`libraryBusy` 与 `manualMatchUiBusy` 闭合成自引用环 —— SongList 用 `isMatchFlowBusy()`（内含 `props.libraryBusy`）的结果回写 `manualMatchUiBusy`，而传进去的 `libraryBusy` 又由 `isLibraryBusy` 推出、后者含 `manualMatchUiBusy`。于是第一次匹配成功后在 `finally` 里清标志时，读到的 `libraryBusy` 正是由那个还没清掉的标志推出来的，永远清不回 false；此后每次右键都在 `if (isMatchFlowBusy()) return` 被静默吞掉。现新增 `isExternalLibraryBusy`（排除 `manualMatchUiBusy`，仅含歌词/封面批量、扫描、清理）传给 SongList，工具栏禁用仍用 `isLibraryBusy`。此环与平台无关，macOS 同样会中招，只是需要连续匹配两次才暴露
 - **扫描卡在最后一个文件、永远停在「扫描中」**：读取会阻塞的普通文件（失联的网络盘、下载不下来的 iCloud/OneDrive 占位文件、坏道）会让 `music-metadata` 与 MD5 读流**双双永不 settle** —— 既不抛错也不结束，并发池里那一路就此永久挂起。`current++` 在 `finally` 里，所以进度停在「总数 − 1」不动，日志里也看不出是哪个文件。现给单文件处理加 120s 超时护栏：超时文件记为失败、控制台打出完整路径、扫描继续走完。注意超时只是放行扫描，并不能真正中断底层读取，挂住的 fd 会留到进程退出（需 music-metadata 支持 AbortSignal 才能根治）
 - 扫描结果里的 `failed` / `errors` 原先被整个丢弃，失败或超时的文件静默不入库，用户只会发现「某首歌没进来」却不知为何。现在扫描结束若有失败项会提示数量并指向控制台日志
 - 扫描中途切到「本地音乐」页看不到任何进度：进度监听加了 `isScanning` 门，但该标志只由本页 `handleScan` 或 `scan-state-changed` 的「开始」事件点亮；从设置页/目录对话框发起扫描后再切过来，开始事件早已错过，整轮扫描一条进度都显示不出。现挂载时经已有的 `get-scan-state` 回填状态与进度（带代际校验，避免 await 期间扫描已结束又被点亮）

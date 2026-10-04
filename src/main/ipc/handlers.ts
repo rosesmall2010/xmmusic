@@ -1404,7 +1404,6 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         })
 
         if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('music-list-refresh')
           mainWindow.webContents.send('lyrics-match-finished', summary)
         }
         return summary
@@ -1436,8 +1435,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
       const music = db.getMusicById(musicId)
       if (!music) throw new Error('音乐不存在')
       const result = await coverMatchService.matchOne(db, music, { force: options?.force === true })
+      // 只发 cover-matched：渲染端转成 music-metadata-updated 原位更新那一首，
+      // 不再发 music-list-refresh 触发本地列表全量重拉（单曲匹配只改这一首）
       if (result.status === 'matched' && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('music-list-refresh')
         mainWindow.webContents.send('cover-matched', {
           musicId: result.musicId,
           coverPath: result.coverPath,
@@ -1491,7 +1491,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           options || {}
         )
         if (result.status === 'matched' && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('music-list-refresh')
+          // 同 match-cover：只发 cover-matched，不触发列表全量重拉
           mainWindow.webContents.send('cover-matched', {
             musicId: result.musicId,
             coverPath: result.coverPath,
@@ -1519,7 +1519,7 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           options || {}
         )
         if (result.status === 'matched' && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('music-list-refresh')
+          // 同 match-cover：只发 cover-matched，不触发列表全量重拉
           mainWindow.webContents.send('cover-matched', {
             musicId: result.musicId,
             coverPath: result.coverPath,
@@ -1663,9 +1663,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         })
 
         if (!mainWindow.isDestroyed()) {
-          // 勿对每首成功曲发 cover-matched：App/列表/队列会对每次事件做整表拷贝，
-          // 批量几百上千首时渲染进程会卡死到只能强杀。对齐歌词批量：只刷列表 + finished。
-          mainWindow.webContents.send('music-list-refresh')
+          // summary.results 已包含每首成功曲的 musicId + coverPath，
+          // 渲染端直接原位更新内存对象，不再需要全量刷新列表
           mainWindow.webContents.send('cover-match-finished', summary)
         }
         return summary

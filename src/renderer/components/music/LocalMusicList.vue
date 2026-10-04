@@ -369,6 +369,7 @@ import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { useCoverMatchStore } from '@/stores/coverMatch'
 import { useSettingsStore } from '@/stores/settings'
 import { formatDurationDhms } from '@/utils/formatDuration'
+import { mergeMatchPaths } from '@/utils/mergeMatchPaths'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
 import type { LyricsMatchWorkerTaskStatus } from '@shared/types/lyrics'
@@ -623,10 +624,18 @@ onMounted(async () => {
     // 播放栏跳转过来：跳过默认首屏加载，直接定位
     await performLocateScroll(pendingIndex)
   } else {
-    // 已有数据时跳过重载，避免切回来时不必要的重新加载；
-    // 批量匹配/扫描完成后会各自调 loadMusic(0, ..., true) 强制刷新
+    // 已有数据时跳过重载，避免切回来时不必要的重新加载
     await musicStore.loadMusic(0, 100)
     startBackgroundLoading()
+  }
+
+  // 回填离开期间完成的批量匹配结果：watch 只在 lastSummary 变化时触发，
+  // 本页卸载期间完成的匹配不会补上，这里主动应用一次（幂等，取不到就是 no-op）
+  if (lyricsMatchStore.lastSummary) {
+    applyBatchResultToMemory(lyricsMatchStore.lastSummary.results)
+  }
+  if (coverMatchStore.lastSummary) {
+    applyBatchResultToMemory(coverMatchStore.lastSummary.results)
   }
 
   // 加载目录列表
@@ -657,7 +666,7 @@ onMounted(async () => {
     if (!state.isScanning) {
       scanProgress.value = null
       // 扫描结束后刷新列表
-      musicStore.loadMusic(0, 20, true)
+      musicStore.loadMusic(0, 100, true)
     }
   })
 
@@ -675,6 +684,8 @@ onMounted(async () => {
   })
 
   unsubMusicListRefresh = window.electronAPI.on('music-list-refresh', async () => {
+    // 注意：批量匹配已不再发这个事件（改为 finished 事件里按 changed id 原位更新），
+    // 但 ID3 批量修复 / 单曲封面匹配 / 应用候选等路径仍靠它做全量刷新，不能改成只刷计数
     try {
       await refreshListAfterMatch()
     } catch (e) {
@@ -683,6 +694,32 @@ onMounted(async () => {
     await refreshMissingCoverCount()
   })
 })
+
+/**
+ * 批量匹配结束：只更新内存里有变化的歌曲，不重新拉取列表
+ *
+ * 监听 store 的 lastSummary（store 的 ensureListeners 已持有 IPC 监听、
+ * 跨路由不注销），而不是在这里再注册一份——后者会在每次进入本页时累积，
+ * 且没法用 removeAllListeners 清理（会误杀 store 的监听器）。
+ * watch 随组件卸载自动停止。
+ */
+watch(
+  () => lyricsMatchStore.lastSummary,
+  (summary) => {
+    if (!summary) return
+    applyBatchResultToMemory(summary.results)
+  }
+)
+
+watch(
+  () => coverMatchStore.lastSummary,
+  (summary) => {
+    if (!summary) return
+    applyBatchResultToMemory(summary.results)
+    // 批量封面匹配不再发 music-list-refresh，工具栏「待匹配封面数」需在此自行刷新
+    void refreshMissingCoverCount()
+  }
+)
 
 onUnmounted(() => {
   if (matchClockTimer) {
@@ -765,7 +802,7 @@ const handleBatchMatchLyrics = async () => {
       }))
     })
 
-    // 列表由主进程批量结束时发出的 music-list-refresh 统一刷新
+    // 内存里的歌词由 lyricsMatchStore.lastSummary 的 watch 按 changed id 原位更新
     const summary = await lyricsMatchStore.startBatchMatch()
 
     if (summary.cancelled) {
@@ -824,7 +861,7 @@ const handleBatchMatchCovers = async () => {
     })
 
     const summary = await coverMatchStore.startBatchMatch()
-    await refreshListAfterMatch()
+    // 内存里的封面由 cover-match-finished 事件按 changed id 原位更新，不再全量重载
     await refreshMissingCoverCount()
 
     if (summary.cancelled) {
@@ -1121,6 +1158,20 @@ const handleSongsUpdated = async () => {
 }
 
 // 监听元数据更新事件，只更新被修改的歌曲
+/**
+ * 批量匹配结束后，只把有变化的歌曲合并进内存（与单个匹配走同一套思路）
+ *
+ * 具体合并规则与边界（失败项不动、值未变不重建对象）已抽到
+ * mergeMatchPaths 并有单测覆盖。
+ */
+const applyBatchResultToMemory = (
+  results: Array<{ musicId: number; lyricsPath?: string; coverPath?: string }> | undefined
+) => {
+  const next = mergeMatchPaths(musicStore.musicList, results)
+  // shallowRef 数组需要整体重新赋值才能触发响应式；无变化时 next 为 null，跳过赋值
+  if (next) musicStore.musicList = next
+}
+
 const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail
   if (!updatedMusic || !updatedMusic.id) return
@@ -1133,6 +1184,9 @@ const handleMetadataUpdate = (event: CustomEvent) => {
     updatedList[index] = { ...updatedList[index], ...updatedMusic }
     musicStore.musicList = updatedList
   }
+
+  // 封面变化会影响工具栏「待匹配封面数」（单曲封面匹配不再发 music-list-refresh，由此处补刷）
+  if (updatedMusic.coverPath) void refreshMissingCoverCount()
 }
 
 const playMusic = async (music: MusicItem) => {

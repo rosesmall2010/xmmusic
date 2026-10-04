@@ -937,7 +937,13 @@ const onContextMenuViewportChange = () => {
 const applyMatchResult = (music: MusicItem, result: { status: string; lyricsPath?: string; message?: string }) => {
   if ((result.status === 'matched' || result.status === 'linked_local') && result.lyricsPath) {
     music.lyricsPath = result.lyricsPath
-    emit('songs-updated')
+    // 只更新这首：派发事件让本地列表 / 队列 / 当前播放 / 各子页面的 handleMetadataUpdate 原位更新，
+    // 不做全量重载（用户要求单个匹配只改匹配的那首，正在显示的同步刷新）
+    window.dispatchEvent(
+      new CustomEvent('music-metadata-updated', {
+        detail: { id: music.id, lyricsPath: result.lyricsPath }
+      })
+    )
   }
   if (result.status === 'matched' || result.status === 'linked_local') {
     alert(t('music.matchLyricsSuccess', { title: music.title }))
@@ -1077,8 +1083,8 @@ const applyCoverMatchResult = (
         detail: { id: music.id, coverPath: result.coverPath }
       })
     )
-    emit('songs-updated')
     // 手动选图确认后不再弹成功框，封面变化已即时反映
+    // 不再 emit('songs-updated')：上面的事件已让本地列表 / 队列 / 当前播放原位更新，无需全量重载
   } else if (result.status === 'skipped_has_cover') {
     alert(t('music.matchCoverAlreadyHas', { title: music.title }))
   } else {
