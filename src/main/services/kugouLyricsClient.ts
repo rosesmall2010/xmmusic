@@ -23,7 +23,8 @@ export interface KugouLyricTrack {
 
 type CacheEntry = KugouLyricTrack & { lyric?: string }
 
-const fetchText = async (url: string): Promise<string> => {
+const fetchText = async (url: string, externalSignal?: AbortSignal): Promise<string> => {
+  const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS)
   const res = await net.fetch(url, {
     method: 'GET',
     headers: {
@@ -31,7 +32,7 @@ const fetchText = async (url: string): Promise<string> => {
       Accept: 'application/json,text/plain,*/*',
       Referer: 'https://www.kugou.com/'
     },
-    signal: AbortSignal.timeout(TIMEOUT_MS)
+    signal: externalSignal ? AbortSignal.any([timeoutSignal, externalSignal]) : timeoutSignal
   })
   if (!res.ok) throw new Error(`酷狗 HTTP ${res.status}`)
   return await res.text()
@@ -57,6 +58,7 @@ class KugouLyricsClient {
   async search(params: {
     keyword: string
     durationSec?: number
+    signal?: AbortSignal
   }): Promise<KugouLyricTrack[]> {
     const keyword = params.keyword.trim()
     if (!keyword) return []
@@ -72,7 +74,7 @@ class KugouLyricsClient {
           ? String(Math.round(params.durationSec * 1000))
           : ''
     })
-    const text = await fetchText(`${SEARCH_URL}?${qs.toString()}`)
+    const text = await fetchText(`${SEARCH_URL}?${qs.toString()}`, params.signal)
     let data: any
     try {
       data = JSON.parse(text)
@@ -107,7 +109,7 @@ class KugouLyricsClient {
     return out
   }
 
-  async getLyric(id: number, accessKey: string): Promise<string | null> {
+  async getLyric(id: number, accessKey: string, signal?: AbortSignal): Promise<string | null> {
     const key = String(accessKey || '').trim()
     if (!id || !key) throw new Error('酷狗歌词凭证无效')
 
@@ -122,7 +124,7 @@ class KugouLyricsClient {
       fmt: 'lrc',
       charset: 'utf8'
     })
-    const text = await fetchText(`${DOWNLOAD_URL}?${qs.toString()}`)
+    const text = await fetchText(`${DOWNLOAD_URL}?${qs.toString()}`, signal)
     let data: any
     try {
       data = JSON.parse(text)

@@ -1191,32 +1191,41 @@ export default class MusicDatabase {
    * 统计无歌词（或歌词文件已丢失）的歌曲数
    * 空路径用 SQL；路径失效需回磁盘核对
    */
-  async getMusicWithoutLyricsCount(): Promise<number> {
-    const emptyStmt = this.db!.prepare(`
-      SELECT COUNT(*) as count FROM all_music
-      WHERE is_duplicate = 0
-        AND is_exists = 1
-        AND (lyrics_path IS NULL OR lyrics_path = '')
-    `)
-    let count = (emptyStmt.get() as { count: number }).count
-
-    // 有路径但文件已丢的，也算待匹配
-    // 与封面计数同理：只取 lyrics_path 一列、流式迭代、按块让出
-    // （逐行让出的开销反超实际工作，一次性 all() 在超大库上会吃掉上百 MB）
+  /**
+   * 待匹配歌词数
+   *
+   * @param hasSidecar 判断「同目录是否已有同名 .lrc/.txt」；
+   *   由调用方注入（目录索引属于歌词领域，放 service 层），
+   *   避免把「用户已在目录里放好歌词」的歌算成待匹配
+   */
+  async getMusicWithoutLyricsCount(
+    hasSidecar?: (dirPath: string, fileName: string) => boolean
+  ): Promise<number> {
     const rows = this.db!.prepare(`
-      SELECT lyrics_path FROM all_music
-      WHERE is_duplicate = 0
-        AND is_exists = 1
-        AND lyrics_path IS NOT NULL
-        AND lyrics_path != ''
-    `).iterate() as IterableIterator<{ lyrics_path: string }>
+      SELECT am.dir_id, am.file_name, am.lyrics_path, md.path as dir_path
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      WHERE am.is_duplicate = 0
+        AND am.is_exists = 1
+    `).iterate() as IterableIterator<{
+      dir_id: number
+      file_name: string
+      lyrics_path: string | null
+      dir_path: string
+    }>
 
+    let count = 0
     let scanned = 0
     for (const row of rows) {
-      if (!existsSync(row.lyrics_path)) count++
+      // 与封面计数同理：按块让出事件循环（逐行让出的开销反超实际工作）
       if (++scanned % COUNT_SCAN_YIELD_EVERY === 0) {
         await new Promise<void>((resolve) => setImmediate(resolve))
       }
+
+      const hasPath = !!(row.lyrics_path && row.lyrics_path !== '')
+      if (hasPath && existsSync(row.lyrics_path!)) continue
+      if (hasSidecar?.(row.dir_path, row.file_name)) continue
+      count++
     }
     return count
   }

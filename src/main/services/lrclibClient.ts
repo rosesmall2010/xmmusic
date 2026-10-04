@@ -88,37 +88,48 @@ class LrclibClient {
     return out
   }
 
-  async search(params: SearchParams): Promise<LrclibTrack[]> {
+  async search(params: SearchParams & { signal?: AbortSignal }): Promise<LrclibTrack[]> {
     const durationMs =
       params.durationSec != null && params.durationSec > 0
         ? Math.round(params.durationSec * 1000)
         : undefined
     const artist = params.artistName?.trim() || undefined
 
+    // lrclib-api 自带 timeoutMs，外部取消信号经 RequestInit 透传（其内部会用 AbortSignal.any 合并）
+    const init: RequestInit | undefined = params.signal ? { signal: params.signal } : undefined
+
     let list: FindLyricsResponse[]
     if (params.trackName?.trim()) {
-      list = await this.client.searchLyrics({
-        track_name: params.trackName.trim(),
-        artist_name: artist,
-        duration: durationMs
-      })
+      list = await this.client.searchLyrics(
+        {
+          track_name: params.trackName.trim(),
+          artist_name: artist,
+          duration: durationMs
+        },
+        init
+      )
     } else if (params.q?.trim()) {
-      list = await this.client.searchLyrics({
-        query: params.q.trim(),
-        artist_name: artist,
-        duration: durationMs
-      })
+      list = await this.client.searchLyrics(
+        {
+          query: params.q.trim(),
+          artist_name: artist,
+          duration: durationMs
+        },
+        init
+      )
     } else {
       return []
     }
     return this.takeCached(list)
   }
 
-  async getById(id: number): Promise<LrclibTrack> {
+  async getById(id: number, signal?: AbortSignal): Promise<LrclibTrack> {
     const cached = this.cache.get(id)
     if (cached && (cached.syncedLyrics || cached.instrumental)) return cached
 
-    const track = mapRecord(await this.client.findLyrics({ id }))
+    const track = mapRecord(
+      await this.client.findLyrics({ id }, signal ? { signal } : undefined)
+    )
     this.remember(track)
     return track
   }

@@ -149,8 +149,11 @@ const similarPercent = (a: string, b: string): number => {
   return total > 0 ? Math.round((2 * overlap / total) * 1000) / 10 : 0
 }
 
-const fetchText = async (url: string): Promise<string> => {
+const fetchText = async (url: string, signal?: AbortSignal): Promise<string> => {
   // Electron net 跟随系统代理
+  // 取消中断：外部信号与超时合并（AbortSignal.any 需要两者的原因——
+  // 只有 timeout 时取消要等满 12s，只有外部信号时单请求失去兜底超时）
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   const res = await net.fetch(url, {
     method: 'GET',
     headers: {
@@ -158,7 +161,7 @@ const fetchText = async (url: string): Promise<string> => {
       Accept: 'application/json,text/plain,*/*',
       'Cache-Control': 'no-cache'
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    signal: signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return await res.text()
@@ -170,13 +173,26 @@ export default class LyricsMatchService {
   private cancelled = false
   /** 搜索请求串行化，避免非官方镜像并发时串结果 */
   private searchMutex: Promise<void> = Promise.resolve()
+  /**
+   * 取消时中断在途请求。
+   * 只置 cancelled 标志时，在途的 net.fetch 要等满 12s 超时、镜像轮询最长可拖到
+   * ~48s，期间 UI 停在「匹配中」无法取消；abort 让这些请求立即失败退出。
+   */
+  private abortController = new AbortController()
+
+  /** 当前会话的中断信号；批量/单曲匹配内部所有请求都应带上它 */
+  private abortSignal(): AbortSignal {
+    return this.abortController.signal
+  }
 
   cancel() {
     this.cancelled = true
+    this.abortController.abort()
   }
 
   resetCancel() {
     this.cancelled = false
+    this.abortController = new AbortController()
   }
 
   isCancelled() {
@@ -187,11 +203,14 @@ export default class LyricsMatchService {
   resetSessionState() {
     this.cancelled = false
     this.apiIndex = 0
+    this.abortController = new AbortController()
   }
 
   /** 手动入口：复位会话状态 */
   async prepareManualSearch() {
     this.resetSessionState()
+    // 目录里可能刚放入新的 .lrc，清掉索引缓存避免漏判
+    this.lyricsService.clearLyricCache()
   }
 
   /** 换到下一个搜索镜像（连续失败 / 低相似时调用） */
@@ -348,10 +367,12 @@ export default class LyricsMatchService {
 
     // 扫遍全部镜像，按「歌名相关度」择优；禁止「第一个勉强过线就 sticky」
     for (let attempt = 0; attempt < SEARCH_APIS.length; attempt++) {
+      // 取消后立即停止轮询镜像，不再对其余镜像逐个发请求
+      if (this.cancelled) break
       const idx = (startIdx + attempt) % SEARCH_APIS.length
       const base = SEARCH_APIS[idx]
       try {
-        const text = await fetchText(base + path + encoded + bust())
+        const text = await fetchText(base + path + encoded + bust(), this.abortSignal())
         const json = JSON.parse(text)
         const songs = json?.result?.songs
         if (!Array.isArray(songs) || songs.length === 0) {
@@ -407,7 +428,7 @@ export default class LyricsMatchService {
 
   /** 拉词走网易云官方接口，与搜索镜像分离；不进 searchMutex，保留批量多路拉词 */
   private async fetchLyric(songId: number): Promise<{ lyric: string | null; instrumental: boolean }> {
-    const text = await fetchText(LRC_API + String(songId))
+    const text = await fetchText(LRC_API + String(songId), this.abortSignal())
     const json = JSON.parse(text)
     if (json?.nolyric === true || json?.nolyric === 'true') {
       return { lyric: null, instrumental: true }
@@ -539,7 +560,7 @@ export default class LyricsMatchService {
     const params = this.lrclibSearchParams(music, hints)
     if (!params.q && !params.trackName) return []
 
-    const tracks = await lrclib.search(params)
+    const tracks = await lrclib.search({ ...params, signal: this.abortSignal() })
     const scored: ExternalScored = []
     for (const track of tracks) {
       if (track.instrumental) {
@@ -574,7 +595,7 @@ export default class LyricsMatchService {
     if (!keyword) return []
     const durationSec =
       typeof music.duration === 'number' && music.duration > 0 ? music.duration : undefined
-    const tracks = await kugouLyrics.search({ keyword, durationSec })
+    const tracks = await kugouLyrics.search({ keyword, durationSec, signal: this.abortSignal() })
     const scored: ExternalScored = []
     for (const track of tracks) {
       const item = this.scoreExternalTrack(music, hints, {
@@ -597,7 +618,7 @@ export default class LyricsMatchService {
   ): Promise<ExternalScored> {
     const { keyword } = this.searchHints(music)
     if (!keyword) return []
-    const tracks = await qqLyrics.search(keyword)
+    const tracks = await qqLyrics.search(keyword, this.abortSignal())
     const scored: ExternalScored = []
     for (const track of tracks) {
       const item = this.scoreExternalTrack(music, hints, {
@@ -783,7 +804,7 @@ export default class LyricsMatchService {
     ref: LyricsCandidateRef
   ): Promise<{ lyric: string | null; instrumental: boolean }> {
     if (ref.source === 'lrclib') {
-      const track = await lrclib.getById(ref.songId)
+      const track = await lrclib.getById(ref.songId, this.abortSignal())
       if (track.instrumental) return { lyric: null, instrumental: true }
       const synced = track.syncedLyrics
         ? this.normalizeLrcTimestamps(track.syncedLyrics)
@@ -794,14 +815,14 @@ export default class LyricsMatchService {
     if (ref.source === 'kugou') {
       const key = (ref.externalKey || '').trim()
       if (!key) throw new Error('缺少酷狗 accesskey')
-      const raw = await kugouLyrics.getLyric(ref.songId, key)
+      const raw = await kugouLyrics.getLyric(ref.songId, key, this.abortSignal())
       const synced = raw ? this.normalizeLrcTimestamps(raw) : null
       return { lyric: synced, instrumental: false }
     }
     if (ref.source === 'qq') {
       const mid = (ref.externalKey || '').trim()
       if (!mid) throw new Error('缺少 QQ songmid')
-      const raw = await qqLyrics.getLyric(mid)
+      const raw = await qqLyrics.getLyric(mid, this.abortSignal())
       const synced = raw ? this.normalizeLrcTimestamps(raw) : null
       return { lyric: synced, instrumental: false }
     }
@@ -1151,6 +1172,8 @@ export default class LyricsMatchService {
   ): Promise<LyricsMatchSummary> {
     if (options.resetCancel !== false) {
       this.resetSessionState()
+      // 新一轮批量：目录里可能已放入新的 .lrc，清索引缓存
+      this.lyricsService.clearLyricCache()
     } else {
       // 保留 cancelled，仅复位镜像游标
       this.apiIndex = 0

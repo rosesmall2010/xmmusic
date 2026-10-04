@@ -1,5 +1,5 @@
-import { readFileSync, existsSync } from 'fs'
-import { dirname, join, extname } from 'path'
+import { readFileSync, existsSync, readdirSync } from 'fs'
+import { dirname, join, extname, basename } from 'path'
 import iconv from 'iconv-lite'
 
 export interface LyricLine {
@@ -54,34 +54,11 @@ export default class LyricsService {
         }
       }
 
-      // 2. 遍历目录进行模糊匹配（解决大小写和 NFC/NFD 问题）
-      const { readdirSync } = require('fs')
-      const { basename } = require('path')
-
-      let files: string[] = []
-      try {
-        files = readdirSync(dir)
-      } catch (error: any) {
-        console.error('❌ 读取目录失败:', dir, error?.message || error)
-        return null
-      }
-
-      const targetName = baseName.toLowerCase().normalize('NFC')
-      console.log(`🔍 模糊匹配：目标文件名=${targetName}, 目录文件数=${files.length}`)
-
-      for (const file of files) {
-        const fileExt = extname(file).toLowerCase()
-        if (fileExt !== '.lrc' && fileExt !== '.txt') continue
-
-        const fileName = basename(file, extname(file))
-        const normalizedFileName = fileName.toLowerCase().normalize('NFC')
-
-        // 比较文件名（忽略大小写和 Unicode 规范化差异）
-        if (normalizedFileName === targetName) {
-          const foundPath = join(dir, file)
-          console.log(`✅ 找到歌词文件（模糊匹配）: ${foundPath}`)
-          return foundPath
-        }
+      // 2. 走目录索引模糊匹配（忽略大小写与 NFC/NFD 差异），避免逐首 readdirSync
+      const found = this.lyricIndexFor(dir).get(baseName.toLowerCase().normalize('NFC'))
+      if (found) {
+        console.log(`✅ 找到歌词文件（模糊匹配）: ${found}`)
+        return found
       }
 
       console.log(`⚠️ 未找到歌词文件：目录=${dir}, 目标文件名=${baseName}`)
@@ -90,6 +67,47 @@ export default class LyricsService {
     }
 
     return null
+  }
+
+  /**
+   * 曲目同目录是否已有同名 .lrc / .txt（忽略大小写与 NFC/NFD 差异）
+   *
+   * 与 findLyricsFile 的差别：只查索引，不做逐扩展名 existsSync，
+   * 供「整库逐首判断有无歌词」的批量场景使用（大库上省下数十万次同步 stat）。
+   */
+  hasSidecarLyrics(musicFilePath: string): boolean {
+    if (!musicFilePath) return false
+    const dir = dirname(musicFilePath)
+    const base = basename(musicFilePath, extname(musicFilePath)).toLowerCase().normalize('NFC')
+    if (!base) return false
+    return this.lyricIndexFor(dir).has(base)
+  }
+
+  /** 清空目录索引缓存（目录内容变化后调用） */
+  clearLyricCache(): void {
+    this.dirLyricIndex.clear()
+  }
+
+  /** 目录内歌词文件索引（小写 NFC basename → 完整路径），按目录缓存复用 */
+  private dirLyricIndex = new Map<string, Map<string, string>>()
+
+  private lyricIndexFor(dir: string): Map<string, string> {
+    const cached = this.dirLyricIndex.get(dir)
+    if (cached) return cached
+
+    const index = new Map<string, string>()
+    try {
+      for (const name of readdirSync(dir)) {
+        const ext = extname(name).toLowerCase()
+        if (ext !== '.lrc' && ext !== '.txt') continue
+        const base = basename(name, extname(name)).toLowerCase().normalize('NFC')
+        if (!index.has(base)) index.set(base, join(dir, name))
+      }
+    } catch {
+      // 目录不可读：当作没有歌词
+    }
+    this.dirLyricIndex.set(dir, index)
+    return index
   }
 
   /**

@@ -24,8 +24,9 @@ export interface QqLyricTrack {
 
 const fetchJson = async (
   url: string,
-  init?: { method?: string; body?: string; contentType?: string }
+  init?: { method?: string; body?: string; contentType?: string; signal?: AbortSignal }
 ): Promise<any> => {
+  const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS)
   const res = await net.fetch(url, {
     method: init?.method || 'GET',
     headers: {
@@ -35,7 +36,7 @@ const fetchJson = async (
       ...(init?.contentType ? { 'Content-Type': init.contentType } : {})
     },
     body: init?.body,
-    signal: AbortSignal.timeout(TIMEOUT_MS)
+    signal: init?.signal ? AbortSignal.any([timeoutSignal, init.signal]) : timeoutSignal
   })
   if (!res.ok) throw new Error(`QQ 音乐 HTTP ${res.status}`)
   const text = await res.text()
@@ -67,7 +68,7 @@ class QqLyricsClient {
     this.cache.set(track.mid, track)
   }
 
-  async search(keyword: string): Promise<QqLyricTrack[]> {
+  async search(keyword: string, signal?: AbortSignal): Promise<QqLyricTrack[]> {
     const q = keyword.trim()
     if (!q) return []
 
@@ -86,7 +87,8 @@ class QqLyricsClient {
     const data = await fetchJson(SEARCH_URL, {
       method: 'POST',
       body,
-      contentType: 'application/json'
+      contentType: 'application/json',
+      signal
     })
 
     const list: any[] =
@@ -126,7 +128,7 @@ class QqLyricsClient {
     return out
   }
 
-  async getLyric(mid: string): Promise<string | null> {
+  async getLyric(mid: string, signal?: AbortSignal): Promise<string | null> {
     const songmid = String(mid || '').trim()
     if (!songmid) throw new Error('QQ 歌曲 mid 无效')
 
@@ -139,7 +141,7 @@ class QqLyricsClient {
       nobase64: '1',
       g_tk: '5381'
     })
-    const data = await fetchJson(`${LYRIC_URL}?${qs.toString()}`)
+    const data = await fetchJson(`${LYRIC_URL}?${qs.toString()}`, { signal })
     if (data?.code !== 0 && data?.retcode !== 0) {
       // 无歌词常见 code
       if (data?.code === -1901 || data?.code === 700) return null

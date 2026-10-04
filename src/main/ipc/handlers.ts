@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { resolve, normalize, sep } from 'path'
+import { resolve, normalize, sep, join } from 'path'
 import MusicDatabase, { calculateFilePathMD5 } from '../database/db'
 import FileScanner from '../services/fileScanner'
 import ID3Fixer from '../services/id3Fixer'
@@ -21,6 +21,7 @@ import type { ShortcutConfig } from '../../shared/types/settings'
 import type {
   LyricsData,
   LyricsMatchProgress,
+  LyricsMatchResult,
   LyricsMatchSummary,
   LyricsCandidateRef
 } from '../../shared/types/lyrics'
@@ -1277,10 +1278,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     })
   })
 
-  /** 统计本地库中无歌词歌曲数量 */
+  /** 统计本地库中无歌词歌曲数量（同目录已有 .lrc 的不算待匹配） */
   ipcMain.handle('get-music-without-lyrics-count', async () => {
     if (!db) return 0
-    return db.getMusicWithoutLyricsCount()
+    return db.getMusicWithoutLyricsCount((dirPath, fileName) =>
+      lyricsService.hasSidecarLyrics(join(dirPath, fileName))
+    )
   })
 
   /**
@@ -1291,6 +1294,8 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
     if (!db) throw new Error('数据库未初始化')
     return withLyricsMatchLock(async () => {
       lyricsMatchService.resetCancel()
+      // 新一轮批量：目录里可能已放入新的 .lrc，清索引缓存避免漏判
+      lyricsService.clearLyricCache()
       batchLyricsMatchActive = true
       const startedAt = Date.now()
       const concurrency = clampMatchConcurrency(
@@ -1339,6 +1344,10 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
         const pageSize = 100
         const songs: MusicItem[] = []
         const seen = new Set<number>()
+        // 同目录已有歌词的歌：只把路径补进库，不参与在线匹配。
+        // 必须等分页走完再写——否则 lyrics_path 被填上后这些行会掉出
+        // getMusicWithoutLyrics 的过滤条件，OFFSET 分页会漏掉后续的行。
+        const sidecarLinks: Array<{ id: number; path: string }> = []
 
         let offset = 0
         while (true) {
@@ -1346,16 +1355,22 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           const page = db.getMusicWithoutLyrics(offset, pageSize)
           if (page.length === 0) break
           for (const m of page) {
-            if (!seen.has(m.id)) {
+            if (seen.has(m.id)) continue
+            // 用户在目录里放好的歌词：不算待匹配，也不该被再匹配一遍
+            const sidecar = m.filePath ? lyricsService.findLyricsFile(m.filePath) : null
+            if (sidecar) {
               seen.add(m.id)
-              songs.push(m)
+              sidecarLinks.push({ id: m.id, path: sidecar })
+              continue
             }
+            seen.add(m.id)
+            songs.push(m)
           }
           offset += page.length
           if (page.length < pageSize) break
         }
 
-        // 路径写在库里但文件已丢失 → 一并纳入批量匹配
+        // 路径写在库里但文件已丢失 → 一并纳入批量匹配（同目录有歌词的同样只补库）
         offset = 0
         while (true) {
           if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
@@ -1364,6 +1379,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           for (const m of page) {
             if (seen.has(m.id)) continue
             if (m.lyricsPath && !existsSync(m.lyricsPath)) {
+              const sidecar = m.filePath ? lyricsService.findLyricsFile(m.filePath) : null
+              if (sidecar) {
+                seen.add(m.id)
+                sidecarLinks.push({ id: m.id, path: sidecar })
+                continue
+              }
               seen.add(m.id)
               songs.push(m)
             }
@@ -1372,16 +1393,36 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
           if (page.length < pageSize) break
         }
 
+        // 分页已结束，补写 sidecar 关联（播放入口与右键菜单按 lyrics_path 判断有无歌词）
+        for (const link of sidecarLinks) {
+          db.updateAllMusic(link.id, { lyrics_path: link.path })
+        }
+        if (sidecarLinks.length > 0) {
+          console.log(
+            `[lyricsMatch] 批量匹配跳过 ${sidecarLinks.length} 首同目录已有歌词的歌，已补写关联`
+          )
+        }
+
         if (lyricsMatchService.isCancelled()) return sendCancelledSummary()
+
+        // sidecar 关联按 linked_local 计入摘要，渲染端据此原位更新列表
+        // （否则这些歌在界面里仍显示「无歌词」，右键还提示「匹配歌词」）
+        const sidecarResults: LyricsMatchResult[] = sidecarLinks.map((link) => ({
+          musicId: link.id,
+          title: '',
+          status: 'linked_local' as const,
+          lyricsPath: link.path,
+          message: '已关联同目录歌词'
+        }))
 
         if (songs.length === 0) {
           const empty: LyricsMatchSummary = {
-            total: 0,
-            success: 0,
+            total: sidecarResults.length,
+            success: sidecarResults.length,
             failed: 0,
             skipped: 0,
             cancelled: false,
-            results: []
+            results: sidecarResults
           }
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('lyrics-match-finished', empty)
@@ -1402,6 +1443,12 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
             }
           }
         })
+
+        if (sidecarResults.length > 0) {
+          summary.total += sidecarResults.length
+          summary.success += sidecarResults.length
+          summary.results = [...sidecarResults, ...summary.results]
+        }
 
         if (!mainWindow.isDestroyed()) {
           mainWindow.webContents.send('lyrics-match-finished', summary)
