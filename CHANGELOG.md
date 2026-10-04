@@ -7,7 +7,17 @@
 
 ## [1.2.6] - 2026-09-30
 
-### 性能
+### 改善
+- **清理失效记录** 同时删除标记为感叹号（`is_playable = 0`）的无法播放曲目，不再只清理物理丢失的文件；播放队列、收藏、歌单、最近播放、发现列表同步清理；提示文案区分「物理丢失」与「无法播放」两类数量
+- **搜索结果不再限 50 条**，一次性全部返回（原 `db.searchMusic` 默认 `limit = 50` 的硬编码上限去掉）
+- **本地列表分页批大小**从 20 条提升到 100 条（首屏加载与后台续载批次统一）
+- **后台加载进度条**：本地列表后台续载剩余曲目时在页面顶部显示「后台加载中 x / total (xx%)」，加载完成后自动消失；搜索模式或高级搜索模式下不显示
+
+### 修复
+- **切换到本地音乐页每次都重新加载**：`onMounted` 用 `force: true` 强制重载，导致每次从其他页面切回来都触发一次完整的数据加载。现改为 `force: false`（默认），已有数据时直接复用；批量匹配、扫描完成时各自调用 `force: true` 刷新，保持数据及时性
+- **编辑标签清空艺术家/标题后二次打开无法输入**：`buildUpdates()` 对 `artist`/`title` 只做 `.trim()` 不做空字符串 fallback，保存空值后 `dbSnapshot` 与 `editedData` 都是 `''`，`hasChanges` 永远 false，保存按钮灰掉；表现为「能输入但按钮不亮，按一下 Backspace 才解禁」。现 `artist`/`title` 空字符串转 `undefined`，主进程写库前兜底「未知艺术家」/「未知标题」，防止写入空值违反 `NOT NULL` 约束
+- **Windows 下写入 ID3 标签报 EPERM**：Windows 不支持 `rename(2)` 原子覆盖已存在目标文件；现乐观先 rename，遇 `EPERM`/`EEXIST` 时先 `unlink` 再 rename，与 macOS/Linux 行为对齐
+- **第一次手动匹配封面成功、第二次点「匹配封面」毫无反应**：`libraryBusy` 与 `manualMatchUiBusy` 闭合成自引用环 —— SongList 用 `isMatchFlowBusy()`（内含 `props.libraryBusy`）的结果回写 `manualMatchUiBusy`，而传进去的 `libraryBusy` 又由 `isLibraryBusy` 推出、后者含 `manualMatchUiBusy`。于是第一次匹配成功后在 `finally` 里清标志时，读到的 `libraryBusy` 正是由那个还没清掉的标志推出来的，永远清不回 false；此后每次右键都在 `if (isMatchFlowBusy()) return` 被静默吞掉。现新增 `isExternalLibraryBusy`（排除 `manualMatchUiBusy`，仅含歌词/封面批量、扫描、清理）传给 SongList，工具栏禁用仍用 `isLibraryBusy`。此环与平台无关，macOS 同样会中招，只是需要连续匹配两次才暴露
 - **几万条库启动卡顿数秒**：本地列表的后台整库预载用 `LIMIT 20 OFFSET n` 分页，而 OFFSET 要求 SQLite 先遍历并丢弃前 n 行，整库拉完是 O(n²)。5.1 万条实测纯 SQL 75 秒、2552 批，每批把主进程卡住 10–60ms，启动后几分钟内所有 IPC（含界面交互）都在排队。现改为游标（keyset）分页并把批大小从 20 提到 500：103 批 / 0.3 秒，墙钟从 4 分多钟降到约 5 秒
 - 启动时的「待匹配封面数」统计从 1044ms 降到约 50ms：原实现分页 JOIN `music_dir` 并映射成完整 `MusicItem`，而只用得到 `cover_path` 一列；且为「避免阻塞」给每一行加了 `await setImmediate`，3.3 万次让出耗时 447ms，比它保护的 `existsSync`（合计 62ms）还贵。现改为单条 SQL 只取路径列、流式迭代（`Statement.iterate`，内存 O(1)）、每 1024 行让出一次。待匹配歌词数同样处理
 - 后台分页不再每批重复查询总数（原先每批一次 IPC，整库 2552 次）；`hasMore` 改由游标判定而非 `currentOffset < totalCount` —— 总数只在首屏查一次，扫描期间库增长会让它偏小，导致预载提前停住、全选漏歌

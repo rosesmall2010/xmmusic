@@ -623,8 +623,9 @@ onMounted(async () => {
     // 播放栏跳转过来：跳过默认首屏加载，直接定位
     await performLocateScroll(pendingIndex)
   } else {
-    // 回页强制刷新，避免卸载期间批量匹配完成刷新事件丢失导致 lyricsPath 过期
-    await musicStore.loadMusic(0, 100, true)
+    // 已有数据时跳过重载，避免切回来时不必要的重新加载；
+    // 批量匹配/扫描完成后会各自调 loadMusic(0, ..., true) 强制刷新
+    await musicStore.loadMusic(0, 100)
     startBackgroundLoading()
   }
 
