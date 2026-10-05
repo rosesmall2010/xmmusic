@@ -27,7 +27,10 @@
             @error="onThumbError"
           />
           <div class="meta">
-            <div class="name">{{ item.name }}</div>
+            <div class="name">
+              {{ item.name }}
+              <span class="source-badge">{{ sourceLabel(item.source) }}</span>
+            </div>
             <div class="sub">
               <span>{{ item.artists || $t('nowPlaying.unknownArtist') }}</span>
               <span v-if="item.album" class="album"> · {{ item.album }}</span>
@@ -81,7 +84,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { CoverMatchCandidate } from '@shared/types/coverMatch'
+import type { CoverMatchCandidate, CoverMatchSource } from '@shared/types/coverMatch'
 import { getCoverUrl } from '@/utils/media'
 
 const { t } = useI18n()
@@ -99,8 +102,14 @@ const emit = defineEmits<{
   (e: 'select-local', localPath: string): void
 }>()
 
-/** 候选 key：网易云 songId 唯一 */
-const candidateKey = (c: CoverMatchCandidate) => String(c.songId)
+/** 不同来源的 songId 可能相同 */
+const candidateKey = (c: CoverMatchCandidate) => `${c.source ?? 'netease'}:${c.songId}`
+
+const sourceLabel = (source?: CoverMatchSource) => {
+  if (source === 'kugou') return t('nowPlaying.sourceKugou')
+  if (source === 'qq') return t('nowPlaying.sourceQq')
+  return t('nowPlaying.sourceNetease')
+}
 
 const selectedKey = ref<string | null>(null)
 /** 用户选择的本地图片绝对路径 */
@@ -315,6 +324,17 @@ const onThumbError = (e: Event) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.source-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  vertical-align: middle;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
 }
 
 .sub {

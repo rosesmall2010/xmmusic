@@ -1,6 +1,6 @@
 /**
- * 在线封面匹配：搜索网易云 → 取专辑封面 → 写入缓存 / MP3 ID3 → 更新数据库
- * 仅在主进程使用。图源与歌词同源 SEARCH_APIS，但自行解析 picUrl（歌词服务未映射）。
+ * 在线封面匹配：网易云 / 酷狗 / QQ 三源并发搜索 → 取专辑封面 → 写入缓存 / MP3 ID3 → 更新数据库
+ * 仅在主进程使用。网易云图源走 SEARCH_APIS 镜像竞速；QQ / 酷狗与歌词同源搜曲接口。
  */
 import { existsSync, mkdirSync, unlinkSync, accessSync, constants, readFileSync } from 'fs'
 import { writeFile } from 'fs/promises'
@@ -14,7 +14,8 @@ import type {
   CoverMatchProgress,
   CoverMatchSummary,
   CoverMatchStatus,
-  CoverMatchWorkerTask
+  CoverMatchWorkerTask,
+  CoverMatchSource
 } from '../../shared/types/coverMatch'
 import type MusicDatabase from '../database/db'
 import MetadataEditor from './metadataEditor'
@@ -23,6 +24,8 @@ import {
   clampMatchConcurrency,
   DEFAULT_MATCH_CONCURRENCY
 } from '../../shared/utils/matchConcurrency'
+import qqLyrics, { qqMidToSongId } from './qqLyricsClient'
+import kugouCover from './kugouCoverClient'
 
 const SEARCH_APIS = [
   'https://music-api.0m2.cn',
@@ -41,7 +44,8 @@ const TITLE_SIMILARITY_THRESHOLD = 50
 /** 批量/自动：歌名不足时改搜歌手的写入门槛 */
 const ARTIST_AUTO_SIMILARITY_THRESHOLD = 50
 const REQUEST_TIMEOUT_MS = 12000
-const DOWNLOAD_TIMEOUT_MS = 20000
+/** 与歌词拉词同一超时（歌词 fetchText 12s）；封面图不再单独放宽到 20s */
+const DOWNLOAD_TIMEOUT_MS = REQUEST_TIMEOUT_MS
 /** 单张封面下载上限 15MB（不缩放，但拒绝超大文件） */
 const MAX_COVER_BYTES = 15 * 1024 * 1024
 const REQUEST_GAP_MS = 120
@@ -68,6 +72,7 @@ type SearchSong = {
   artists: string
   album?: string
   coverUrl?: string
+  source: CoverMatchSource
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -103,14 +108,15 @@ const similarPercent = (a: string, b: string): number => {
   return total > 0 ? Math.round((2 * overlap / total) * 1000) / 10 : 0
 }
 
-const fetchText = async (url: string): Promise<string> => {
+const fetchText = async (url: string, signal?: AbortSignal): Promise<string> => {
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   const res = await net.fetch(url, {
     method: 'GET',
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.3)',
+      'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.7)',
       Accept: 'application/json,text/plain,*/*'
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    signal: signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return await res.text()
@@ -191,11 +197,12 @@ const isImageContentType = (ct: string | null): boolean => {
 }
 
 export default class CoverMatchService {
-  private apiIndex = 0
   private cancelled = false
   private metadataEditor = new MetadataEditor()
   /** 下载进行中注册的取消回调（cancel() 时触发中断正在进行的网络请求） */
   private cancelListeners = new Set<() => void>()
+  /** 搜索请求用的会话信号（与歌词匹配一样，取消时 abort） */
+  private abortController = new AbortController()
   /**
    * 串行化 nativeImage 转码（WebP→JPEG）
    *
@@ -207,6 +214,7 @@ export default class CoverMatchService {
 
   cancel() {
     this.cancelled = true
+    this.abortController.abort()
     for (const fn of this.cancelListeners) {
       try {
         fn()
@@ -218,7 +226,12 @@ export default class CoverMatchService {
 
   resetCancel() {
     this.cancelled = false
+    this.abortController = new AbortController()
     // 下载回调在下一次 downloadCoverToCache 生命周期自行清理；此处不主动清，避免误放新请求
+  }
+
+  private abortSignal(): AbortSignal {
+    return this.abortController.signal
   }
 
   /** 批量枚举阶段是否已请求取消 */
@@ -365,21 +378,32 @@ export default class CoverMatchService {
     songs: SearchSong[],
     scoreFn: (song: SearchSong) => number
   ): Promise<CoverMatchCandidate[]> {
+    const needDetail = songs.filter((s) => s.source === 'netease' && !s.coverUrl)
+    const extra = new Map<string, string>()
+    if (needDetail.length > 0) {
+      const fetched = await Promise.all(
+        needDetail.map(async (song) => {
+          try {
+            const url = await this.fetchCoverUrlBySongId(song.id)
+            return url ? ([`${song.source}:${song.id}`, url] as const) : null
+          } catch {
+            return null
+          }
+        })
+      )
+      for (const row of fetched) {
+        if (row) extra.set(row[0], row[1])
+      }
+    }
+
     const list: CoverMatchCandidate[] = []
     for (const song of songs) {
       const similarity = scoreFn(song)
-      let coverUrl = song.coverUrl
-      if (!coverUrl) {
-        try {
-          coverUrl = await this.fetchCoverUrlBySongId(song.id)
-        } catch {
-          coverUrl = undefined
-        }
-        await sleep(REQUEST_GAP_MS)
-      }
+      const coverUrl = song.coverUrl || extra.get(`${song.source}:${song.id}`)
       if (!coverUrl) continue
       list.push({
         songId: song.id,
+        source: song.source,
         name: song.name,
         artists: song.artists,
         album: song.album,
@@ -390,80 +414,183 @@ export default class CoverMatchService {
     return list
   }
 
+  private mapNeteaseSongs(songs: any[], limit: number): SearchSong[] {
+    return songs.slice(0, limit).map((s: any) => {
+      const artists = Array.isArray(s.artists)
+        ? s.artists.map((a: any) => a?.name).filter(Boolean).join(' ')
+        : Array.isArray(s.ar)
+          ? s.ar.map((a: any) => a?.name).filter(Boolean).join(' ')
+          : ''
+      const albumName = s.album?.name || s.al?.name
+      return {
+        id: Number(s.id),
+        name: String(s.name || ''),
+        artists,
+        album: albumName ? String(albumName) : undefined,
+        coverUrl: extractCoverUrlFromSongJson(s),
+        source: 'netease' as const
+      }
+    })
+  }
+
+  /** 网易云镜像竞速：第一个有结果的胜出，其余中止 */
   private async searchSongs(keyword: string, pickMode = false): Promise<SearchSong[]> {
     if (!keyword.trim()) return []
     const encoded = encodeURIComponent(keyword.trim())
     const path = pickMode ? SEARCH_PATH_PICK : SEARCH_PATH
     const limit = pickMode ? 8 : 3
-    let lastErr: unknown
-    for (let attempt = 0; attempt < SEARCH_APIS.length; attempt++) {
-      const idx = (this.apiIndex + attempt) % SEARCH_APIS.length
-      const base = SEARCH_APIS[idx]
-      try {
-        const text = await fetchText(base + path + encoded)
-        const json = JSON.parse(text)
-        const songs = json?.result?.songs
-        if (!Array.isArray(songs) || songs.length === 0) {
-          // 本镜像无结果：试下一个，勿直接当成全局无结果
-          continue
+    const session = this.abortSignal()
+    const controllers = SEARCH_APIS.map(() => new AbortController())
+
+    const tasks = SEARCH_APIS.map(async (base, i) => {
+      const signal = AbortSignal.any([controllers[i].signal, session])
+      const text = await fetchText(base + path + encoded, signal)
+      const json = JSON.parse(text)
+      const songs = json?.result?.songs
+      if (!Array.isArray(songs) || songs.length === 0) {
+        throw new Error('empty')
+      }
+      return this.mapNeteaseSongs(songs, limit)
+    })
+
+    const winner = await new Promise<{ ok: true; songs: SearchSong[] } | { ok: false; errors: unknown[] }>(
+      (resolve) => {
+        let pending = tasks.length
+        const errors: unknown[] = []
+        let settled = false
+        for (const task of tasks) {
+          task.then(
+            (songs) => {
+              if (settled) return
+              settled = true
+              resolve({ ok: true, songs })
+            },
+            (err) => {
+              errors.push(err)
+              pending -= 1
+              if (!settled && pending === 0) {
+                settled = true
+                resolve({ ok: false, errors })
+              }
+            }
+          )
         }
-        this.apiIndex = idx
-        return songs.slice(0, limit).map((s: any) => {
-          const artists = Array.isArray(s.artists)
-            ? s.artists.map((a: any) => a?.name).filter(Boolean).join(' ')
-            : Array.isArray(s.ar)
-              ? s.ar.map((a: any) => a?.name).filter(Boolean).join(' ')
-              : ''
-          const albumName = s.album?.name || s.al?.name
-          return {
-            id: Number(s.id),
-            name: String(s.name || ''),
-            artists,
-            album: albumName ? String(albumName) : undefined,
-            coverUrl: extractCoverUrlFromSongJson(s)
-          } as SearchSong
-        })
-      } catch (e) {
-        lastErr = e
+      }
+    )
+
+    for (const c of controllers) {
+      try {
+        c.abort()
+      } catch {
+        /* ignore */
       }
     }
-    // 全部镜像都返回空列表（无异常）→ 视为无搜索结果；有异常则抛出
-    if (lastErr) throw lastErr instanceof Error ? lastErr : new Error('搜索 API 全部失败')
+
+    if (winner.ok) {
+      return winner.songs
+    }
+    const real = winner.errors.filter((err) => !(err instanceof Error && err.message === 'empty'))
+    if (real.length === winner.errors.length && real.length > 0) {
+      const last = real[real.length - 1]
+      throw last instanceof Error ? last : new Error('搜索 API 全部失败')
+    }
     console.warn(`[coverMatch] 搜索「${keyword}」全部镜像无结果`)
     return []
   }
 
-  /** 通过歌曲详情接口补全封面 URL */
+  private async searchQqSongs(keyword: string, pickMode = false): Promise<SearchSong[]> {
+    const tracks = await qqLyrics.search(keyword, this.abortSignal())
+    const limit = pickMode ? 8 : 3
+    const out: SearchSong[] = []
+    for (const track of tracks) {
+      if (!track.coverUrl) continue
+      out.push({
+        id: qqMidToSongId(track.mid),
+        name: track.name,
+        artists: track.artistName,
+        album: track.albumName,
+        coverUrl: track.coverUrl,
+        source: 'qq'
+      })
+      if (out.length >= limit) break
+    }
+    return out
+  }
+
+  private async searchKugouSongs(keyword: string, pickMode = false): Promise<SearchSong[]> {
+    const tracks = await kugouCover.search(keyword, this.abortSignal())
+    const limit = pickMode ? 8 : 3
+    return tracks.slice(0, limit).map((track) => ({
+      id: track.id,
+      name: track.name,
+      artists: track.artistName,
+      album: track.albumName,
+      coverUrl: track.coverUrl,
+      source: 'kugou' as const
+    }))
+  }
+
+  /** 三源并发；单源失败不影响其它 */
+  private async searchAllSources(keyword: string, pickMode = false): Promise<SearchSong[]> {
+    const wrap = (label: string, p: Promise<SearchSong[]>) =>
+      p.catch((e) => {
+        console.warn(`[coverMatch] ${label} 搜索失败`, e)
+        return [] as SearchSong[]
+      })
+    const [netease, qq, kugou] = await Promise.all([
+      wrap('netease', this.searchSongs(keyword, pickMode)),
+      wrap('qq', this.searchQqSongs(keyword, pickMode)),
+      wrap('kugou', this.searchKugouSongs(keyword, pickMode))
+    ])
+    return [...netease, ...qq, ...kugou]
+  }
+
+  /** 通过歌曲详情接口补全封面 URL（镜像竞速） */
   private async fetchCoverUrlBySongId(songId: number): Promise<string | undefined> {
-    let lastErr: unknown
-    for (let attempt = 0; attempt < SEARCH_APIS.length; attempt++) {
-      const idx = (this.apiIndex + attempt) % SEARCH_APIS.length
-      const base = SEARCH_APIS[idx]
+    const session = this.abortSignal()
+    const controllers = SEARCH_APIS.map(() => new AbortController())
+    const tasks = SEARCH_APIS.map(async (base, i) => {
+      const signal = AbortSignal.any([controllers[i].signal, session])
+      const text = await fetchText(base + SONG_DETAIL_PATH + String(songId), signal)
+      const json = JSON.parse(text)
+      const song = Array.isArray(json?.songs) ? json.songs[0] : json?.song
+      const url = extractCoverUrlFromSongJson(song)
+      if (url) return url
+      const dataSong = Array.isArray(json?.data) ? json.data[0] : json?.data
+      const url2 = extractCoverUrlFromSongJson(dataSong)
+      if (url2) return url2
+      throw new Error('empty')
+    })
+
+    const winner = await new Promise<{ ok: true; url: string } | { ok: false }>((resolve) => {
+      let pending = tasks.length
+      let settled = false
+      for (const task of tasks) {
+        task.then(
+          (url) => {
+            if (settled) return
+            settled = true
+            resolve({ ok: true, url })
+          },
+          () => {
+            pending -= 1
+            if (!settled && pending === 0) {
+              settled = true
+              resolve({ ok: false })
+            }
+          }
+        )
+      }
+    })
+
+    for (const c of controllers) {
       try {
-        const text = await fetchText(base + SONG_DETAIL_PATH + String(songId))
-        const json = JSON.parse(text)
-        const song = Array.isArray(json?.songs) ? json.songs[0] : json?.song
-        const url = extractCoverUrlFromSongJson(song)
-        if (url) {
-          this.apiIndex = idx
-          return url
-        }
-        const dataSong = Array.isArray(json?.data) ? json.data[0] : json?.data
-        const url2 = extractCoverUrlFromSongJson(dataSong)
-        if (url2) {
-          this.apiIndex = idx
-          return url2
-        }
-        // 本镜像无封面字段：继续试下一个，勿提前 return undefined
-        continue
-      } catch (e) {
-        lastErr = e
+        c.abort()
+      } catch {
+        /* ignore */
       }
     }
-    if (lastErr) {
-      console.warn('[coverMatch] 详情补图失败', lastErr)
-    }
-    return undefined
+    return winner.ok ? winner.url : undefined
   }
 
   /** 解析最终可用封面 URL：已有则用，否则详情补全 */
@@ -497,14 +624,26 @@ export default class CoverMatchService {
 
     this.cancelListeners.add(abortFromCancel)
 
+    const imageHeaders: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.7)',
+      Accept: 'image/*,*/*'
+    }
+    try {
+      const host = new URL(coverUrl).hostname
+      if (host.endsWith('gtimg.cn') || host.endsWith('qq.com')) {
+        imageHeaders.Referer = 'https://y.qq.com/'
+      } else if (host.includes('kugou.com')) {
+        imageHeaders.Referer = 'https://www.kugou.com/'
+      }
+    } catch {
+      /* ignore */
+    }
+
     let res: Awaited<ReturnType<typeof net.fetch>>
     try {
       res = await net.fetch(coverUrl, {
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; xmmusic/1.2.3)',
-          Accept: 'image/*,*/*'
-        },
+        headers: imageHeaders,
         signal: abortCtrl.signal
       })
     } catch (e) {
@@ -654,57 +793,60 @@ export default class CoverMatchService {
   /**
    * 搜索候选（含封面 URL 尽力补全），按相似度降序
    * 手动：标签歌名+歌手双搜，再叠加文件名推测出的差异歌名/歌手；合并去重、不设下限
-   * （lrclib 仅提供歌词、无封面，封面候选仍只走网易云）
-   * 各轮搜索失败互不影响，保留已合并结果；全失败则返回空列表（UI 仍可开本地选图）
+   * 网易云 / 酷狗 / QQ 三源并发；各关键词并行，单源失败不影响其它
    */
   async searchCandidates(music: MusicItem): Promise<CoverMatchCandidate[]> {
     const titleKw = this.titleKeyword(music)
     const artistKw = this.artistKeyword(music)
     const extra = this.extraInferredKeywords(music, titleKw, artistKw)
-    const byId = new Map<number, CoverMatchCandidate>()
-    let searchedOnce = false
+    const byKey = new Map<string, CoverMatchCandidate>()
     let lastError: unknown
 
     const mergeIn = (list: CoverMatchCandidate[]) => {
       for (const c of list) {
-        const prev = byId.get(c.songId)
+        const key = `${c.source ?? 'netease'}:${c.songId}`
+        const prev = byKey.get(key)
         if (!prev || c.similarity > prev.similarity) {
-          byId.set(c.songId, c)
+          byKey.set(key, c)
         }
       }
     }
 
-    const runTitle = async (kw: string) => {
-      if (searchedOnce) await sleep(REQUEST_GAP_MS)
-      searchedOnce = true
-      try {
-        const songs = await this.searchSongs(kw, true)
-        mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByTitle(kw, s)))
-      } catch (e) {
-        lastError = e
-        console.warn(`[coverMatch] 手动候选歌名搜索失败「${kw}」`, e)
-      }
+    const jobs: Array<Promise<void>> = []
+    const runTitle = (kw: string) => {
+      jobs.push(
+        (async () => {
+          try {
+            const songs = await this.searchAllSources(kw, true)
+            mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByTitle(kw, s)))
+          } catch (e) {
+            lastError = e
+            console.warn(`[coverMatch] 手动候选歌名搜索失败「${kw}」`, e)
+          }
+        })()
+      )
+    }
+    const runArtist = (kw: string) => {
+      jobs.push(
+        (async () => {
+          try {
+            const songs = await this.searchAllSources(kw, true)
+            mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByArtist(kw, s)))
+          } catch (e) {
+            lastError = e
+            console.warn(`[coverMatch] 手动候选歌手搜索失败「${kw}」`, e)
+          }
+        })()
+      )
     }
 
-    const runArtist = async (kw: string) => {
-      if (searchedOnce) await sleep(REQUEST_GAP_MS)
-      searchedOnce = true
-      try {
-        const songs = await this.searchSongs(kw, true)
-        mergeIn(await this.songsToCandidates(songs, (s) => this.scoreByArtist(kw, s)))
-      } catch (e) {
-        lastError = e
-        console.warn(`[coverMatch] 手动候选歌手搜索失败「${kw}」`, e)
-      }
-    }
+    if (titleKw) runTitle(titleKw)
+    if (artistKw) runArtist(artistKw)
+    if (extra.title) runTitle(extra.title)
+    if (extra.artist) runArtist(extra.artist)
+    await Promise.all(jobs)
 
-    if (titleKw) await runTitle(titleKw)
-    if (artistKw) await runArtist(artistKw)
-    if (extra.title) await runTitle(extra.title)
-    if (extra.artist) await runArtist(extra.artist)
-
-    const list = Array.from(byId.values()).sort((a, b) => b.similarity - a.similarity)
-    // 全轮失败且无候选：返回空列表，不抛错，便于 UI 仍弹出本地选图
+    const list = Array.from(byKey.values()).sort((a, b) => b.similarity - a.similarity)
     if (list.length === 0 && lastError) {
       console.warn('[coverMatch] 手动候选各轮均失败，返回空列表', lastError)
     }
@@ -872,9 +1014,8 @@ export default class CoverMatchService {
     }
 
     const tryTitle = async (kw: string): Promise<boolean> => {
-      if (pickState.didSearch) await sleep(REQUEST_GAP_MS)
       try {
-        const songs = await this.searchSongs(kw)
+        const songs = await this.searchAllSources(kw)
         pickState.didSearch = true
         pickState.lastSearchError = undefined
         if (isAborted()) return true
@@ -893,9 +1034,8 @@ export default class CoverMatchService {
     }
 
     const tryArtist = async (kw: string): Promise<boolean> => {
-      if (pickState.didSearch) await sleep(REQUEST_GAP_MS)
       try {
-        const songs = await this.searchSongs(kw)
+        const songs = await this.searchAllSources(kw)
         pickState.didSearch = true
         pickState.lastSearchError = undefined
         if (isAborted()) return true

@@ -67,9 +67,12 @@ export interface CoverMatchSummary {
   results: CoverMatchResult[]
 }
 
+export type CoverMatchSource = 'netease' | 'kugou' | 'qq'
+
 /** 在线匹配封面候选（用户选择用；列表中必有 coverUrl） */
 export interface CoverMatchCandidate {
   songId: number
+  source?: CoverMatchSource
   name: string
   artists: string
   album?: string

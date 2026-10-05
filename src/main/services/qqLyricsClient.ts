@@ -12,12 +12,22 @@ const LYRIC_URL = 'https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg'
 const UA = 'Mozilla/5.0 (compatible; xmmusic/1.2.5)'
 const REFERER = 'https://y.qq.com/'
 
+export const qqAlbumCoverUrl = (albumMid: string, size = 800): string | undefined => {
+  const mid = String(albumMid || '').trim()
+  if (!mid) return undefined
+  return `https://y.gtimg.cn/music/photo_new/T002R${size}x${size}M000${mid}.jpg`
+}
+
 export interface QqLyricTrack {
   /** songmid */
   mid: string
   name: string
   artistName: string
   albumName?: string
+  /** 专辑 mid，拼封面用 */
+  albumMid?: string
+  /** 专辑封面（有 albumMid 时） */
+  coverUrl?: string
   /** 秒 */
   duration?: number
 }
@@ -106,15 +116,19 @@ class QqLyricsClient {
       const singers: string[] = Array.isArray(raw?.singer)
         ? raw.singer.map((s: any) => String(s?.name || '').trim()).filter(Boolean)
         : []
+      const albumMid = String(raw?.album?.mid || raw?.albumMid || raw?.albummid || '').trim()
+      const albumName = raw?.album?.name
+        ? String(raw.album.name)
+        : raw?.albumname
+          ? String(raw.albumname)
+          : undefined
       const track: QqLyricTrack = {
         mid,
         name: String(raw?.title || raw?.name || raw?.songname || '').trim(),
         artistName: singers.join(' / '),
-        albumName: raw?.album?.name
-          ? String(raw.album.name)
-          : raw?.albumname
-            ? String(raw.albumname)
-            : undefined,
+        albumName,
+        albumMid: albumMid || undefined,
+        coverUrl: qqAlbumCoverUrl(albumMid),
         duration:
           typeof raw?.interval === 'number' && raw.interval > 0
             ? raw.interval
@@ -162,6 +176,8 @@ class QqLyricsClient {
       name: cached?.name || '',
       artistName: cached?.artistName || '',
       albumName: cached?.albumName,
+      albumMid: cached?.albumMid,
+      coverUrl: cached?.coverUrl,
       duration: cached?.duration,
       lyric
     })
