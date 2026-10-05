@@ -751,9 +751,7 @@ const refreshListAfterMatch = async () => {
 
 const startBackgroundLoading = async () => {
   const token = backgroundLoadToken
-  // Check if there are more items to load
   if (musicStore.hasMore) {
-    // 批间让出事件循环，避免连续 IPC 占满渲染线程
     setTimeout(async () => {
       if (token !== backgroundLoadToken) return
       if (musicStore.hasMore && !musicStore.loading) {

@@ -3004,38 +3004,47 @@ export default class MusicDatabase {
    * @param cursor 上一页末行的游标；null 表示取第一页
    */
   getLocalMusicPage(cursor: LocalMusicCursor | null, limit: number): LocalMusicPage {
-    const base = `
+    // 游标列放在子查询里再 JOIN，避免 SELECT am.* 把 lm.added_at 盖掉
+    const innerWhere = cursor
+      ? 'WHERE (lm.added_at < ?) OR (lm.added_at = ? AND lm.music_id < ?)'
+      : ''
+    const sql = `
       SELECT
         am.*,
-        md.path as dir_path,
-        lm.added_at AS lm_added_at,
-        lm.music_id AS lm_music_id,
-        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-      FROM local_music lm
-      JOIN all_music am ON lm.music_id = am.id
+        md.path AS dir_path,
+        cur.lm_added_at AS lm_added_at,
+        cur.lm_music_id AS lm_music_id,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END AS is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END AS in_queue
+      FROM (
+        SELECT lm.added_at AS lm_added_at, lm.music_id AS lm_music_id
+        FROM local_music lm
+        JOIN all_music am2 ON am2.id = lm.music_id
+        JOIN music_dir md2 ON am2.dir_id = md2.id
+        ${innerWhere}
+        ORDER BY lm.added_at DESC, lm.music_id DESC
+        LIMIT ?
+      ) cur
+      JOIN all_music am ON am.id = cur.lm_music_id
       JOIN music_dir md ON am.dir_id = md.id
       LEFT JOIN favorites f ON am.id = f.music_id
       LEFT JOIN play_queue pq ON am.id = pq.music_id
+      ORDER BY cur.lm_added_at DESC, cur.lm_music_id DESC
     `
-    const tail = 'ORDER BY lm.added_at DESC, lm.music_id DESC LIMIT ?'
-
-    // 后台整库预载是高频热点，用缓存的 Statement 避免反复编译
     const rows = (
       cursor
-        ? this.prepareCached(
-            `${base} WHERE (lm.added_at < ?) OR (lm.added_at = ? AND lm.music_id < ?) ${tail}`
-          ).all(cursor.addedAt, cursor.addedAt, cursor.musicId, limit)
-        : this.prepareCached(`${base} ${tail}`).all(limit)
+        ? this.prepareCached(sql).all(cursor.addedAt, cursor.addedAt, cursor.musicId, limit)
+        : this.prepareCached(sql).all(limit)
     ) as any[]
 
     const last = rows[rows.length - 1]
+    const addedAt = last != null ? last.lm_added_at : null
+    const musicId = last != null ? Number(last.lm_music_id) : NaN
     return {
       items: this.mapSearchResultRows(rows),
-      // 取满一页才可能还有下一页；不足一页说明已到末尾
       nextCursor:
-        rows.length === limit && last
-          ? { addedAt: last.lm_added_at as string, musicId: last.lm_music_id as number }
+        rows.length === limit && last && addedAt != null && Number.isFinite(musicId)
+          ? { addedAt: String(addedAt), musicId }
           : null
     }
   }
