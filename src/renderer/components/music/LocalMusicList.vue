@@ -375,6 +375,10 @@ import type { MusicItem, ScanProgress } from '@shared/types/music'
 import type { LyricsMatchWorkerTaskStatus } from '@shared/types/lyrics'
 import type { CoverMatchWorkerTaskStatus } from '@shared/types/coverMatch'
 
+/** 后台续载每批条数与间隔 */
+const BG_PAGE_SIZE = 50
+const BG_LOAD_DELAY_MS = 1
+
 const { t } = useI18n()
 const musicStore = useMusicStore()
 const playerStore = usePlayerStore()
@@ -665,8 +669,8 @@ onMounted(async () => {
     isScanning.value = state.isScanning
     if (!state.isScanning) {
       scanProgress.value = null
-      // 扫描结束后刷新列表
-      musicStore.loadMusic(0, 100, true)
+      // 扫描结束只拉首屏不够，必须续上后台游标加载，否则列表停在 100 首
+      void refreshListAfterMatch()
     }
   })
 
@@ -749,16 +753,15 @@ const startBackgroundLoading = async () => {
   const token = backgroundLoadToken
   // Check if there are more items to load
   if (musicStore.hasMore) {
-    // Use requestIdleCallback or setTimeout to avoid blocking main thread
+    // 批间让出事件循环，避免连续 IPC 占满渲染线程
     setTimeout(async () => {
       if (token !== backgroundLoadToken) return
       if (musicStore.hasMore && !musicStore.loading) {
-        await musicStore.loadMusic(musicStore.currentOffset, 100)
+        await musicStore.loadMusic(musicStore.currentOffset, BG_PAGE_SIZE)
         if (token !== backgroundLoadToken) return
-        // Continue loading next batch
         startBackgroundLoading()
       }
-    }, 100) // Small delay between batches
+    }, BG_LOAD_DELAY_MS)
   }
 }
 
@@ -769,7 +772,7 @@ const stopBackgroundLoading = () => {
 const loadMore = async () => {
   // This is now handled by background loading, but we keep it for manual trigger if needed
   if (!musicStore.loading && musicStore.hasMore) {
-    await musicStore.loadMusic(musicStore.currentOffset, 100)
+    await musicStore.loadMusic(musicStore.currentOffset, BG_PAGE_SIZE)
   }
 }
 

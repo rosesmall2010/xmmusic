@@ -26,7 +26,11 @@
 - ⚡ **极致性能** - 虚拟滚动+分批加载，轻松应对万级曲库与万级播放队列；随机切歌时队列瞬时定位当前曲（不长距离平滑滚动）
 - 🖥️ **跨平台** - 支持 macOS（Apple Silicon）、Windows、Linux
 
-## 🎯 最新版本 v1.2.6
+## 🎯 最新版本 v1.2.7
+
+### v1.2.7 更新内容
+- **依赖升级** - Electron 44.5、better-sqlite3 13、music-metadata 12；Vue / Vite / TypeScript / electron-builder 同步跟上
+- **本地列表后台加载** - 整库续载改走游标分页（不再用 OFFSET）；首屏仍 100 条，后台每批 50 条
 
 ### v1.2.6 更新内容
 - **导出封面** - 列表右键与全屏歌词区右键新增「导出封面」，把当前封面另存为图片；自动记住上次导出目录（首次为下载目录）
@@ -139,8 +143,8 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 ## 🛠️ 技术栈
 
 ### 核心框架
-- **Electron** `42.7` - 跨平台桌面应用框架
-- **Vue 3** `3.5.40` - 渐进式 JavaScript 框架
+- **Electron** `44.5` - 跨平台桌面应用框架
+- **Vue 3** `3.5.43` - 渐进式 JavaScript 框架
 - **TypeScript** `7.x` - JavaScript 的超集
 - **Vite** `8.x` - 前端构建工具
 
@@ -151,7 +155,7 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 ### 音频 & 媒体
 - **Howler.js** / 原生 Audio API - 音频播放（优先原生，失败时回退 Howler）
-- **music-metadata** - 音频元数据提取
+- **music-metadata** `12.x` - 音频元数据提取
 - **node-id3** - ID3 标签编辑
 
 ### UI组件 & 图标
@@ -160,7 +164,7 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 - **@tanstack/vue-virtual** - 虚拟滚动
 
 ### 数据 & 工具
-- **better-sqlite3** `12.11` - SQLite 数据库
+- **better-sqlite3** `13.x` - SQLite 数据库
 
 ## 📦 安装
 
@@ -168,9 +172,9 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 从 [Releases](https://github.com/rosesmall2010/xmmusic/releases) 页面下载对应平台的安装包:
 
-- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.2.6-arm64.dmg`
-- **Windows**: `xmmusic Setup 1.2.6.exe`
-- **Linux**: `xmmusic-1.2.6.AppImage`
+- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-1.2.7-arm64.dmg`
+- **Windows**: `xmmusic Setup 1.2.7.exe`
+- **Linux**: `xmmusic-1.2.7.AppImage`
 
 > macOS 安装包仅支持 **Apple Silicon（`arm64`）**。可在终端用 `uname -m` 确认，应显示 `arm64`。
 

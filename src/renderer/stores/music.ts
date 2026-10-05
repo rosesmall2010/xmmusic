@@ -1,14 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef, triggerRef } from 'vue'
-import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
+import type { MusicItem, Playlist, AdvancedSearchCriteria, LocalMusicCursor } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
   // State
   const musicList = shallowRef<MusicItem[]>([])
   const totalCount = ref(0)
   const currentOffset = ref(0)
-  const pageSize = ref(100)
+  /** 默认续载批大小；首屏由调用方显式传 100 */
+  const pageSize = ref(50)
   const loading = ref(false)
+  /** 游标分页：下一页起点；null 表示没有更多 */
+  const listCursor = ref<LocalMusicCursor | null>(null)
   const searchQuery = ref('')
   const searchResults = ref<MusicItem[]>([])
   const currentView = ref<'local' | 'recent' | 'playlist' | 'favorites' | 'queue' | 'playlist-detail' | 'settings' | 'statistics' | 'recommendations'>('local')
@@ -30,9 +33,9 @@ export const useMusicStore = defineStore('music', () => {
   /** 列表加载世代：清空/强制重置时递增，丢弃进行中的过期分页结果 */
   let loadEpoch = 0
 
-  // Getters
+  // Getters：有下一页游标且已加载数未到总数（后台加载期间总数不变，只首屏查一次）
   const hasMore = computed(() => {
-    return currentOffset.value < totalCount.value
+    return listCursor.value != null && currentOffset.value < totalCount.value
   })
   const isAdvancedMode = computed(() => !!advancedCriteria.value)
   const currentInLocalList = computed(
@@ -45,36 +48,54 @@ export const useMusicStore = defineStore('music', () => {
     musicList.value = []
     totalCount.value = 0
     currentOffset.value = 0
+    listCursor.value = null
     loading.value = false
   }
 
-  // Actions
+  /**
+   * 加载本地列表。
+   * offset === 0：从第一页重拉（游标置空），并查一次总数。
+   * offset !== 0：按 listCursor 追加下一页，不再查总数、不用 OFFSET。
+   */
   async function loadMusic(offset: number = 0, limit: number = pageSize.value, force: boolean = false) {
-    // If not forcing refresh and we already have data (and asking for first page), skip
-    if (!force && offset === 0 && musicList.value.length > 0) {
+    const isReset = offset === 0
+    if (!force && isReset && musicList.value.length > 0) {
       return
     }
 
-    const epoch = force && offset === 0 ? (loadEpoch += 1) : loadEpoch
+    const epoch = force && isReset ? (loadEpoch += 1) : loadEpoch
+    // 重拉开始立刻作废旧游标，避免进行中的追加接到新列表后面
+    const appendFrom = isReset ? null : listCursor.value
+    if (isReset) {
+      listCursor.value = null
+    } else if (!appendFrom) {
+      return
+    }
 
     loading.value = true
     try {
-      const items = await window.electronAPI.getMusicList(offset, limit)
+      const page = await window.electronAPI.getLocalMusicPage(appendFrom, limit)
       if (epoch !== loadEpoch) return
+      // 追加必须仍接在「发起时的那一页」后面；首屏重拉会改游标，对不上则丢弃
+      if (!isReset && listCursor.value !== appendFrom) return
 
-      if (offset === 0) {
-        musicList.value = items
-        currentOffset.value = items.length
+      if (isReset) {
+        musicList.value = page.items
+        currentOffset.value = page.items.length
+        listCursor.value = page.nextCursor
+        const count = await window.electronAPI.getMusicTotalCount()
+        if (epoch !== loadEpoch) return
+        totalCount.value = count
       } else {
-        // 并发分页时若 offset 已错位（重复拉同一页/跳跃），丢弃避免列表出现重复或错位歌曲
-        if (offset !== musicList.value.length) return
-        musicList.value.push(...items)
+        if (page.items.length === 0) {
+          listCursor.value = null
+          return
+        }
+        musicList.value.push(...page.items)
         triggerRef(musicList)
         currentOffset.value = musicList.value.length
+        listCursor.value = page.nextCursor
       }
-      const count = await window.electronAPI.getMusicTotalCount()
-      if (epoch !== loadEpoch) return
-      totalCount.value = count
     } finally {
       if (epoch === loadEpoch) {
         loading.value = false

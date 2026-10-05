@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.7] - 2026-10-05
+
+### 改善
+- **依赖升级**：Electron `42.7` → `^44.5.1`，better-sqlite3 `12.11` → `^13.0.3`，music-metadata → `^12.0.0`；同步升级 Vue `^3.5.43`、Vite `^8.3.2`、TypeScript `^7.0.2`、electron-builder `^26.15.3` 等
+- **本地列表后台续载改走游标分页**：渲染进程不再用 `OFFSET` 逐批拉全库；首屏仍 100 条并只查一次总数，后台每批 50 条、间隔 1ms，按 `getLocalMusicPage` 的 nextCursor 追加
+- 审核跟进：首屏重拉会立刻作废旧游标，追加返回后若游标已变则丢弃，避免和新列表拼在一起；扫描结束经 `scan-state-changed` 时改为首屏刷新后继续后台续载，不再只留下 100 首
+
 ## [1.2.6] - 2026-09-30
 
 ### 新增
