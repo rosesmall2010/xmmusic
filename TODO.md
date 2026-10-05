@@ -1,13 +1,35 @@
 # TODO 任务清单
 
-**最后更新**: 2026-09-18
-**项目状态**: 🚀 维护与迭代 (v1.2.4)
+**最后更新**: 2026-10-05
+**项目状态**: 🚀 维护与迭代 (v1.2.6)
 
 ---
 
 ## 📌 组件保留备忘（勿当死代码删除）
 
 - `EditTagModal.vue`、`MetadataEditDialog.vue`：即使当前 UI 主路径为 `NewTagInfoModal`，**仍保留**，后续可能重新接入
+
+---
+
+## 🐞 已知 Bug（2026-10-05 编写功能指南时盘点，待修复）
+
+> 用户侧已在 [`docs/功能指南.md`](docs/功能指南.md) 第 23 节「已知限制」中照实说明，修复后记得同步删改
+
+- [ ] **设置「关闭主面板」开关不生效**：点关闭总是直接退出
+  - 原因: 渲染端只把 `closeToTray` 写进 localStorage；主进程 `close` 事件读的是数据库 settings 的 `minimizeToTray`，没有任何代码写这个键
+  - 📍 相关: `src/renderer/stores/settings.ts`、`src/renderer/views/SettingsView.vue`、`src/main/main.ts`
+- [ ] **设置「自动播放」开关不生效**：说明文字为「程序启动或切换歌曲时自动播放」，但没有任何代码读取 `autoPlay`
+  - 📍 相关: `src/renderer/stores/settings.ts`、`src/renderer/stores/player.ts`
+- [ ] **桌面歌词锁定后无法解锁**：锁定时隐藏控制条并鼠标穿透，窗口内再无解锁入口，只能回全屏页关闭后重开
+  - 📍 相关: `src/renderer/views/DesktopLyricsWindow.vue`、`src/main/windows/desktopLyrics.ts`
+- [ ] **「检查更新」是假的**：固定弹出「当前已是最新版本」，未接入真实版本检查（可查 GitHub Releases）
+  - 📍 相关: `src/renderer/views/SettingsView.vue`
+- [ ] **「清除缓存」说明与实际不符**：说明写「清除封面图片和临时文件」，实际只清 Chromium 会话缓存，不删 `covers/`
+  - 📍 相关: `src/main/ipc/handlers.ts`（`clear-cache`）、`src/renderer/locales/*.json`（`clearCacheDesc`）
+- [ ] **正式版数据库文件名可能用错（需实测确认）**：`db.ts` 用 `process.env.NODE_ENV !== 'production'` 选 `m4-dev.db` / `m4.db`，打包后运行时通常没有 `NODE_ENV`，正式版很可能实际在用 `m4-dev.db`（目录仍是非 dev 的 userData）。修复时注意已有用户数据的迁移
+  - 📍 相关: `src/main/database/db.ts`（两处 `isDev`）
+- [ ] **README 桌面歌词入口描述不准**：使用说明写「播放栏打开桌面歌词」，实际入口只在全屏播放页顶栏
+  - 📍 相关: `README.md`
 
 ---
 
