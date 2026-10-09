@@ -108,6 +108,7 @@ import { useRouter } from 'vue-router'
 import { Moon, Sun, Settings, Minimize2, Search, Clock, X, Languages } from 'lucide-vue-next'
 import { useSettingsStore } from '@/stores/settings'
 import { useI18n } from 'vue-i18n'
+import { parseSearchKeywords } from '@shared/utils/searchKeywords'
 
 const router = useRouter()
 const { locale } = useI18n()
@@ -191,7 +192,7 @@ const handleSearchBlur = () => {
 
 const handleSearch = async () => {
   const query = searchQuery.value || ''
-  if (query.trim().length === 0) {
+  if (parseSearchKeywords(query).length === 0) {
     return
   }
 

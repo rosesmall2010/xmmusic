@@ -28,6 +28,7 @@ import type {
 } from '../../shared/types/lyrics'
 import type { CoverMatchResult, CoverMatchProgress, CoverMatchSummary } from '../../shared/types/coverMatch'
 import { APP_SHORTCUT_ACTIONS } from '../../shared/utils/shortcutActions'
+import { parseSearchKeywords } from '../../shared/utils/searchKeywords'
 import {
   clampMatchConcurrency,
   DEFAULT_MATCH_CONCURRENCY
@@ -540,11 +541,9 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
 
   ipcMain.handle('search-music', async (_, query: string) => {
     if (!db) return []
+    if (parseSearchKeywords(query).length === 0) return []
     const results = db.searchMusic(query)
-    // 记录搜索历史
-    if (query && query.trim()) {
-      db.addSearchHistory(query.trim(), 'basic')
-    }
+    db.addSearchHistory(query.trim(), 'basic')
     return results
   })
 

@@ -15,9 +15,9 @@ import { DB_VERSION, DB_VERSION_KEY } from './dbver'
 import { normalizePath, getOrCreateMusicDir, batchGetOrCreateMusicDir, buildPathFromMusicRecord, parsePath } from './pathUtils'
 import {
   buildSearchPinyinFields,
-  classifySearchQuery,
-  escapeFtsQuery
+  classifySearchQuery
 } from '../../shared/utils/pinyinSearch'
+import { parseSearchKeywords } from '../../shared/utils/searchKeywords'
 
 const dbname: string = 'm4'
 const dbnameDev: string = dbname +'-dev'
@@ -454,85 +454,6 @@ export default class MusicDatabase {
       musicItem.inQueue = row.in_queue === 1
       return musicItem as MusicItem
     })
-  }
-
-  /** FTS5 原文搜索 */
-  private searchMusicFts(query: string, limit: number): MusicItem[] {
-    const ftsQuery = escapeFtsQuery(query)
-    if (!ftsQuery) return []
-
-    const stmt = this.db!.prepare(`
-      SELECT
-        am.*,
-        md.path as dir_path,
-        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-      FROM music_fts fts
-      JOIN all_music am ON am.id = fts.rowid
-      JOIN music_dir md ON am.dir_id = md.id
-      LEFT JOIN favorites f ON am.id = f.music_id
-      LEFT JOIN play_queue pq ON am.id = pq.music_id
-      WHERE am.is_duplicate = 0
-        AND music_fts MATCH ?
-      ORDER BY rank
-      LIMIT ?
-    `)
-    const rows = stmt.all(`${ftsQuery}*`, limit) as any[]
-    return this.mapSearchResultRows(rows)
-  }
-
-  /** 拼音/声母旁路搜索 */
-  private searchMusicPinyin(query: string, limit: number): MusicItem[] {
-    const q = query.trim().toLowerCase()
-    if (!q) return []
-
-    const stmt = this.db!.prepare(`
-      SELECT
-        am.*,
-        md.path as dir_path,
-        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-      FROM all_music am
-      JOIN music_dir md ON am.dir_id = md.id
-      LEFT JOIN favorites f ON am.id = f.music_id
-      LEFT JOIN play_queue pq ON am.id = pq.music_id
-      WHERE am.is_duplicate = 0
-        AND (
-          am.search_pinyin LIKE ?
-          OR am.search_initials LIKE ?
-        )
-      LIMIT ?
-    `)
-    // 前缀匹配（而非两端通配），让 idx_all_music_search_pinyin/search_initials 索引生效
-    const prefix = `${q}%`
-    const rows = stmt.all(prefix, prefix, limit) as any[]
-    return this.mapSearchResultRows(rows)
-  }
-
-  /** LIKE 原文回退（含 file_name） */
-  private searchMusicLike(query: string, limit: number): MusicItem[] {
-    const likeQuery = `%${query.trim()}%`
-    const stmt = this.db!.prepare(`
-      SELECT
-        am.*,
-        md.path as dir_path,
-        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
-        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
-      FROM all_music am
-      JOIN music_dir md ON am.dir_id = md.id
-      LEFT JOIN favorites f ON am.id = f.music_id
-      LEFT JOIN play_queue pq ON am.id = pq.music_id
-      WHERE am.is_duplicate = 0
-        AND (
-          am.title LIKE ?
-          OR am.artist LIKE ?
-          OR am.album LIKE ?
-          OR am.file_name LIKE ?
-        )
-      LIMIT ?
-    `)
-    const rows = stmt.all(likeQuery, likeQuery, likeQuery, likeQuery, limit) as any[]
-    return this.mapSearchResultRows(rows)
   }
 
   close(): void {
@@ -1348,44 +1269,34 @@ export default class MusicDatabase {
   }
 
   /**
-   * 统一搜索入口：按 query 分流后合并去重
-   * - pinyin：仅走预计算拼音/声母列
-   * - fts：仅走 FTS5；失败回退 LIKE
-   * - mixed：FTS → 拼音 → LIKE，按 id 去重直至 limit
+   * 顶栏搜索：关键字按空格/逗号拆分并去重，「歌名 + 歌手 + 文件名」拼成的字符串须包含全部关键字（顺序不限）
+   * 字段间用空格连接：关键字本身不含空白，因此不会跨字段误命中
    */
   searchMusic(query: string, limit: number = 10000): MusicItem[] {
-    if (!query || query.trim() === '') {
-      return []
-    }
+    const keywords = parseSearchKeywords(query)
+    if (keywords.length === 0) return []
 
-    const mode = classifySearchQuery(query)
-    const merged = new Map<number, MusicItem>()
+    const haystack =
+      "(COALESCE(am.title, '') || ' ' || COALESCE(am.artist, '') || ' ' || COALESCE(am.file_name, ''))"
+    const conditions = keywords.map(() => `${haystack} LIKE ? ESCAPE '\\'`).join(' AND ')
+    const params = keywords.map((kw) => `%${kw.replace(/[\\%_]/g, '\\$&')}%`)
 
-    const append = (items: MusicItem[]) => {
-      for (const item of items) {
-        if (!merged.has(item.id)) merged.set(item.id, item)
-        if (merged.size >= limit) break
-      }
-    }
-
-    if (mode === 'fts' || mode === 'mixed') {
-      try {
-        append(this.searchMusicFts(query, limit))
-      } catch (error) {
-        console.error('FTS 搜索失败，回退 LIKE:', error)
-        append(this.searchMusicLike(query, limit))
-      }
-    }
-
-    if ((mode === 'pinyin' || mode === 'mixed') && merged.size < limit) {
-      append(this.searchMusicPinyin(query, limit))
-    }
-
-    if (mode === 'mixed' && merged.size < limit) {
-      append(this.searchMusicLike(query, limit))
-    }
-
-    return Array.from(merged.values()).slice(0, limit)
+    const stmt = this.prepareCached(`
+      SELECT
+        am.*,
+        md.path as dir_path,
+        CASE WHEN f.music_id IS NOT NULL THEN 1 ELSE 0 END as is_favorite,
+        CASE WHEN pq.music_id IS NOT NULL THEN 1 ELSE 0 END as in_queue
+      FROM all_music am
+      JOIN music_dir md ON am.dir_id = md.id
+      LEFT JOIN favorites f ON am.id = f.music_id
+      LEFT JOIN play_queue pq ON am.id = pq.music_id
+      WHERE am.is_duplicate = 0
+        AND ${conditions}
+      LIMIT ?
+    `)
+    const rows = stmt.all(...params, limit) as any[]
+    return this.mapSearchResultRows(rows)
   }
 
   advancedSearch(criteria: AdvancedSearchCriteria): MusicItem[] {
@@ -2679,8 +2590,9 @@ export default class MusicDatabase {
       const pinyinQuery = `%${q.toLowerCase()}%`
       const mode = classifySearchQuery(q)
 
-      const whereParts = ['am.title LIKE ?', 'am.artist LIKE ?', 'am.album LIKE ?']
-      const params: any[] = [likeQuery, likeQuery, likeQuery]
+      // 只建议歌名/歌手：专辑不在顶栏搜索范围内，点了也搜不到
+      const whereParts = ['am.title LIKE ?', 'am.artist LIKE ?']
+      const params: any[] = [likeQuery, likeQuery]
       if (mode === 'pinyin' || mode === 'mixed') {
         whereParts.push('am.search_pinyin LIKE ?', 'am.search_initials LIKE ?')
         params.push(pinyinQuery, pinyinQuery)
@@ -2699,18 +2611,11 @@ export default class MusicDatabase {
            JOIN all_music am ON lm.music_id = am.id
            WHERE am.is_duplicate = 0
              AND (${whereParts.join(' OR ')})
-           UNION ALL
-           SELECT am.album AS suggestion
-           FROM local_music lm
-           JOIN all_music am ON lm.music_id = am.id
-           WHERE am.is_duplicate = 0
-             AND am.album IS NOT NULL
-             AND (${whereParts.join(' OR ')})
          ) t
          WHERE suggestion IS NOT NULL AND suggestion != ''
          LIMIT ?`
       )
-      const rows = stmt.all(...params, ...params, ...params, limit * 6) as Array<{ suggestion: string }>
+      const rows = stmt.all(...params, ...params, limit * 6) as Array<{ suggestion: string }>
 
       const seen = new Set<string>()
       const suggestions: string[] = []

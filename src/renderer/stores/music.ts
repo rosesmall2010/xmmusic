@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef, triggerRef } from 'vue'
+import { parseSearchKeywords } from '@shared/utils/searchKeywords'
 import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
@@ -82,7 +83,7 @@ export const useMusicStore = defineStore('music', () => {
 
   async function searchMusic(query: string) {
     searchQuery.value = query
-    if (!query.trim()) {
+    if (parseSearchKeywords(query).length === 0) {
       searchResults.value = []
       return
     }
