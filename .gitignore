@@ -34,3 +34,4 @@ yarn-error.log*
 # Electron
 out/
 packages/
+package-lock.json
