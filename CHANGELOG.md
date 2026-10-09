@@ -5,6 +5,11 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.0.0] - 2026-10-09
+
+### 改善
+- **压缩必要的图片，减小安装包体积**：应用图标 `pic/appicon2.png` / `build/icon.png` / `src/renderer/assets/appicon.png` 约 959KB → 226KB，`icon.icns` 约 1.74MB → 938KB，缺省封面 `default-cover.png` 约 366KB → 43KB，托盘与各尺寸 `build/icon-*.png` 同步压缩；原图备份到 `pic/backup/`
+
 ## [1.2.7] - 2026-10-05
 
 ### 改善
