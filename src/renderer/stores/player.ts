@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch, toRaw } from 'vue'
+import { mergeMusicUpdate, overlayMusicFile } from '@/utils/musicFilePatch'
 import type { MusicItem } from '@shared/types/music'
 
 const LOCAL_STORAGE_KEY = 'xmmusic_player_state'
@@ -30,10 +31,11 @@ export const usePlayerStore = defineStore('player', () => {
   // 添加到队列
   function addToQueue(music: MusicItem, position?: number) {
     const next = [...queue.value]
+    const item = overlayMusicFile(music)
     if (position !== undefined) {
-      next.splice(position, 0, music)
+      next.splice(position, 0, item)
     } else {
-      next.push(music)
+      next.push(item)
     }
     queue.value = next
   }
@@ -449,16 +451,10 @@ export const usePlayerStore = defineStore('player', () => {
       const updatedMusic = customEvent.detail
       if (!updatedMusic || !updatedMusic.id) return
 
-      // 更新队列中的歌曲
-      const queueIndex = queue.value.findIndex(m => m.id === updatedMusic.id)
-      if (queueIndex !== -1) {
-        // 重新赋值整个数组以触发响应式更新
-        const updatedQueue = [...queue.value]
-        updatedQueue[queueIndex] = { ...updatedQueue[queueIndex], ...updatedMusic }
-        queue.value = updatedQueue
-      }
+      // 队列里同一首歌可能重复出现，每一条都要换成新文件名
+      const updatedQueue = mergeMusicUpdate(queue.value, updatedMusic)
+      if (updatedQueue) queue.value = updatedQueue
 
-      // 更新当前播放的歌曲
       if (currentMusic.value && currentMusic.value.id === updatedMusic.id) {
         currentMusic.value = { ...currentMusic.value, ...updatedMusic }
       }

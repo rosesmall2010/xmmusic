@@ -639,6 +639,7 @@ export default class MusicDatabase {
     album: string | null
     year: number | null
     genre: string | null
+    file_name: string
     cover_path: string | null
     lyrics_path: string | null
     lyrics_offset: number
@@ -678,6 +679,10 @@ export default class MusicDatabase {
     if (updates.genre !== undefined) {
       fields.push('genre = ?')
       values.push(updates.genre)
+    }
+    if (updates.file_name !== undefined) {
+      fields.push('file_name = ?')
+      values.push(updates.file_name)
     }
     if (updates.cover_path !== undefined) {
       fields.push('cover_path = ?')
@@ -757,7 +762,8 @@ export default class MusicDatabase {
     if (
       updates.title !== undefined ||
       updates.artist !== undefined ||
-      updates.album !== undefined
+      updates.album !== undefined ||
+      updates.file_name !== undefined
     ) {
       this.refreshSearchPinyinForMusic(id)
     }

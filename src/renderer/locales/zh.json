@@ -464,7 +464,16 @@
     "cancel": "取消",
     "saveError": "保存失败",
     "nonMp3Hint": "该格式不支持写回文件标签，保存仅更新数据库",
-    "noId3Data": "该文件没有可读取的 ID3 原始数据"
+    "noId3Data": "该文件没有可读取的 ID3 原始数据",
+    "renameById3": "按 ID3 重命名",
+    "renameById3Hint": "用当前 ID3 的歌手和歌曲名重命名文件，格式为「歌手 - 歌曲名.扩展名」；同名音频或同名 .lrc 都算重名，从 .1 开始递增。歌词文件会改成相同主文件名",
+    "renameConfirm": "将按当前 ID3 把文件重命名为「{artist} - {title}」并保留原扩展名。若目录中已有同名音频或同名 .lrc，会从 .1 开始依次尝试。歌词文件会同步改成相同的主文件名。确定继续？",
+    "renameUnchanged": "文件名已经符合当前 ID3，无需重命名",
+    "renameFailed": "重命名失败",
+    "restoreFileName": "还原文件名",
+    "restoreFileNameHint": "对话框关闭前，可还原为打开时的文件名「{fileName}」，歌词一并还原",
+    "restoreConfirm": "将文件名还原为「{fileName}」？本次一起改过的歌词文件也会还原。",
+    "restoreFailed": "还原文件名失败"
   },
   "search": {
     "placeholder": "搜索音乐、艺术家、专辑...",

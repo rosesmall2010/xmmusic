@@ -77,6 +77,7 @@ import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import { getCoverUrl } from '@/utils/media'
+import { mergeMusicUpdate, overlayMusicList } from '@/utils/musicFilePatch'
 import { Clock, Heart, Folder, Shuffle, Play } from 'lucide-vue-next'
 import type { MusicItem } from '@shared/types/music'
 
@@ -117,7 +118,7 @@ onMounted(async () => {
     limit: 10,
   }
   const results = await window.electronAPI.advancedSearch(criteria)
-  recentlyAdded.value = results
+  recentlyAdded.value = overlayMusicList(results)
 
   // 监听元数据更新事件
   window.addEventListener('music-metadata-updated', handleMetadataUpdate as EventListener)
@@ -131,13 +132,8 @@ const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail as MusicItem
   if (!updatedMusic || !updatedMusic.id) return
 
-  const index = recentlyAdded.value.findIndex(m => m.id === updatedMusic.id)
-  if (index !== -1) {
-    // 重新赋值整个数组以触发响应式更新
-    const updatedList = [...recentlyAdded.value]
-    updatedList[index] = { ...updatedList[index], ...updatedMusic }
-    recentlyAdded.value = updatedList
-  }
+  const updatedList = mergeMusicUpdate(recentlyAdded.value, updatedMusic)
+  if (updatedList) recentlyAdded.value = updatedList
 }
 
 const goToRecent = () => {

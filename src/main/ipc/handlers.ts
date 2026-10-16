@@ -16,6 +16,7 @@ import { loadSettingsFromFile, saveSettingsToFile } from '../services/settingsSt
 import scanManager from '../services/scanManager'
 import * as desktopLyrics from '../windows/desktopLyrics'
 import { syncMusicMetadataToDb, batchSyncMusicMetadataToDb } from '../services/metadataSync'
+import { renameMusicById3, restoreMusicFileName } from '../services/renameById3'
 import { setPlaylistCover, getPlaylistCoverCandidates } from '../services/playlistCover'
 import type { ScanProgress, MusicItem, LocalMusicCursor } from '../../shared/types/music'
 import type { ShortcutConfig } from '../../shared/types/settings'
@@ -2069,6 +2070,39 @@ export function setupIPC(db: MusicDatabase | null, mainWindow: BrowserWindow, sh
   }
 
   // ========== 元数据编辑功能 ==========
+  ipcMain.handle('rename-music-by-id3', async (_, musicId: number) => {
+    if (!db) throw new Error('数据库未初始化')
+    try {
+      return await renameMusicById3({
+        db,
+        musicId,
+        readTags: (filePath) => id3Fixer.readRawID3Tags(filePath),
+        findSidecar: (audioPath) => lyricsService.findLyricsFile(audioPath),
+        clearLyricCache: () => lyricsService.clearLyricCache()
+      })
+    } catch (error: any) {
+      throw new Error(error?.message || '按 ID3 重命名失败')
+    }
+  })
+
+  ipcMain.handle('restore-music-file-name', async (_, request: {
+    musicId: number
+    audioTo: string
+    lyricsPath: string | null
+    lyrics: Array<{ from: string; to: string }>
+  }) => {
+    if (!db) throw new Error('数据库未初始化')
+    try {
+      return await restoreMusicFileName({
+        db,
+        request,
+        clearLyricCache: () => lyricsService.clearLyricCache()
+      })
+    } catch (error: any) {
+      throw new Error(error?.message || '还原文件名失败')
+    }
+  })
+
   ipcMain.handle('update-music-metadata', async (_, musicId: number, updates: any) => {
     if (!db) throw new Error('数据库未初始化')
 

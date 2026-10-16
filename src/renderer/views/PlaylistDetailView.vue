@@ -112,6 +112,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
+import { mergeMusicUpdate, overlayMusicList } from '@/utils/musicFilePatch'
 import CreatePlaylistModal from '@/components/music/CreatePlaylistModal.vue'
 import SetPlaylistCoverModal from '@/components/music/SetPlaylistCoverModal.vue'
 import type { MusicItem } from '@shared/types/music'
@@ -174,12 +175,8 @@ const handleMetadataUpdate = (event: CustomEvent) => {
   const updatedMusic = event.detail as MusicItem
   if (!updatedMusic || !updatedMusic.id) return
 
-  const index = songs.value.findIndex(m => m.id === updatedMusic.id)
-  if (index !== -1) {
-    const updatedList = [...songs.value]
-    updatedList[index] = { ...updatedList[index], ...updatedMusic }
-    songs.value = updatedList
-  }
+  const updatedList = mergeMusicUpdate(songs.value, updatedMusic)
+  if (updatedList) songs.value = updatedList
 }
 
 watch(() => route.params.id as string, async (newId: string, oldId: string) => {
@@ -245,7 +242,7 @@ const loadPlaylist = async () => {
       hasMore = false
     }
 
-    songs.value = [...songs.value, ...newSongs]
+    songs.value = [...songs.value, ...overlayMusicList(newSongs)]
     currentOffset += newSongs.length
   } catch (error) {
     console.error('加载歌单失败:', error)

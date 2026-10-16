@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, shallowRef, triggerRef } from 'vue'
 import { parseSearchKeywords } from '@shared/utils/searchKeywords'
+import { mergeMusicUpdate, overlayMusicList } from '@/utils/musicFilePatch'
 import type { MusicItem, Playlist, AdvancedSearchCriteria } from '@shared/types/music'
 
 export const useMusicStore = defineStore('music', () => {
@@ -61,13 +62,14 @@ export const useMusicStore = defineStore('music', () => {
       const items = await window.electronAPI.getMusicList(offset, limit)
       if (epoch !== loadEpoch) return
 
+      const page = overlayMusicList(items)
       if (offset === 0) {
-        musicList.value = items
-        currentOffset.value = items.length
+        musicList.value = page
+        currentOffset.value = page.length
       } else {
         // 并发分页时若 offset 已错位（重复拉同一页/跳跃），丢弃避免列表出现重复或错位歌曲
         if (offset !== musicList.value.length) return
-        musicList.value.push(...items)
+        musicList.value.push(...page)
         triggerRef(musicList)
         currentOffset.value = musicList.value.length
       }
@@ -87,7 +89,7 @@ export const useMusicStore = defineStore('music', () => {
       searchResults.value = []
       return
     }
-    searchResults.value = await window.electronAPI.searchMusic(query)
+    searchResults.value = overlayMusicList(await window.electronAPI.searchMusic(query))
   }
 
   async function runAdvancedSearch(criteria: AdvancedSearchCriteria) {
@@ -102,7 +104,7 @@ export const useMusicStore = defineStore('music', () => {
         }
       })
       const results = await window.electronAPI.advancedSearch(cleaned)
-      advancedResults.value = results
+      advancedResults.value = overlayMusicList(results)
       advancedCriteria.value = cleaned
     } finally {
       advancedLoading.value = false
@@ -187,6 +189,24 @@ export const useMusicStore = defineStore('music', () => {
   /** 定位流程结束（加载 + 滚动完成后由列表页调用） */
   function finishLocateCurrent() {
     locatingCurrent.value = false
+  }
+
+  /** 按 id 合并曲目变更。同一 id 在列表里出现多次时全部更新；shallowRef 必须换成新数组 */
+  function patchCachedMusic(patch: Partial<MusicItem> & { id: number }) {
+    const nextList = mergeMusicUpdate(musicList.value, patch)
+    if (nextList) musicList.value = nextList
+    const nextSearch = mergeMusicUpdate(searchResults.value, patch)
+    if (nextSearch) searchResults.value = nextSearch
+    const nextAdvanced = mergeMusicUpdate(advancedResults.value, patch)
+    if (nextAdvanced) advancedResults.value = nextAdvanced
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('music-metadata-updated', (event: Event) => {
+      const patch = (event as CustomEvent).detail
+      if (!patch?.id) return
+      patchCachedMusic(patch)
+    })
   }
 
   return {

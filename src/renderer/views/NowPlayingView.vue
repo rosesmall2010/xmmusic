@@ -595,6 +595,7 @@ import Cassette from '@/components/effects/Cassette.vue'
 import CassetteIcon from '@/components/effects/CassetteIcon.vue'
 import { type LyricLine } from '@/utils/lrcParser'
 import { getCoverUrl } from '@/utils/media'
+import { musicFilePatchRevision, overlayMusicFile } from '@/utils/musicFilePatch'
 import type { MusicItem, Playlist } from '@shared/types/music'
 import { Monitor, List, Heart, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Shuffle, ArrowRight, Minimize2, Volume2, VolumeX, Sliders, Moon, Sun, Languages, AudioLines, Flame, Zap, Disc3, Disc2, FileText, Eye, EyeOff, X, Music, FileEdit, FolderOpen, Info, Trash2, RotateCcw, Clock, Image as ImageIcon, Loader2, ChevronRight, Download } from 'lucide-vue-next'
 import { useEqualizer } from '@/composables/useEqualizer'
@@ -749,9 +750,10 @@ const visibleQueue = computed(() => {
   const start = Math.max(0, Math.floor(effectiveScrollTop / queueItemHeight) - buffer)
   const visibleCount = Math.ceil(queueContainerHeight.value / queueItemHeight)
   const end = Math.min(queue.value.length, start + visibleCount + buffer * 2)
+  void musicFilePatchRevision.value
   const result: { music: MusicItem; index: number }[] = []
   for (let index = start; index < end; index++) {
-    result.push({ music: queue.value[index], index })
+    result.push({ music: overlayMusicFile(queue.value[index]), index })
   }
   return result
 })

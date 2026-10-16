@@ -362,6 +362,7 @@ import { useI18n } from 'vue-i18n'
 import { usePlayerStore } from '@/stores/player'
 import { useLyricsMatchStore } from '@/stores/lyricsMatch'
 import { getCoverUrl } from '@/utils/media'
+import { musicFilePatchRevision, overlayMusicFile } from '@/utils/musicFilePatch'
 import { Volume2, Trash2, Heart, Music, Check, X, FileEdit, ListMusic, FolderOpen, Info, AlertCircle, FileX, Database, FileText, Image as ImageIcon, Loader2, ChevronRight, Download } from 'lucide-vue-next'
 import DefaultCover from '@/components/common/DefaultCover.vue'
 import AddToPlaylistModal from '@/components/music/AddToPlaylistModal.vue'
@@ -429,10 +430,12 @@ const visibleRange = computed(() => {
 })
 
 const visibleSongs = computed(() => {
+  // 读一次修订号：改名事件先于父列表换数组时，文件名列也能立刻换成新名字
+  void musicFilePatchRevision.value
   // 不直接 mutate props.songs 里的原始对象（它们可能被 store/播放队列共享引用），
   // originalIndex 只在本组件内用于展示序号，返回浅拷贝即可
   return props.songs.slice(visibleRange.value.start, visibleRange.value.end).map((song, index) => ({
-    ...song,
+    ...overlayMusicFile(song),
     originalIndex: visibleRange.value.start + index
   }))
 })
@@ -550,8 +553,12 @@ const isAllSelected = computed(() => {
 
 // filePath -> 歌曲的查找表，避免批量加歌单时对整个 songs 数组做线性 .find()
 const songsByFilePath = computed(() => {
+  void musicFilePatchRevision.value
   const map = new Map<string, MusicItem>()
-  for (const song of props.songs) map.set(song.filePath, song)
+  for (const song of props.songs) {
+    const shown = overlayMusicFile(song)
+    map.set(shown.filePath, shown)
+  }
   return map
 })
 
@@ -1368,6 +1375,40 @@ const updateQueueStatus = () => {
     music.inQueue = queueFilePaths.has(music.filePath)
   })
 }
+
+/** 改名后文件路径变了，勾选、收藏和队列标记都按路径记，要跟着迁到新路径 */
+const lastFilePathById = new Map<number, string>()
+
+const remapPathSet = (paths: Set<string>, from: string, to: string) => {
+  if (from === to || !paths.has(from)) return paths
+  const next = new Set(paths)
+  next.delete(from)
+  next.add(to)
+  return next
+}
+
+watch(
+  [() => props.songs, musicFilePatchRevision],
+  () => {
+    let selected = selectedSongs.value
+    let favorites = favoriteFiles.value
+    let queued = queueFiles.value
+    for (const song of props.songs) {
+      const shown = overlayMusicFile(song)
+      const prev = lastFilePathById.get(song.id)
+      if (!prev || prev === shown.filePath) continue
+      selected = remapPathSet(selected, prev, shown.filePath)
+      favorites = remapPathSet(favorites, prev, shown.filePath)
+      queued = remapPathSet(queued, prev, shown.filePath)
+    }
+    if (selected !== selectedSongs.value) selectedSongs.value = selected
+    if (favorites !== favoriteFiles.value) favoriteFiles.value = favorites
+    if (queued !== queueFiles.value) queueFiles.value = queued
+    lastFilePathById.clear()
+    for (const song of props.songs) lastFilePathById.set(song.id, overlayMusicFile(song).filePath)
+  },
+  { immediate: true }
+)
 
 const toggleQueue = async (music: MusicItem) => {
   const currentInQueue = isInQueue(music)

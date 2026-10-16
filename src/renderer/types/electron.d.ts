@@ -247,6 +247,19 @@ export interface ElectronAPI {
 
   // 元数据
   updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
+  /** 按文件内当前 ID3 的歌手、歌曲名重命名音频，并同步歌词文件名 */
+  renameMusicById3: (musicId: number) => Promise<{
+    music: MusicItem
+    changed: boolean
+    moves: Array<{ from: string; to: string }>
+  }>
+  /** 对话框未关闭时，把本次重命名还原到打开时的文件名 */
+  restoreMusicFileName: (request: {
+    musicId: number
+    audioTo: string
+    lyricsPath: string | null
+    lyrics: Array<{ from: string; to: string }>
+  }) => Promise<MusicItem>
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<any>
   /** 仅把元数据写入数据库，不改文件 ID3 */
   syncMusicMetadataToDb: (musicId: number, updates: {

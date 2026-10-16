@@ -464,7 +464,16 @@
     "cancel": "Cancel",
     "saveError": "Failed to save",
     "nonMp3Hint": "This format does not support writing tags back to the file; save will only update the database",
-    "noId3Data": "No raw ID3 data found for this file"
+    "noId3Data": "No raw ID3 data found for this file",
+    "renameById3": "Rename from ID3",
+    "renameById3Hint": "Rename the file from the current ID3 artist and title as \"Artist - Title.ext\". An existing audio file or .lrc with that base name counts as a conflict; then try .1, .2, and so on. The lyrics file gets the same base name",
+    "renameConfirm": "Rename this file to \"{artist} - {title}\" using the current ID3 tags, keeping the original extension. If an audio file or .lrc with that name exists, try .1, .2, and so on. The lyrics file will be renamed to the same base name. Continue?",
+    "renameUnchanged": "The file name already matches the current ID3 tags",
+    "renameFailed": "Rename failed",
+    "restoreFileName": "Restore Filename",
+    "restoreFileNameHint": "Before closing this dialog, restore the filename from when it opened: \"{fileName}\". Lyrics are restored too",
+    "restoreConfirm": "Restore the filename to \"{fileName}\"? Lyrics renamed in this dialog will be restored too.",
+    "restoreFailed": "Failed to restore filename"
   },
   "search": {
     "placeholder": "Search music, artists, albums...",

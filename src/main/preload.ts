@@ -343,6 +343,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // 元数据编辑功能
   updateMusicMetadata: (musicId: number, updates: any) => ipcRenderer.invoke('update-music-metadata', musicId, updates),
+  renameMusicById3: (musicId: number) => ipcRenderer.invoke('rename-music-by-id3', musicId),
+  restoreMusicFileName: (request: {
+    musicId: number
+    audioTo: string
+    lyricsPath: string | null
+    lyrics: Array<{ from: string; to: string }>
+  }) => ipcRenderer.invoke('restore-music-file-name', request),
   batchUpdateMusicMetadata: (musicIds: number[], updates: any) => ipcRenderer.invoke('batch-update-music-metadata', musicIds, updates),
   // 仅同步到数据库（不写文件 ID3）
   syncMusicMetadataToDb: (musicId: number, updates: any) => ipcRenderer.invoke('sync-music-metadata-to-db', musicId, updates),
@@ -545,6 +552,17 @@ declare global {
       onTrayAction: (callback: (action: string) => void) => void
       removeTrayAction: () => void
       updateMusicMetadata: (musicId: number, updates: any) => Promise<boolean>
+      renameMusicById3: (musicId: number) => Promise<{
+        music: MusicItem
+        changed: boolean
+        moves: Array<{ from: string; to: string }>
+      }>
+      restoreMusicFileName: (request: {
+        musicId: number
+        audioTo: string
+        lyricsPath: string | null
+        lyrics: Array<{ from: string; to: string }>
+      }) => Promise<MusicItem>
       batchUpdateMusicMetadata: (musicIds: number[], updates: any) => Promise<{ success: number; failed: number; errors: Array<{ file: string; error: string }> }>
       syncMusicMetadataToDb: (musicId: number, updates: any) => Promise<MusicItem>
       batchSyncMusicMetadataToDb: (musicIds: number[]) => Promise<{

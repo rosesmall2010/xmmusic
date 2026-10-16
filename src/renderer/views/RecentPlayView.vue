@@ -32,6 +32,7 @@ import { Clock } from 'lucide-vue-next'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import SongList from '@/components/music/SongList.vue'
+import { mergeMusicUpdate, overlayMusicList } from '@/utils/musicFilePatch'
 import type { MusicItem } from '@shared/types/music'
 
 const playerStore = usePlayerStore()
@@ -52,7 +53,7 @@ onUnmounted(() => {
 })
 
 const loadRecent = async () => {
-  songs.value = await window.electronAPI.getRecentPlays()
+  songs.value = overlayMusicList(await window.electronAPI.getRecentPlays())
 }
 
 // 监听元数据更新事件，只更新被修改的歌曲
@@ -61,13 +62,8 @@ const handleMetadataUpdate = (event: CustomEvent) => {
   if (!updatedMusic || !updatedMusic.id) return
 
   // 在当前列表中查找并更新这首歌
-  const index = songs.value.findIndex(m => m.id === updatedMusic.id)
-  if (index !== -1) {
-    // 重新赋值整个数组以触发响应式更新
-    const updatedList = [...songs.value]
-    updatedList[index] = { ...updatedList[index], ...updatedMusic }
-    songs.value = updatedList
-  }
+  const updatedList = mergeMusicUpdate(songs.value, updatedMusic)
+  if (updatedList) songs.value = updatedList
 }
 
 const playMusic = async (music: MusicItem) => {

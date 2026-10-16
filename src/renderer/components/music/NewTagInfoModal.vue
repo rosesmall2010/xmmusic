@@ -20,7 +20,7 @@
       <!-- 中间可滚动，避免内容过长把底部按钮顶出视口 -->
       <div class="dialog-body">
         <div class="file-info">
-          <p class="filename">{{ music?.fileName }}</p>
+          <p class="filename">{{ sessionMusic?.fileName }}</p>
         </div>
 
         <div v-if="loadingMetadata" class="loading-metadata">
@@ -175,6 +175,27 @@
       </div>
 
       <div class="dialog-actions">
+        <div class="dialog-actions-left">
+          <button
+            type="button"
+            class="btn-rename"
+            :disabled="loading || loadingMetadata || !canRenameById3"
+            :title="$t('tagInfoEditor.renameById3Hint')"
+            @click="renameById3"
+          >
+            {{ $t('tagInfoEditor.renameById3') }}
+          </button>
+          <button
+            v-if="restorePoint"
+            type="button"
+            class="btn-restore"
+            :disabled="loading"
+            :title="$t('tagInfoEditor.restoreFileNameHint', { fileName: restorePoint.fileName })"
+            @click="restoreFileName"
+          >
+            {{ $t('tagInfoEditor.restoreFileName') }}
+          </button>
+        </div>
         <button @click="save()" class="btn-primary" :disabled="loading || !hasChanges">
           {{ $t('tagInfoEditor.save') }}
         </button>
@@ -230,22 +251,39 @@ const ENCODABLE_FIELDS: TagField[] = ['artist', 'title', 'album', 'genre']
 
 const loading = ref(false)
 const loadingMetadata = ref(false)
+const sessionMusic = ref<MusicItem | null>(null)
+/** 本次打开对话框期间的重命名还原点；关闭对话框后丢弃 */
+const restorePoint = ref<{
+  fileName: string
+  audioTo: string
+  lyricsPath: string | null
+  lyrics: Array<{ original: string; current: string }>
+} | null>(null)
 // shallowRef：readRawID3Tags 返回的对象会原样传给 convertID3TagsEncoding 走 IPC，
 // 若用 ref() 会被 Vue 自动包一层 reactive Proxy，结构化克隆时报 "object could not be cloned"
 const id3Snapshot = shallowRef<TagSnapshot | null>(null)
 const dbSnapshot = ref<Record<TagField, string>>({ artist: '', title: '', album: '', year: '', genre: '' })
 const editedData = reactive<Record<TagField, string>>({ artist: '', title: '', album: '', year: '', genre: '' })
 
-const isMp3 = computed(() => !!props.music?.filePath && /\.mp3$/i.test(props.music.filePath))
+const isMp3 = computed(() => !!sessionMusic.value?.filePath && /\.mp3$/i.test(sessionMusic.value.filePath))
 const hasChanges = computed(() => FIELDS.some((f) => editedData[f] !== dbSnapshot.value[f]))
+const canRenameById3 = computed(() => {
+  const artist = id3Snapshot.value?.artist?.trim()
+  const title = id3Snapshot.value?.title?.trim()
+  return !!sessionMusic.value && !!artist && !!title
+})
 
 watch(
   () => props.show,
   (newVal) => {
     if (newVal && props.music) {
+      sessionMusic.value = props.music
+      restorePoint.value = null
       loadData(props.music)
     } else {
       id3Snapshot.value = null
+      sessionMusic.value = null
+      restorePoint.value = null
     }
   }
 )
@@ -361,8 +399,8 @@ const swapArtistTitle = () => {
 }
 
 const guessFromFilename = () => {
-  if (!props.music) return
-  const fileName = props.music.fileName || props.music.filePath.split(/[/\\]/).pop() || ''
+  if (!sessionMusic.value) return
+  const fileName = sessionMusic.value.fileName || sessionMusic.value.filePath.split(/[/\\]/).pop() || ''
   const parsed = parseFilenameForTags(fileName)
   editedData.artist = parsed.artist
   editedData.title = parsed.title
@@ -391,8 +429,97 @@ const buildUpdates = () => ({
   genre: editedData.genre.trim() || null
 })
 
+const pathsMatch = (a: string, b: string) => a === b || a.toLowerCase() === b.toLowerCase()
+const baseNameOf = (filePath: string) => filePath.split(/[/\\]/).pop() || filePath
+
+/** 只广播文件名和歌词路径。数据库读出来的整条记录里收藏标记是写死的 false，不能整对象盖回去 */
+const publishFileRename = (before: MusicItem, renamed: MusicItem) => {
+  const patch = {
+    id: renamed.id,
+    fileName: renamed.fileName,
+    filePath: renamed.filePath,
+    lyricsPath: renamed.lyricsPath
+  }
+  sessionMusic.value = { ...before, ...patch }
+  window.dispatchEvent(new CustomEvent('music-metadata-updated', { detail: patch }))
+}
+
+const rememberRename = (before: MusicItem, moves: Array<{ from: string; to: string }>, audioFileName: string) => {
+  if (!restorePoint.value) {
+    restorePoint.value = {
+      fileName: before.fileName,
+      audioTo: before.filePath,
+      lyricsPath: before.lyricsPath ?? null,
+      lyrics: []
+    }
+  }
+  const point = restorePoint.value
+  for (const move of moves) {
+    if (pathsMatch(baseNameOf(move.to), audioFileName)) continue
+    const tracked = point.lyrics.find((item) => pathsMatch(item.current, move.from))
+    if (tracked) {
+      tracked.current = move.to
+    } else {
+      point.lyrics.push({ original: move.from, current: move.to })
+    }
+  }
+}
+
+const renameById3 = async () => {
+  const music = sessionMusic.value
+  const artist = id3Snapshot.value?.artist?.trim() || ''
+  const title = id3Snapshot.value?.title?.trim() || ''
+  if (!music || !artist || !title) return
+
+  const ok = window.confirm(t('tagInfoEditor.renameConfirm', { artist, title }))
+  if (!ok) return
+
+  try {
+    loading.value = true
+    const result = await window.electronAPI.renameMusicById3(music.id)
+    if (result.changed) rememberRename(music, result.moves, result.music.fileName)
+    publishFileRename(music, result.music)
+    if (!result.changed) {
+      alert(t('tagInfoEditor.renameUnchanged'))
+    }
+  } catch (error: any) {
+    console.error('按 ID3 重命名失败:', error)
+    alert(t('tagInfoEditor.renameFailed') + ': ' + (error?.message || error))
+  } finally {
+    loading.value = false
+  }
+}
+
+const restoreFileName = async () => {
+  const music = sessionMusic.value
+  const point = restorePoint.value
+  if (!music || !point) return
+
+  const ok = window.confirm(t('tagInfoEditor.restoreConfirm', { fileName: point.fileName }))
+  if (!ok) return
+
+  try {
+    loading.value = true
+    const updated = await window.electronAPI.restoreMusicFileName({
+      musicId: music.id,
+      audioTo: point.audioTo,
+      lyricsPath: point.lyricsPath,
+      lyrics: point.lyrics
+        .filter((item) => !pathsMatch(item.original, item.current))
+        .map((item) => ({ from: item.current, to: item.original }))
+    })
+    restorePoint.value = null
+    publishFileRename(music, updated)
+  } catch (error: any) {
+    console.error('还原文件名失败:', error)
+    alert(t('tagInfoEditor.restoreFailed') + ': ' + (error?.message || error))
+  } finally {
+    loading.value = false
+  }
+}
+
 const save = async (dbOnly = false) => {
-  if (!hasChanges.value || !props.music) return
+  if (!hasChanges.value || !sessionMusic.value) return
 
   try {
     loading.value = true
@@ -400,10 +527,10 @@ const save = async (dbOnly = false) => {
     let updatedMusic: MusicItem | null = null
 
     if (isMp3.value && !dbOnly) {
-      const success = await window.electronAPI.updateMusicMetadata(props.music.id, updates)
+      const success = await window.electronAPI.updateMusicMetadata(sessionMusic.value.id, updates)
       if (success) {
         updatedMusic = {
-          ...props.music,
+          ...sessionMusic.value,
           ...updates,
           // 空字符串统一转 undefined：与 buildUpdates 的处理保持一致，
           // 防止派发出去的 music-metadata-updated 携带空字符串覆盖列表对象，
@@ -416,7 +543,7 @@ const save = async (dbOnly = false) => {
         } as MusicItem
       }
     } else {
-      updatedMusic = await window.electronAPI.syncMusicMetadataToDb(props.music.id, updates)
+      updatedMusic = await window.electronAPI.syncMusicMetadataToDb(sessionMusic.value.id, updates)
     }
 
     if (!updatedMusic) {
@@ -425,6 +552,7 @@ const save = async (dbOnly = false) => {
       return
     }
 
+    sessionMusic.value = updatedMusic
     window.dispatchEvent(new CustomEvent('music-metadata-updated', { detail: updatedMusic }))
     emit('saved')
     setTimeout(() => {
@@ -793,6 +921,55 @@ const close = () => {
 }
 
 .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-actions-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-right: auto;
+}
+
+.btn-rename {
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  transition: all var(--transition-base);
+}
+
+.btn-rename:hover:not(:disabled) {
+  background: var(--color-primary-alpha-10, rgba(49, 194, 124, 0.1));
+}
+
+.btn-rename:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-restore {
+  padding: var(--spacing-sm) var(--spacing-xl);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  transition: all var(--transition-base);
+}
+
+.btn-restore:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.btn-restore:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

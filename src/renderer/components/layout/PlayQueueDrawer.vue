@@ -61,6 +61,7 @@ import { useElementSize } from '@vueuse/core'
 import { usePlayerStore } from '@/stores/player'
 import { usePlayer } from '@/composables/usePlayer'
 import { Volume2, Trash2, X } from 'lucide-vue-next'
+import { musicFilePatchRevision, overlayMusicFile } from '@/utils/musicFilePatch'
 
 const props = defineProps<{
   visible: boolean
@@ -102,9 +103,10 @@ const visibleQueue = computed(() => {
   const start = Math.max(0, Math.floor(effectiveScrollTop / itemHeight) - buffer)
   const visibleCount = Math.ceil(containerHeight.value / itemHeight)
   const end = Math.min(queue.value.length, start + visibleCount + buffer * 2)
+  void musicFilePatchRevision.value
   const result = []
   for (let index = start; index < end; index++) {
-    result.push({ music: queue.value[index], index })
+    result.push({ music: overlayMusicFile(queue.value[index]), index })
   }
   return result
 })

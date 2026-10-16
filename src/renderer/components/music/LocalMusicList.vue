@@ -370,6 +370,7 @@ import { useCoverMatchStore } from '@/stores/coverMatch'
 import { useSettingsStore } from '@/stores/settings'
 import { formatDurationDhms } from '@/utils/formatDuration'
 import { mergeMatchPaths } from '@/utils/mergeMatchPaths'
+import { mergeMusicUpdate } from '@/utils/musicFilePatch'
 import SongList from '@/components/music/SongList.vue'
 import type { MusicItem, ScanProgress } from '@shared/types/music'
 import type { LyricsMatchWorkerTaskStatus } from '@shared/types/lyrics'
@@ -1178,13 +1179,8 @@ const handleMetadataUpdate = (event: CustomEvent) => {
   if (!updatedMusic || !updatedMusic.id) return
 
   // 在当前列表中查找并更新这首歌
-  const index = musicStore.musicList.findIndex(m => m.id === updatedMusic.id)
-  if (index !== -1) {
-    // 更新列表中的这首歌（shallowRef需要重新赋值整个数组才能触发响应式更新）
-    const updatedList = [...musicStore.musicList]
-    updatedList[index] = { ...updatedList[index], ...updatedMusic }
-    musicStore.musicList = updatedList
-  }
+  const updatedList = mergeMusicUpdate(musicStore.musicList, updatedMusic)
+  if (updatedList) musicStore.musicList = updatedList
 
   // 封面变化会影响工具栏「待匹配封面数」（单曲封面匹配不再发 music-list-refresh，由此处补刷）
   if (updatedMusic.coverPath) void refreshMissingCoverCount()
