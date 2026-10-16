@@ -196,18 +196,20 @@
             {{ $t('tagInfoEditor.restoreFileName') }}
           </button>
         </div>
-        <button @click="save()" class="btn-primary" :disabled="loading || !hasChanges">
-          {{ $t('tagInfoEditor.save') }}
-        </button>
-        <button
-          v-if="isMp3"
-          @click="save(true)"
-          class="btn-secondary"
-          :disabled="loading || !hasChanges"
-        >
-          {{ $t('tagInfoEditor.syncDbOnly') }}
-        </button>
-        <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('tagInfoEditor.cancel') }}</button>
+        <div class="dialog-actions-right">
+          <button @click="save()" class="btn-primary" :disabled="loading || !hasChanges">
+            {{ $t('tagInfoEditor.save') }}
+          </button>
+          <button
+            v-if="isMp3"
+            @click="save(true)"
+            class="btn-secondary"
+            :disabled="loading || !hasChanges"
+          >
+            {{ $t('tagInfoEditor.syncDbOnly') }}
+          </button>
+          <button @click="close" class="btn-secondary" :disabled="loading">{{ $t('tagInfoEditor.close') }}</button>
+        </div>
       </div>
     </div>
     </div>
@@ -548,20 +550,27 @@ const save = async (dbOnly = false) => {
 
     if (!updatedMusic) {
       alert(t('tagInfoEditor.saveError'))
-      loading.value = false
       return
     }
 
     sessionMusic.value = updatedMusic
+    dbSnapshot.value = buildDbSnapshot(updatedMusic)
+    Object.assign(editedData, dbSnapshot.value)
     window.dispatchEvent(new CustomEvent('music-metadata-updated', { detail: updatedMusic }))
     emit('saved')
-    setTimeout(() => {
-      loading.value = false
-      close()
-    }, 100)
+    // 写回文件后重读当前 ID3。读失败只记日志，不能把已经保存成功报成保存失败
+    if (isMp3.value && !dbOnly && updatedMusic.filePath) {
+      try {
+        const tags = await window.electronAPI.readRawID3Tags(updatedMusic.filePath)
+        id3Snapshot.value = tags && (tags.title || tags.artist || tags.album || tags.genre || tags.year) ? tags : null
+      } catch (error) {
+        console.error('保存后重读 ID3 失败:', error)
+      }
+    }
   } catch (error: any) {
     console.error('保存标签失败:', error)
     alert(t('tagInfoEditor.saveError') + ': ' + (error?.message || error))
+  } finally {
     loading.value = false
   }
 }
@@ -874,9 +883,10 @@ const close = () => {
 
 .dialog-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   margin-top: var(--spacing-xl);
   padding-top: var(--spacing-lg);
   border-top: 1px solid var(--border-color);
@@ -925,11 +935,25 @@ const close = () => {
   cursor: not-allowed;
 }
 
-.dialog-actions-left {
+.dialog-actions-left,
+.dialog-actions-right {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-md);
-  margin-right: auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.dialog-actions-right {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.dialog-actions .btn-primary,
+.dialog-actions .btn-secondary,
+.dialog-actions .btn-rename,
+.dialog-actions .btn-restore {
+  white-space: nowrap;
+  padding: var(--spacing-sm) var(--spacing-md);
 }
 
 .btn-rename {

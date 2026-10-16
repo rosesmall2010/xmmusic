@@ -1465,8 +1465,8 @@ const formatChannels = (channels: number) => {
 }
 
 const handleTagSaved = () => {
-  // Emit event to refresh the list
-  emit('songs-updated')
+  // 标签已由 music-metadata-updated 原位更新。这里再发 songs-updated 会让收藏/歌单整表重载，
+  // 加载中把 SongList 卸掉，对话框跟着被关掉。
 }
 
 // New Tag Info Modal handlers

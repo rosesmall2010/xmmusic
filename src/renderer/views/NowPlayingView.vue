@@ -566,7 +566,6 @@
       :show="showEditTag"
       :music="editingMusic"
       @close="showEditTag = false; editingMusic = null"
-      @saved="onTagSaved"
     />
     <MusicDetailsModal
       :show="showDetailsDialog"
@@ -1457,12 +1456,6 @@ const removeFromContextMenu = () => {
   // 按 id 查找，避免菜单打开后队列变动导致下标过期删错歌
   const index = queue.value.findIndex(m => m.id === music.id)
   if (index >= 0) removeQueueItem(index)
-}
-
-const onTagSaved = () => {
-  // NewTagInfoModal 已派发 music-metadata-updated，playerStore 会同步当前曲/队列项
-  showEditTag.value = false
-  editingMusic.value = null
 }
 
 const toggleMiniMode = async () => {

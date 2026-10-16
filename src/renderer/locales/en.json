@@ -461,7 +461,7 @@
     "reset": "Reset",
     "save": "Save",
     "syncDbOnly": "Sync DB Only",
-    "cancel": "Cancel",
+    "close": "Close",
     "saveError": "Failed to save",
     "nonMp3Hint": "This format does not support writing tags back to the file; save will only update the database",
     "noId3Data": "No raw ID3 data found for this file",
