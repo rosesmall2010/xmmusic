@@ -66,7 +66,10 @@
 | :---: | :---: |
 | <img src="pic/interface/xm12.jpg" width="420" alt="霓虹频谱特效" /> | <img src="pic/interface/xm13.jpg" width="420" alt="蓝色火焰特效" /> |
 
-## 🎯 最新版本 v2.0.0
+## 🎯 最新版本 v2.0.1
+
+### v2.0.1 更新内容
+- **重命名歌单同步左侧列表** - 歌单详情页改名保存后，侧边栏歌单列表立即显示新名称（此前只刷新当前页）
 
 ### v2.0.0 更新内容
 - **按 ID3 重命名** - 编辑标签里可把文件改成「歌手 - 歌曲名.扩展名」
@@ -218,9 +221,9 @@ v1.1.1 及以前的更新（国际化、标签编辑增强、扫描目录、bett
 
 从 [Releases](https://github.com/rosesmall2010/xmmusic/releases) 页面下载对应平台的安装包:
 
-- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-2.0.0-arm64.dmg`
-- **Windows**: `xmmusic Setup 2.0.0.exe`
-- **Linux**: `xmmusic-2.0.0.AppImage`
+- **macOS**（仅 Apple Silicon / arm64）: `xmmusic-2.0.1-arm64.dmg`
+- **Windows**: `xmmusic Setup 2.0.1.exe`
+- **Linux**: `xmmusic-2.0.1.AppImage`
 
 > macOS 安装包仅支持 **Apple Silicon（`arm64`）**。可在终端用 `uname -m` 确认，应显示 `arm64`。
 
