@@ -1,10 +1,26 @@
-# XM Music
+<p align="center">
+  <img src="pic/appicon-256.png" width="128" alt="XM Music 应用图标" />
+</p>
 
-> 基于 Electron + Vue 3 + TypeScript 的高颜值本地音乐播放器
+<h1 align="center">XM Music</h1>
 
-[![GitHub release](https://img.shields.io/github/v/release/rosesmall2010/xmmusic)](https://github.com/rosesmall2010/xmmusic/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20arm64%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/rosesmall2010/xmmusic/releases)
+<p align="center">
+  <strong>基于 Electron + Vue 3 + TypeScript 的高颜值本地音乐播放器</strong>
+</p>
+
+<p align="center">万级曲库也顺滑的本地音乐管理 · 四源并发匹配歌词与封面 · 六套全屏播放特效</p>
+
+<p align="center">
+  <a href="https://github.com/rosesmall2010/xmmusic/releases"><img src="https://img.shields.io/github/v/release/rosesmall2010/xmmusic" alt="GitHub release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://github.com/rosesmall2010/xmmusic/releases"><img src="https://img.shields.io/badge/platform-macOS%20arm64%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platform" /></a>
+</p>
+
+<p align="center">
+  <img src="pic/interface/xm3.jpg" width="860" alt="XM Music 全屏播放界面" />
+  <br />
+  <sub>全屏播放 · 霓虹频谱特效与逐行滚动歌词</sub>
+</p>
 
 ## ✨ 特性
 
@@ -287,7 +303,27 @@ npm run dist:win    # Windows x64（macOS/Linux 上也可交叉打包，自动�
 
 ## 📸 截图
 
-> 待添加应用截图
+<p align="center">
+  <img src="pic/interface/xm1.jpg" width="860" alt="XM Music 本地音乐主界面" />
+  <br />
+  <sub><b>本地音乐</b> · 万级曲库虚拟滚动，批量匹配歌词 / 封面与清理失效记录一键完成</sub>
+</p>
+
+| 全屏播放 · 六套特效与滚动歌词 | 播放队列 · 快速定位与右键操作 |
+| :---: | :---: |
+| <img src="pic/interface/xm3.jpg" width="420" alt="全屏播放" /> | <img src="pic/interface/xm4.jpg" width="420" alt="播放队列" /> |
+
+| 匹配封面 · 三源并发候选预览 | 匹配歌词 · 四源并发按相似度择优 |
+| :---: | :---: |
+| <img src="pic/interface/xm2.jpg" width="420" alt="匹配封面" /> | <img src="pic/interface/xm10.jpg" width="420" alt="匹配歌词" /> |
+
+| 歌单管理 · 自定义封面与复制到目录 | 歌单详情 · 播放全部与专辑信息 |
+| :---: | :---: |
+| <img src="pic/interface/xm8.jpg" width="420" alt="歌单管理" /> | <img src="pic/interface/xm9.jpg" width="420" alt="歌单详情" /> |
+
+| 均衡器 · 预设音效与自定义调节 | 迷你模式 · 与全屏特效双向同步 |
+| :---: | :---: |
+| <img src="pic/interface/xm7.jpg" width="420" alt="均衡器" /> | <img src="pic/interface/xm5.jpg" width="197" alt="迷你模式" /> |
 
 ## 💻 开发指南
 
