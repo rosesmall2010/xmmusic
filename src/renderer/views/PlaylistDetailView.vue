@@ -297,6 +297,8 @@ const handleRename = async (newName: string) => {
   try {
     await window.electronAPI.updatePlaylist(playlist.value.id, { name: newName })
     await reloadPlaylist()
+    // 通知侧边栏等外部列表同步歌单名称，路由不跳转时不会触发其 onMounted
+    window.dispatchEvent(new CustomEvent('playlist-updated'))
   } catch (error) {
     console.error('Failed to rename playlist:', error)
   }
