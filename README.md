@@ -54,15 +54,17 @@
 | :---: | :---: |
 | <img src="pic/interface/xm2.jpg" width="420" alt="匹配封面" /> | <img src="pic/interface/xm10.jpg" width="420" alt="匹配歌词" /> |
 
-| 歌单管理 · 自定义封面与复制到目录 | 歌单详情 · 播放全部与专辑信息 |
+| 编辑标签 · 数据库 / ID3 / 编辑后三栏对比 | 歌单管理 · 自定义封面与复制到目录 |
 | :---: | :---: |
-| <img src="pic/interface/xm8.jpg" width="420" alt="歌单管理" /> | <img src="pic/interface/xm9.jpg" width="420" alt="歌单详情" /> |
+| <img src="pic/interface/xm11.jpg" width="420" alt="编辑标签" /> | <img src="pic/interface/xm8.jpg" width="420" alt="歌单管理" /> |
 
-<p align="center">
-  <img src="pic/interface/xm7.jpg" width="840" alt="均衡器" />
-  <br />
-  <sub><b>均衡器</b> · 内置多种预设音效，可逐段自定义调节</sub>
-</p>
+| 歌单详情 · 播放全部与专辑信息 | 均衡器 · 预设音效与自定义调节 |
+| :---: | :---: |
+| <img src="pic/interface/xm9.jpg" width="420" alt="歌单详情" /> | <img src="pic/interface/xm7.jpg" width="420" alt="均衡器" /> |
+
+| 全屏特效 · 霓虹频谱 | 全屏特效 · 蓝色火焰 |
+| :---: | :---: |
+| <img src="pic/interface/xm12.jpg" width="420" alt="霓虹频谱特效" /> | <img src="pic/interface/xm13.jpg" width="420" alt="蓝色火焰特效" /> |
 
 ## 🎯 最新版本 v2.0.0
 
