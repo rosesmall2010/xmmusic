@@ -17,9 +17,11 @@
 </p>
 
 <p align="center">
-  <img src="pic/interface/xm3.jpg" width="860" alt="XM Music 全屏播放界面" />
+  <img src="pic/interface/xm3.jpg" width="560" alt="XM Music 全屏播放界面" />
+  &nbsp;&nbsp;
+  <img src="pic/interface/xm5.jpg" width="249" alt="XM Music 迷你播放器" />
   <br />
-  <sub>全屏播放 · 霓虹频谱特效与逐行滚动歌词</sub>
+  <sub>全屏播放 · 霓虹频谱特效与逐行滚动歌词&nbsp;&nbsp;|&nbsp;&nbsp;迷你模式 · 简洁播放器，封面样式与全屏特效双向同步</sub>
 </p>
 
 ## ✨ 特性
@@ -41,6 +43,26 @@
 - 📱 **迷你模式** - 简洁迷你播放器；当前歌词、主题切换；封面可在无特效 / 唱片 / CD / 磁带间切换，并与全屏特效双向同步
 - ⚡ **极致性能** - 虚拟滚动+分批加载，轻松应对万级曲库与万级播放队列；随机切歌时队列瞬时定位当前曲（不长距离平滑滚动）
 - 🖥️ **跨平台** - 支持 macOS（Apple Silicon）、Windows、Linux
+
+## 📸 界面预览
+
+| 本地音乐 · 万级曲库与批量匹配 | 播放队列 · 快速定位与右键操作 |
+| :---: | :---: |
+| <img src="pic/interface/xm1.jpg" width="420" alt="本地音乐" /> | <img src="pic/interface/xm4.jpg" width="420" alt="播放队列" /> |
+
+| 匹配封面 · 三源并发候选预览 | 匹配歌词 · 四源并发按相似度择优 |
+| :---: | :---: |
+| <img src="pic/interface/xm2.jpg" width="420" alt="匹配封面" /> | <img src="pic/interface/xm10.jpg" width="420" alt="匹配歌词" /> |
+
+| 歌单管理 · 自定义封面与复制到目录 | 歌单详情 · 播放全部与专辑信息 |
+| :---: | :---: |
+| <img src="pic/interface/xm8.jpg" width="420" alt="歌单管理" /> | <img src="pic/interface/xm9.jpg" width="420" alt="歌单详情" /> |
+
+<p align="center">
+  <img src="pic/interface/xm7.jpg" width="840" alt="均衡器" />
+  <br />
+  <sub><b>均衡器</b> · 内置多种预设音效，可逐段自定义调节</sub>
+</p>
 
 ## 🎯 最新版本 v2.0.0
 
@@ -300,30 +322,6 @@ npm run dist:win    # Windows x64（macOS/Linux 上也可交叉打包，自动�
 | 音量减小 | `⌘+Shift+↓` | `Ctrl+Shift+↓` |
 | 切换收藏 | `⌘+Shift+F` | `Ctrl+Shift+F` |
 | 迷你模式 | `⌘+Option+M` | `Ctrl+Alt+M` |
-
-## 📸 截图
-
-<p align="center">
-  <img src="pic/interface/xm1.jpg" width="860" alt="XM Music 本地音乐主界面" />
-  <br />
-  <sub><b>本地音乐</b> · 万级曲库虚拟滚动，批量匹配歌词 / 封面与清理失效记录一键完成</sub>
-</p>
-
-| 全屏播放 · 六套特效与滚动歌词 | 播放队列 · 快速定位与右键操作 |
-| :---: | :---: |
-| <img src="pic/interface/xm3.jpg" width="420" alt="全屏播放" /> | <img src="pic/interface/xm4.jpg" width="420" alt="播放队列" /> |
-
-| 匹配封面 · 三源并发候选预览 | 匹配歌词 · 四源并发按相似度择优 |
-| :---: | :---: |
-| <img src="pic/interface/xm2.jpg" width="420" alt="匹配封面" /> | <img src="pic/interface/xm10.jpg" width="420" alt="匹配歌词" /> |
-
-| 歌单管理 · 自定义封面与复制到目录 | 歌单详情 · 播放全部与专辑信息 |
-| :---: | :---: |
-| <img src="pic/interface/xm8.jpg" width="420" alt="歌单管理" /> | <img src="pic/interface/xm9.jpg" width="420" alt="歌单详情" /> |
-
-| 均衡器 · 预设音效与自定义调节 | 迷你模式 · 与全屏特效双向同步 |
-| :---: | :---: |
-| <img src="pic/interface/xm7.jpg" width="420" alt="均衡器" /> | <img src="pic/interface/xm5.jpg" width="197" alt="迷你模式" /> |
 
 ## 💻 开发指南
 
